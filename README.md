@@ -1,4 +1,9 @@
-# Mantis
+# Mantis: Multi-Image Instruction Tuning
+---
+
+Check out our blog for more details: [Mantis: Multi-Image Instruction Tuning](https://tiger-ai-lab.github.io/Blog/mantis)
+
+Hugging face space Demo: [Mantis](https://huggingface.co/spaces/TIGER-Lab/Mantis)
 
 ## Installation
 ```bash
