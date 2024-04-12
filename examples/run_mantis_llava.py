@@ -16,6 +16,7 @@ model = LlavaForConditionalGeneration.from_pretrained("TIGER-Lab/Mantis-llava-7b
 # chat
 response, history = chat_mllava(text, images, model, processor)
 
+print(text)
 print(response)
 # The image on the right has a larger number of wallets displayed compared to the image on the left. The wallets in the right image are arranged in a grid pattern, while the wallets in the left image are displayed in a more scattered manner. The wallets in the right image have various colors, including red, purple, and brown, while the wallets in the left image are primarily brown.
 

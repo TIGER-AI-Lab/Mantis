@@ -1,0 +1,3 @@
+[submodule "Mantis"]
+	path = hf_space/Mantis
+	url = https://huggingface.co/spaces/TIGER-Lab/Mantis.git
