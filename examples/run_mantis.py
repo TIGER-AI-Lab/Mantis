@@ -9,8 +9,8 @@ images = [Image.open(image1), Image.open(image2)]
 
 # load processor and model
 from mantis.models.mllava import MLlavaProcessor, LlavaForConditionalGeneration
-processor = MLlavaProcessor.from_pretrained("TIGER-Lab/Mantis-llava-7b")
-model = LlavaForConditionalGeneration.from_pretrained("TIGER-Lab/Mantis-llava-7b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+processor = MLlavaProcessor.from_pretrained("TIGER-Lab/Mantis-bakllava-7b")
+model = LlavaForConditionalGeneration.from_pretrained("TIGER-Lab/Mantis-bakllava-7b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
 
 # chat
 text = "<image> <image> What's the difference between these two images? Please describe as much as you can."

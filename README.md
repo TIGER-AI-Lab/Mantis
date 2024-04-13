@@ -10,18 +10,20 @@ Hugging face space Demo: [Mantis](https://huggingface.co/spaces/TIGER-Lab/Mantis
 conda create -n mantis python=3.9
 conda activate mantis
 pip install -e .
+# install flash-attention
+pip install flash-attn --no-build-isolation
 ```
 ## Inference
 
 You can run inference with the following command:
 ```bash
 cd examples
-python run_mantis_llava.py
+python run_mantis.py
 ```
 
 Alternatively, you can run the following command to use the pure hugging face codes, without using the Mantis library:
 ```bash
-python run_mantis_llava_hf.py # with pure hugging face codes
+python run_mantis_hf.py # with pure hugging face codes
 ```
 
 ## Training

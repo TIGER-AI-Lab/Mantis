@@ -78,8 +78,8 @@ image2 = "image2.jpg"
 images = [Image.open(image1), Image.open(image2)]
 
 # load processor and model
-processor = AutoProcessor.from_pretrained("TIGER-Lab/Mantis-llava-7b-v1.1")
-model = LlavaForConditionalGeneration.from_pretrained("TIGER-Lab/Mantis-llava-7b-v1.1", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+processor = AutoProcessor.from_pretrained("TIGER-Lab/Mantis-bakllava-7b")
+model = LlavaForConditionalGeneration.from_pretrained("TIGER-Lab/Mantis-llava-7b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
 
 # chat
 text = "<image> <image> What's the difference between these two images? Please describe as much as you can."
