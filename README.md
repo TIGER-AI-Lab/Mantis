@@ -29,7 +29,7 @@ cd examples
 python run_mantis.py
 ```
 
-Alternatively, you can run the following command to use the pure hugging face codes, without using the Mantis library:
+Alternatively, you can run the following command with pure hugging face codes, without using the Mantis library:
 ```bash
 python run_mantis_hf.py # with pure hugging face codes
 ```
