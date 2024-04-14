@@ -41,9 +41,6 @@ python run_mantis_hf.py # with pure hugging face codes
 ## Data
 **Data coming soon**
 
-
-Dongfu Jiang, Xuan He, Huaye Zeng, Cong Wei, Max Ku, Qian Liu, Wenhu Chen
-
 ## Citation
 ```bibtex
 @misc{jiang2024mantis,
