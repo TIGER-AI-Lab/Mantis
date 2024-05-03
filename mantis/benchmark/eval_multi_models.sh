@@ -1,0 +1,21 @@
+bash eval_single_model.sh "random"
+bash eval_single_model.sh "blip2"
+bash eval_single_model.sh "instructblip"
+bash eval_single_model.sh "llava"
+bash eval_single_model.sh "fuyu"
+bash eval_single_model.sh "kosmos2"
+bash eval_single_model.sh "qwenVL"
+bash eval_single_model.sh "emu2"
+bash eval_single_model.sh "idefics1"
+bash eval_single_model.sh "idefics2"
+bash eval_single_model.sh "openflamingo"
+bash eval_single_model.sh "cogvlm"
+bash eval_single_model.sh "gpt4v" # we only eval mantis eval for gpt-4v
+bash eval_single_model.sh "emu2"
+
+# mantis
+bash eval_single_model.sh "mantis-8b-clip-llama3"
+bash eval_single_model.sh "mantis-8b-siglip-llama3"
+bash eval_single_model.sh "mantis-8b-fuyu"
+bash eval_single_model.sh "mantis-7b-llava"
+bash eval_single_model.sh "mantis-7b-bakllava"

@@ -2,8 +2,8 @@ import PIL
 import torch
 from .modeling_llava import LlavaForConditionalGeneration
 from .processing_llava import MLlavaProcessor
-from ..conversation import conv_mllava_v1 as default_conv
-from ..conversation import conv_mllava_v1_mmtag as default_conv_mmtag
+# from ..conversation import conv_mllava_v1_mmtag as default_conv
+from ..conversation import conv_mllava_v1 as default_conv, conv_templates
 
 from typing import List, Tuple, Union, Tuple
 
@@ -27,8 +27,20 @@ def chat_mllava(
         kwargs: dict, the generation kwargs
     Returns:
         Tuple[str, List[dict]], the generated text and the history of the conversation
+        
+
     """
-    conv = default_conv.copy()
+    if "llama-3" in model.language_model.name_or_path.lower():
+        conv = conv_templates['llama_3']
+        terminators = [
+            processor.tokenizer.eos_token_id,
+            processor.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        ]
+    else:
+        conv = default_conv
+        terminators = None
+    kwargs["eos_token_id"] = terminators
+    conv = conv.copy()
     conv.messages = []
     if history is not None:
         for message in history:
@@ -46,7 +58,7 @@ def chat_mllava(
             if isinstance(images[i], str):
                 images[i] = PIL.Image.open(images[i])
     
-    inputs = processor(images=images, text=prompt, return_tensors="pt", truncation=isinstance(max_input_length, int), max_length=max_input_length)
+    inputs = processor(images=images, text=prompt, return_tensors="pt", truncation=True, max_length=max_input_length)
     for k, v in inputs.items():
         if v is not None:
             if isinstance(v, torch.Tensor):
@@ -55,10 +67,8 @@ def chat_mllava(
                 inputs[k] = [x.to(model.device) for x in v]
             else:
                 raise ValueError(f"Invalid input type: {type(v)}")
-
-    if not "max_length" in kwargs and not "max_new_tokens" in kwargs:
-        kwargs["max_length"] = 4096
     
+
     output_ids = model.generate(**inputs, **kwargs)
     output_ids = output_ids[0]
     

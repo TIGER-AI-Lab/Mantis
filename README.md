@@ -35,11 +35,29 @@ python run_mantis_hf.py # with pure hugging face codes
 ```
 
 ## Training
-**Training codes coming soon**
+We support training of Mantis based on the Fuyu architecture and the LLaVA architecture. You can train the model with the following command:
 
+**Training Mantis based on LLaMA3 with CLIP/SigLIP encoder:**
+- Pretrain Mantis-LLaMA3 Multimodal projector on pretrain data (Stage 1):
+```bash
+cd mantis/train/pretrain_mllava.sh
+```
+
+- Fine-tune the pretrained Mantis-LLaMA3 on Mantis-Instruct (Stage 2):
+```bash
+cd mantis/train/train_mllava.sh
+```
+
+**Training Mantis based on Fuyu-8B:**
+- Fine-tune Fuyu-8B on Mantis-Instruct to get Mantis-Fuyu:
+```bash
+cd mantis/train/train_fuyu.sh
+```
 
 ## Data
-**Data coming soon**
+- [🤗 Mantis-Instruct](TIGER-Lab/Mantis-Instruct) 721K text-image interleaved datasets for multi-image instruction tuning
+- [🤗 Mantis-Eval](TIGER-Lab/MIQA-Eval) 217 high-quality examples for evaluating LMM's multi-image skills
+
 
 ## Citation
 ```bibtex

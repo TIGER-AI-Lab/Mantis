@@ -1,0 +1,16 @@
+{
+    "id": "id",
+    "question_type": "multi-choice",
+    "question": "<image> What change can be observed in the second pair of images?",
+    "images": [
+        ""
+    ],
+    "options": [
+        "The person with umbrella is gone",
+        "The person with red coat is moved",
+        "The car up at the top left is now missing"
+    ],
+    "answer": "B",
+    "data_source": "original dataset",
+    "category": "difference description"
+}

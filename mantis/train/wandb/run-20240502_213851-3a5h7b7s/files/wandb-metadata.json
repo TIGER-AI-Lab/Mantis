@@ -1,0 +1,300 @@
+{
+    "os": "Linux-5.15.0-101-generic-x86_64-with-glibc2.35",
+    "python": "3.9.19",
+    "heartbeatAt": "2024-05-03T01:38:52.162467",
+    "startedAt": "2024-05-03T01:38:51.564661",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--model_name_or_path",
+        "adept/fuyu-8b",
+        "--data_config_file",
+        "./data_configs/train_config_debug.yaml",
+        "--data_format",
+        "chat",
+        "--run_name",
+        "mfuyu_8b_8192_720p",
+        "--bf16",
+        "True",
+        "--output_dir",
+        "../../checkpoints",
+        "--hub_model_id",
+        "/mfuyu_8b_8192_720p",
+        "--hub_token",
+        "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",
+        "--push_to_hub",
+        "False",
+        "--num_train_epochs",
+        "1",
+        "--per_device_train_batch_size",
+        "1",
+        "--per_device_eval_batch_size",
+        "1",
+        "--gradient_accumulation_steps",
+        "32",
+        "--evaluation_strategy",
+        "no",
+        "--save_strategy",
+        "steps",
+        "--save_steps",
+        "500",
+        "--eval_steps",
+        "500",
+        "--save_total_limit",
+        "1",
+        "--learning_rate",
+        "1e-5",
+        "--weight_decay",
+        "0.01",
+        "--warmup_ratio",
+        "0.03",
+        "--lr_scheduler_type",
+        "cosine",
+        "--logging_steps",
+        "1",
+        "--tf32",
+        "True",
+        "--gradient_checkpointing",
+        "True",
+        "--dataloader_num_workers",
+        "16",
+        "--report_to",
+        "wandb",
+        "--do_train",
+        "--lora_enabled",
+        "false",
+        "--max_seq_len",
+        "8192",
+        "--max_image_size",
+        "(720,1280)",
+        "--resume_from_checkpoint",
+        ""
+    ],
+    "state": "running",
+    "program": "/home/dongfu/WorkSpace/Mantis/mantis/train/train_fuyu.py",
+    "codePathLocal": "train_fuyu.py",
+    "codePath": "mantis/train/train_fuyu.py",
+    "git": {
+        "remote": "https://github.com/TIGER-AI-Lab/Mantis.git",
+        "commit": "d1f97087c71d859f5450065f9d4e35aede02ec91"
+    },
+    "email": "dongfu.jdf@gmail.com",
+    "root": "/home/dongfu/WorkSpace/Mantis",
+    "host": "darth.cs.uwaterloo.ca",
+    "username": "dongfu",
+    "executable": "/home/dongfu/miniconda3/envs/mantis/bin/python",
+    "cpu_count": 32,
+    "cpu_count_logical": 32,
+    "cpu_freq": {
+        "current": 1872.503375,
+        "min": 1500.0,
+        "max": 3000.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2400.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 3296.912,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 3300.056,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 3000.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 3000.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2400.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2400.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1411.576,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2400.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2400.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 2400.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        },
+        {
+            "current": 1500.0,
+            "min": 1500.0,
+            "max": 3000.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 879.0143852233887,
+            "used": 51.37590026855469
+        }
+    },
+    "gpu": "NVIDIA RTX A6000",
+    "gpu_count": 8,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        },
+        {
+            "name": "NVIDIA RTX A6000",
+            "memory_total": 51527024640
+        }
+    ],
+    "memory": {
+        "total": 503.7505226135254
+    }
+}

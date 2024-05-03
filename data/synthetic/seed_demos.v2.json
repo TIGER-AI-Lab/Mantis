@@ -1,0 +1,1346 @@
+[
+    {
+        "aspect": "number of objects",
+        "question": "How many <objects> are there in all the images?"
+    },
+    {
+        "aspect": "number of objects",
+        "question": "How many more <objects> are there in image 1 than in image 2?"
+    },
+    {
+        "aspect": "number of objects",
+        "question": "How many less <objects> are there in image 1 than in image 2?"
+    },
+    {
+        "aspect": "color of objects",
+        "question": "Is the color of <object> in image 1 the same as that in image 2?"
+    },
+    {
+        "aspect": "color of objects",
+        "question": "Is the color of <object> in image 1 different from that in image 2?"
+    },
+    {
+        "aspect": "size of objects",
+        "question": "Can the <object> in image 1 fit into the <object> in image 2 considering the size of the <object> in image 1?"
+    },
+    {
+        "aspect": "size of objects",
+        "question": "Is the <object> in image 1 bigger than the <object> in image 2?"
+    },
+    {
+        "aspect": "size of objects",
+        "question": "Is the <object> in image 1 smaller than the <object> in image 2?"
+    },
+    {
+        "aspect": "weight of objects",
+        "question": "Is the <object> in image 1 heavier than the <object> in image 2?"
+    },
+    {
+        "aspect": "weight of objects",
+        "question": "Is the <object> in image 1 lighter than the <object> in image 2?"
+    },
+    {
+        "aspect": "distance between objects",
+        "question": "Is the <object> in image 1 closer to the <object> in image 2?"
+    },
+    {
+        "aspect": "distance between objects",
+        "question": "Is the <object> in image 1 farther from the <object> in image 2?"
+    },
+    {
+        "aspect": "relative position in the image",
+        "question": "Is the <object> in image 1 on the left of the <object> in image 2?"
+    },
+    {
+        "aspect": "language understanding",
+        "question": "Can you write a sentence combining the words in the two images?"
+    },
+    {
+        "aspect": "common sense",
+        "question": "Is there any <object> that does not fit common sense in any of the images provided?"
+    },
+    {
+        "aspect": "texture of objects",
+        "question": "What is the texture of the <object> in image 1 compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "material of objects",
+        "question": "What material is the <object> in image 1 made of compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "emotional response to objects",
+        "question": "What is the emotional impact of the <object> in image 1 compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "historical significance of objects",
+        "question": "What historical period do the <objects> in the images represent?"
+    },
+    {
+        "aspect": "orientation of objects",
+        "question": "How does the orientation of the <object> in image 1 compare to the <object> in image 2?"
+    },
+    {
+        "aspect": "pattern recognition",
+        "question": "Are there any patterns on the <object> in image 1 that match with the <object> in image 2?"
+    },
+    {
+        "aspect": "contextual understanding",
+        "question": "How would the context change if the <object> in image 1 were placed in the setting of image 2?"
+    },
+    {
+        "aspect": "cultural relevance of objects",
+        "question": "What cultural significance does the <object> in image 1 have compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "age estimation of objects or subjects",
+        "question": "Which image shows older/younger <objects/subjects>?"
+    },
+    {
+        "aspect": "symmetry and asymmetry in objects",
+        "question": "Are the <objects> in both images symmetrical or asymmetrical?"
+    },
+    {
+        "aspect": "motion or static state of objects",
+        "question": "Is the <object/subject> in motion or static in both images?"
+    },
+    {
+        "aspect": "usage or function of objects",
+        "question": "What is the apparent function or use of the <object> in each image?"
+    },
+    {
+        "aspect": "environmental context of objects",
+        "question": "Which image depicts a more urban/rural environment?"
+    },
+    {
+        "aspect": "historical or temporal context of images",
+        "question": "Do the images represent the same historical period or different ones?"
+    },
+    {
+        "aspect": "technological aspects in images",
+        "question": "Which image contains more advanced/simple technology?"
+    },
+    {
+        "aspect": "natural versus artificial elements in images",
+        "question": "Which image shows more natural/artificial elements?"
+    },
+    {
+        "aspect": "lighting and shadow effects in images",
+        "question": "How does the lighting/shadowing compare between the two images?"
+    },
+    {
+        "aspect": "perspective and depth perception in images",
+        "question": "Which image demonstrates a greater sense of depth or perspective?"
+    },
+    {
+        "aspect": "weather conditions in images",
+        "question": "What kind of weather conditions are depicted in each image?"
+    },
+    {
+        "aspect": "seasonal attributes in images",
+        "question": "Do the images represent different seasons?"
+    },
+    {
+        "aspect": "time of day in images",
+        "question": "Does one image seem to be taken at a different time of day than the other?"
+    },
+    {
+        "aspect": "interaction between subjects in images",
+        "question": "Is there any interaction between subjects in the images? How does it differ?"
+    },
+    {
+        "aspect": "biological characteristics in images",
+        "question": "What biological characteristics are apparent in the subjects of each image?"
+    },
+    {
+        "aspect": "geographical location implications in images",
+        "question": "Do the images suggest different geographical locations?"
+    },
+    {
+        "aspect": "economic or social status indicators in images",
+        "question": "Are there indicators of economic or social status in the images? How do they compare?"
+    },
+    {
+        "aspect": "artistic style or genre of images",
+        "question": "Do the images represent different artistic styles or genres?"
+    },
+    {
+        "aspect": "interactivity between objects and environments",
+        "question": "Can a person take the <object> from image 1 to the place shown in image 2? How would it fit in?"
+    },
+    {
+        "aspect": "adaptability of subjects or objects in new environments",
+        "question": "Would the <object/animal/person> from image 1 survive or thrive in the environment of image 2?"
+    },
+    {
+        "aspect": "feasibility of actions in varied contexts",
+        "question": "How would the <object> from image 1 be used differently in the setting of image 2?"
+    },
+    {
+        "aspect": "impact of environmental changes on objects or subjects",
+        "question": "If the <subject> from image 1 interacted with the <object> in image 2, what would likely happen?"
+    },
+    {
+        "aspect": "environmental or ecological implications of placing objects in new settings",
+        "question": "What are the potential environmental impacts of moving the <object> from image 1 to the location in image 2?"
+    },
+    {
+        "aspect": "congruence of objects with different time periods",
+        "question": "Would the technology in image 1 be functional or obsolete in the time period or setting of image 2?"
+    },
+    {
+        "aspect": "cultural appropriateness of objects in diverse settings",
+        "question": "Are the <clothing/items> from image 1 culturally appropriate or historically accurate for the setting in image 2?"
+    },
+    {
+        "aspect": "practicality of using objects in alternate scenarios",
+        "question": "How would the light/shadow effects on the <object/subject> in image 1 change in the environment of image 2?"
+    },
+    {
+        "aspect": "safety considerations in changing object placements",
+        "question": "Is it safe to transport the <animal/chemical/substance> from image 1 to the environment in image 2? Why?"
+    },
+    {
+        "aspect": "ethical considerations in altering contexts",
+        "question": "What ethical considerations arise from placing the <subject/object> of image 1 into the context of image 2?"
+    },
+    {
+        "aspect": "emotional tone or mood in images",
+        "question": "How would the mood or emotional tone change if elements from image 1 were introduced into image 2?"
+    },
+    {
+        "aspect": "emotional tone or mood in images",
+        "question": "Which image conveys a happier/sadder or more positive/negative mood?"
+    },
+    {
+        "aspect": "historical accuracy of combining elements from different images",
+        "question": "Could the <object/subject> from image 1 realistically exist or be found in the period/location of image 2?"
+    },
+    {
+        "aspect": "cultural symbols and meanings in images",
+        "question": "How would the inclusion of the <object/subject> from image 1 alter the cultural or social implications of image 2?"
+    },
+    {
+        "aspect": "cultural symbols and meanings in images",
+        "question": "Are there any cultural symbols in the images and how do they differ?"
+    },
+    {
+        "aspect": "anachronism and historical consistency",
+        "question": "Would the <object> from image 1 be considered anachronistic or out of place in the setting of image 2?"
+    },
+    {
+        "aspect": "daily use and functionality of objects",
+        "question": "How would the <kitchen appliance> from image 1 be used in the <setting> of image 2?"
+    },
+    {
+        "aspect": "daily use and functionality of objects",
+        "question": "Can the <furniture> in image 1 fit and be functional in the <room> shown in image 2?"
+    },
+    {
+        "aspect": "maintenance and care requirements of objects",
+        "question": "What are the maintenance challenges for the <vehicle> in image 1 if used in the location of image 2?"
+    },
+    {
+        "aspect": "cost and economic value of objects in diverse contexts",
+        "question": "How would the cost of the <object> from image 1 vary if it were in the economy of the place shown in image 2?"
+    },
+    {
+        "aspect": "health and wellness implications of objects and environments",
+        "question": "What health benefits or risks does the <object/activity> in image 1 pose in the environment of image 2?"
+    },
+    {
+        "aspect": "sustainability and environmental friendliness of objects",
+        "question": "Is the <object> from image 1 environmentally sustainable if used extensively in the setting of image 2?"
+    },
+    {
+        "aspect": "transportation and mobility aspects of objects",
+        "question": "How would someone transport the <large object> from image 1 to the location in image 2?"
+    },
+    {
+        "aspect": "communication and technology usage in daily life",
+        "question": "What technological adaptations would be needed for the <device> from image 1 to work in the setting of image 2?"
+    },
+    {
+        "aspect": "cuisine and food-related aspects in different cultures",
+        "question": "How would the <food item> from image 1 be received in the cultural context of image 2?"
+    },
+    {
+        "aspect": "recreational and leisure activities in various environments",
+        "question": "Would the <recreational activity> from image 1 be feasible or popular in the environment of image 2?"
+    },
+    {
+        "aspect": "work and professional environments and their tools",
+        "question": "How would a professional in the <work environment> of image 1 adapt to the setting in image 2?"
+    },
+    {
+        "aspect": "urban and rural lifestyle differences",
+        "question": "What lifestyle changes would be necessary for a person from the urban setting of image 1 to live in the rural setting of image 2?"
+    },
+    {
+        "aspect": "seasonal activities and their appropriate gear or settings",
+        "question": "What seasonal clothing or equipment from image 1 would be inappropriate or unnecessary in the climate of image 2?"
+    },
+    {
+        "aspect": "seasonal activities and their appropriate gear or settings",
+        "question": "How would the seasonal attributes of image 1 affect the <object/subject> if placed in the season of image 2?"
+    },
+    {
+        "aspect": "safety and risk factors associated with objects and environments",
+        "question": "Are there any safety concerns in using the <object> from image 1 in the environment of image 2?"
+    },
+    {
+        "aspect": "social norms and etiquettes related to objects and environments",
+        "question": "How do social norms differ regarding the use of <object/setting> between image 1 and image 2?"
+    },
+    {
+        "aspect": "scientific principles and natural laws relevant to objects",
+        "question": "How does the principle of <scientific concept> apply to the <object> in image 1 compared to image 2?"
+    },
+    {
+        "aspect": "historical significance and evolution of objects and environments",
+        "question": "What historical era is represented by the <objects/settings> in the images, and how do they compare?"
+    },
+    {
+        "aspect": "geographical features and their influence on objects and settings",
+        "question": "How do the geographical features in image 1 affect the <object/subject> compared to those in image 2?"
+    },
+    {
+        "aspect": "artistic elements and aesthetic qualities in images",
+        "question": "Can you compare the artistic styles or aesthetic elements present in both images?"
+    },
+    {
+        "aspect": "technological advancements and future possibilities",
+        "question": "How might the <object/technology> in image 1 evolve in the context of the future setting shown in image 2?"
+    },
+    {
+        "aspect": "architectural styles and construction methods",
+        "question": "What architectural differences are evident between the buildings in image 1 and image 2?"
+    },
+    {
+        "aspect": "botanical and zoological aspects in different environments",
+        "question": "How do the flora and fauna in image 1 compare with those in the ecosystem of image 2?"
+    },
+    {
+        "aspect": "meteorological conditions and their effects on settings",
+        "question": "What weather conditions are depicted in each image, and how do they affect the environment?"
+    },
+    {
+        "aspect": "astronomical phenomena visible or inferred in images",
+        "question": "Are there any astronomical phenomena or elements in either image, and how do they compare?"
+    },
+    {
+        "aspect": "psychological and emotional responses to different environments",
+        "question": "How might the environments in each image influence the psychological state of a person?"
+    },
+    {
+        "aspect": "sociopolitical context and its influence on environments",
+        "question": "What are the sociopolitical implications of the settings or activities shown in the images?"
+    },
+    {
+        "aspect": "economic systems and their impact on lifestyles",
+        "question": "How do the economic conditions in image 1 compare to those suggested in image 2?"
+    },
+    {
+        "aspect": "linguistic diversity and communication methods",
+        "question": "Are there linguistic elements in the images, and how do they reflect communication styles?"
+    },
+    {
+        "aspect": "philosophical concepts illustrated or implied in images",
+        "question": "What philosophical themes or ideas are suggested by the contents of the images?"
+    },
+    {
+        "aspect": "educational and learning environments and tools",
+        "question": "How do the educational tools or environments in the images compare, and what do they suggest about learning methods?"
+    },
+    {
+        "aspect": "architecture_styles",
+        "question": "How do architectural styles of the buildings in image 1 and image 3 differ?"
+    },
+    {
+        "aspect": "cultural_symbolism",
+        "question": "What cultural elements or symbolism can you identify in images 2 and 4?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "How do the historical contexts of the places in image 1 and image 3 impact their current appearances?"
+    },
+    {
+        "aspect": "historical significance",
+        "question": "What historical period do the items in the images represent?"
+    },
+    {
+        "aspect": "musical instruments",
+        "question": "What type of music can be produced by the instruments in the images?"
+    },
+    {
+        "aspect": "cultural significance",
+        "question": "What does the way these instruments are played tell us about the culture they originate from?"
+    },
+    {
+        "aspect": "usage",
+        "question": "How are the instruments in the images used in a symphony orchestra?"
+    },
+    {
+        "aspect": "Historical Periods",
+        "question": "Which historical period do the objects and architecture in the images belong to?"
+    },
+    {
+        "aspect": "Cultural Symbols",
+        "question": "What cultural symbols can be identified in each image, and what do they represent?"
+    },
+    {
+        "aspect": "Socio-economic Indicators",
+        "question": "What socio-economic indicators can be deduced from the images?"
+    },
+    {
+        "aspect": "Environmental Conservation",
+        "question": "How do the images depict the impact of human activities on the environment?"
+    },
+    {
+        "aspect": "Technological Advancements",
+        "question": "Can you identify any technological tools or advancements represented in the images?"
+    },
+    {
+        "aspect": "Climate Change",
+        "question": "What signs of climate change can you identify from the images?"
+    },
+    {
+        "aspect": "Human-Animal Interaction",
+        "question": "How is the relationship between humans and animals portrayed in the images?"
+    },
+    {
+        "aspect": "environmental_impact",
+        "question": "How do the human activities depicted in image 1 and image 3 contribute to environmental changes?"
+    },
+    {
+        "aspect": "cultural_differences",
+        "question": "What are the differences in the cultural activities shown in image 2 and image 4 and how might they influence the individuals' lifestyle?"
+    },
+    {
+        "aspect": "technological_advancements",
+        "question": "How do the technological advancements in image 1 and image 4 affect the day-to-day life of the people in the image?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "How do the two images reflect the era they are portraying?"
+    },
+    {
+        "aspect": "artistic_style",
+        "question": "What artistic styles are used in each image and how do they contribute to the overall atmosphere?"
+    },
+    {
+        "aspect": "symbolism",
+        "question": "What symbols are present in both images and what might they represent?"
+    },
+    {
+        "aspect": "time_of_day",
+        "question": "How does the time of day in image 1 compare to that of image 2?"
+    },
+    {
+        "aspect": "animal_behavior",
+        "question": "What is the behavior of the animal in image 1 compared to the animal in image 2?"
+    },
+    {
+        "aspect": "seasons",
+        "question": "What season does image 1 represent, and how does it compare to the season represented in image 2?"
+    },
+    {
+        "aspect": "food_chain",
+        "question": "Based on the images, can we infer any food chain relationship between the animals in image 1 and image 3?"
+    },
+    {
+        "aspect": "Aspect1: Climate Change Awareness",
+        "question": "How does the environmental condition portrayed in image 1 contrast with that of image 2, particularly in the context of climate change?"
+    },
+    {
+        "aspect": "Aspect2: Anthropocentric Influence",
+        "question": "What human influence or activities can be inferred from both images that could be impacting the environment?"
+    },
+    {
+        "aspect": "Aspect3: Biodiversity",
+        "question": "Can you identify and compare the biodiversity present in both images?"
+    },
+    {
+        "aspect": "architectural styles",
+        "question": "How does the architectural style of building in image 1 differ from the style in image 2?"
+    },
+    {
+        "aspect": "historical periods",
+        "question": "Can you tell which historical periods are represented in image 1 and image 2?"
+    },
+    {
+        "aspect": "Cultural Significance",
+        "question": "What are the cultural implications of the objects or scenes depicted in the images?"
+    },
+    {
+        "aspect": "Historical Context",
+        "question": "What historical period do the images seem to represent?"
+    },
+    {
+        "aspect": "Artistic Style",
+        "question": "What artistic styles are present in the images?"
+    },
+    {
+        "aspect": "Emotional Impact",
+        "question": "What emotions do the colour palettes in the images evoke?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "What architectural style do the buildings in the images represent?"
+    },
+    {
+        "aspect": "historical_periods",
+        "question": "Can you determine the historical periods the buildings in the images are from?"
+    },
+    {
+        "aspect": "relationship_between_culture_and_architecture",
+        "question": "How does the architectural style of the buildings in the images reflect their cultural origins?"
+    },
+    {
+        "aspect": "cultural diversity",
+        "question": "How do the images depict the cultural diversity in different regions?"
+    },
+    {
+        "aspect": "architecture and its societal influence",
+        "question": "How does the architecture in the images reflect the societal values and norms of the respective regions?"
+    },
+    {
+        "aspect": "history and evolution of architecture",
+        "question": "What does each image tell about the evolution of architecture in different regions?"
+    },
+    {
+        "aspect": "cultural symbolism",
+        "question": "What cultural symbols can be identified in each image and what do they represent?"
+    },
+    {
+        "aspect": "interplay of natural and man-made elements",
+        "question": "How do the natural and artificial elements in the images interact or complement each other?"
+    },
+    {
+        "aspect": "human activity and its environmental impact",
+        "question": "What indications of human activity are visible in each image and how might they have impacted the environment?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "What historical period could each image be representing?"
+    },
+    {
+        "aspect": "cultural symbolism",
+        "question": "What is the cultural significance of the objects in the images?"
+    },
+    {
+        "aspect": "geographical setting",
+        "question": "Where in the world could each image be located based on the landscape and architecture?"
+    },
+    {
+        "aspect": "time of day",
+        "question": "What time of day is each image depicting?"
+    },
+    {
+        "aspect": "cultural contrast",
+        "question": "How does the architectural style in image 1 contrast with that in image 2, and what does this say about the respective cultures they represent?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "What historical events or eras do the scenes in image 1 and image 3 suggest, and how do these contexts influence the understanding of these images?"
+    },
+    {
+        "aspect": "environmental impact",
+        "question": "How might the environments in image 1 and image 2 be affected by the activities depicted in image 3?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What are the historical periods represented in the images and how do they differ?"
+    },
+    {
+        "aspect": "architectural_style",
+        "question": "What architectural styles can be identified from the buildings in the images?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What cultural or symbolic significance do the buildings in the images hold?"
+    },
+    {
+        "aspect": "environmental_impact",
+        "question": "How do the buildings in the images interact with their surrounding environment?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "What are the specific architectural styles evident in the buildings of each image?"
+    },
+    {
+        "aspect": "cultural_history",
+        "question": "How do the architecture and objects in each image reflect the cultural history of their respective regions?"
+    },
+    {
+        "aspect": "urban_vs_rural_living",
+        "question": "What are the differences in lifestyle suggested by the urban and rural settings in the images?"
+    },
+    {
+        "aspect": "historical_significance",
+        "question": "Does the monument in image 1 have more historical significance than the structure in image 2?"
+    },
+    {
+        "aspect": "architectural_style",
+        "question": "What architectural styles are represented in the buildings from image 3 and image 4?"
+    },
+    {
+        "aspect": "geographical_location",
+        "question": "Can you tell the geographical location of the structures from image 1 and image 4 based on their architectural style and surrounding landscape?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "Can you identify the historical periods depicted in the images based on the architectural style and clothing?"
+    },
+    {
+        "aspect": "geographical_features",
+        "question": "How do the geographical features in the images influence the lifestyle and culture of the inhabitants?"
+    },
+    {
+        "aspect": "symbolism",
+        "question": "What symbolic elements are present in the images and what do they represent?"
+    },
+    {
+        "aspect": "historical context and its influence on environments",
+        "question": "What historical era do these images seem to depict? How do the images reflect the social and cultural norms of that era?"
+    },
+    {
+        "aspect": "interaction between subjects in images",
+        "question": "What is the nature of the interaction between the subjects in the images? Do the interactions reflect any societal norms or practices of a particular era?"
+    },
+    {
+        "aspect": "symbolism and metaphorical elements in images",
+        "question": "Are there any symbolic or metaphorical elements in the images? How do they contribute to the overall interpretation of the images?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "Can you identify the historical period from the architecture and clothing shown in the images?"
+    },
+    {
+        "aspect": "geographical location",
+        "question": "Can you determine the geographical location from the landscape and architecture shown in the images?"
+    },
+    {
+        "aspect": "cultural influence",
+        "question": "What cultural influences can you infer from the clothing, food, or other items in the images?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "How does the architectural style of the buildings in image 1 reflect the historical period it represents?"
+    },
+    {
+        "aspect": "climate and geography",
+        "question": "Considering the climate and geographical indicators in image 2, what type of crops would most likely thrive there?"
+    },
+    {
+        "aspect": "interaction between historical and geographical elements",
+        "question": "How would the introduction of the architectural style from image 1 impact the geography and climate of the location in image 2?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "Can you identify the architectural styles of the buildings in the images?"
+    },
+    {
+        "aspect": "geographical_location",
+        "question": "Based on the architectural styles and other features, can you infer the potential geographical locations of these buildings?"
+    },
+    {
+        "aspect": "historical_period",
+        "question": "Can you infer the historical period when these buildings might have been built?"
+    },
+    {
+        "aspect": "building_materials",
+        "question": "Can you identify the materials used in the construction of these buildings?"
+    },
+    {
+        "aspect": "color symbolism",
+        "question": "What does the predominant color in image 1 symbolize compared to the color in image 2?"
+    },
+    {
+        "aspect": "emotional tone",
+        "question": "What is the emotional tone conveyed in image 1 and how does it contrast with the tone in image 2?"
+    },
+    {
+        "aspect": "cultural elements",
+        "question": "What are the cultural elements noticeable in image 3 and image 4, and what do they say about the societies they represent?"
+    },
+    {
+        "aspect": "animal_behavior",
+        "question": "What similarities can you spot in the behaviors of the animals in images 1 and 3?"
+    },
+    {
+        "aspect": "environment_and_habitat",
+        "question": "How does the natural habitat in image 2 relate to the settings in images 1 and 3?"
+    },
+    {
+        "aspect": "biodiversity",
+        "question": "What can you infer about the biodiversity of the locations in images 1, 2 and 3?"
+    },
+    {
+        "aspect": "geographical_location",
+        "question": "How can the geographical location of the scenes in image 1 and image 2 be determined?"
+    },
+    {
+        "aspect": "wildlife_behaviour",
+        "question": "What can the observed behaviour of the animals in image 1 and image 3 tell us about their habitat and lifestyle?"
+    },
+    {
+        "aspect": "cultural_symbols",
+        "question": "Can any cultural symbols or icons be identified in images 2 and 4? What do they represent?"
+    },
+    {
+        "aspect": "historical events",
+        "question": "How do the events depicted in image 1 and image 2 correlate chronologically?"
+    },
+    {
+        "aspect": "sociopolitical context",
+        "question": "What are the socio-political implications of the events portrayed in both images?"
+    },
+    {
+        "aspect": "artistic style",
+        "question": "How do the artistic styles of image 1 and image 2 reflect their respective historical periods?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "How does the historical context depicted in image 1 differ from that in image 2?"
+    },
+    {
+        "aspect": "architecture_style",
+        "question": "What architectural styles can be identified in the buildings in images 1 and 3?"
+    },
+    {
+        "aspect": "cultural_influence",
+        "question": "What cultural influences can be identified in the clothing styles in image 2 and image 4?"
+    },
+    {
+        "aspect": "day_and_night_comparison",
+        "question": "What differences can be observed in the activities happening in the cityscape of image 3 during the day and the cityscape of image 4 at night?"
+    },
+    {
+        "aspect": "cultural symbolism",
+        "question": "How is the cultural symbolism represented differently in image 1 and image 3?"
+    },
+    {
+        "aspect": "natural environment",
+        "question": "What do the natural environments of image 2 and 3 suggest about the climate and geographical location of these places?"
+    },
+    {
+        "aspect": "architecture",
+        "question": "Based on the architectural elements visible in image 1 and 2, can you infer the time period in which the structures were likely built?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What historical period does each image represent?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "How do the architectural styles of the buildings in each image differ?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What are some cultural features unique to the locations depicted in each image?"
+    },
+    {
+        "aspect": "Physical characteristics of animals",
+        "question": "How do the physical characteristics of the animal in image 1 and image 3 differ?"
+    },
+    {
+        "aspect": "Animal habitats",
+        "question": "How do the habitats of the animals in image 2 and image 3 differ?"
+    },
+    {
+        "aspect": "Cultural symbolism of animals",
+        "question": "What are the cultural significances of the animals in image 1 and image 2 in their respective societies?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What do the images tell us about the different cultures represented?"
+    },
+    {
+        "aspect": "artistic_styles",
+        "question": "What artistic styles are depicted in the images and how are they different?"
+    },
+    {
+        "aspect": "historical_period",
+        "question": "Can you identify the historical period of each image based on the clothing, architecture, and artifacts present?"
+    },
+    {
+        "aspect": "environmental_concerns",
+        "question": "How do the environmental aspects of image 1 affect the species seen in image 2?"
+    },
+    {
+        "aspect": "ecology_and_habitat",
+        "question": "Would the habitat in image 3 be suitable for the species in image 2?"
+    },
+    {
+        "aspect": "impact_of_human_activities",
+        "question": "What impact could the human activities in image 1 have on the environment of image 3?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "Can you identify the historical period or event depicted in each image?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "How would you describe the architectural style seen in each image?"
+    },
+    {
+        "aspect": "human_activity",
+        "question": "What types of human activities are portrayed in these images?"
+    },
+    {
+        "aspect": "cultural_elements",
+        "question": "What cultural elements can you identify from these images?"
+    },
+    {
+        "aspect": "geographical_features",
+        "question": "What geographical features are depicted in the images and how do they differ?"
+    },
+    {
+        "aspect": "weather_conditions",
+        "question": "What is the weather condition in each image and how would it impact the environment?"
+    },
+    {
+        "aspect": "wildlife_habitat",
+        "question": "What animals could possibly live in the environments depicted in the images? How do their habitats differ?"
+    },
+    {
+        "aspect": "human_interaction",
+        "question": "How could human activities impact the landscapes depicted in the images?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "What are the similarities and differences in the historical periods represented by the objects in images 1 and 2?"
+    },
+    {
+        "aspect": "artistic styles",
+        "question": "How do the artistic styles represented in image 3 contrast with the styles in images 1 and 2?"
+    },
+    {
+        "aspect": "cultural connotations",
+        "question": "What cultural connotations can be inferred from the items depicted in images 2 and 4?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What historical events can be inferred from the details of image 1 and image 2?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "Can you identify the architectural style of the buildings in both images? How do they differ?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What elements of cultural significance can be observed in each image?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What are the cultural significance of the objects and settings in the images?"
+    },
+    {
+        "aspect": "object_importance",
+        "question": "How important is the object in the context of its environment in the images?"
+    },
+    {
+        "aspect": "comparison_of_details",
+        "question": "How do the details in image 1 compare to those in image 2 and image 3?"
+    },
+    {
+        "aspect": "symbolic_representation",
+        "question": "What could be the symbolic representation of the objects in the images?"
+    },
+    {
+        "aspect": "Historical Context",
+        "question": "What historical events or time periods do the images represent and how do they contrast?"
+    },
+    {
+        "aspect": "Architectural Styles",
+        "question": "How do the architectural styles depicted in the images reflect their historical context?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "What architectural styles are evident in the two images?"
+    },
+    {
+        "aspect": "geographical_context",
+        "question": "Based on the geographical features visible in the images, where might these structures be located?"
+    },
+    {
+        "aspect": "cultural_influence",
+        "question": "What cultural influences can be inferred from the architectural styles and decorations in the images?"
+    },
+    {
+        "aspect": "Historical events and their representation",
+        "question": "What historical event does image 3 represent and how does it correlate with the event depicted in image 4?"
+    },
+    {
+        "aspect": "Cultural and societal norms",
+        "question": "In what ways do the societal norms depicted in image 1 and image 2 differ?"
+    },
+    {
+        "aspect": "Clothing style and period",
+        "question": "Based on the clothing style, can you estimate the time period of image 1 and image 5?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "How does the historical context of image 1 contrast with that of image 2?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What are the cultural implications of the elements found in image 3 when compared to image 4?"
+    },
+    {
+        "aspect": "aesthetic_styles",
+        "question": "How do the aesthetic styles of image 5 compare and contrast with those in image 6?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "How do the images reflect the historical period they're set in?"
+    },
+    {
+        "aspect": "interactions_between_characters",
+        "question": "What kind of relationship can be inferred between the characters in the images?"
+    },
+    {
+        "aspect": "symbolic_meaning",
+        "question": "Are there any objects in the images that carry symbolic meanings?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What period in history are the two scenes most likely depicting?"
+    },
+    {
+        "aspect": "architectural_styles",
+        "question": "How do the architectural styles in the two images compare?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What cultural elements can be identified in the two scenes?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What cultural significance does the object in image 1 hold in the context of the environment in image 2?"
+    },
+    {
+        "aspect": "environmental_impact",
+        "question": "What could be the potential environmental impact of introducing the object from image 1 into the environment of image 2?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What historical context might connect the scenes in image 1 and image 2?"
+    },
+    {
+        "aspect": "architectural_style",
+        "question": "How can we compare the architectural styles of the structures in image 1 and image 2?"
+    },
+    {
+        "aspect": "architecture_styles",
+        "question": "How does the architectural style of the buildings in image 1 compare to the style in image 2?"
+    },
+    {
+        "aspect": "geographical_distribution",
+        "question": "Would the flora depicted in image 3 typically be found in the same region as the buildings from images 1 and 2?"
+    },
+    {
+        "aspect": "cultural_context",
+        "question": "What cultural elements can be inferred from the images?"
+    },
+    {
+        "aspect": "Historical Context",
+        "question": "Can you identify the historical period depicted in images 1 and 3 based on the architecture and clothing style?"
+    },
+    {
+        "aspect": "Cultural Differences",
+        "question": "What cultural differences can you identify between the people in images 2 and 4?"
+    },
+    {
+        "aspect": "Environmental Impact",
+        "question": "What is the environmental impact of the activities shown in images 1 and 2 compared to images 3 and 4?"
+    },
+    {
+        "aspect": "historical_period",
+        "question": "What historical period do these images portray?"
+    },
+    {
+        "aspect": "artistic_style",
+        "question": "What common artistic style can you identify in the images?"
+    },
+    {
+        "aspect": "subject_matter",
+        "question": "What is the common subject matter in the images?"
+    },
+    {
+        "aspect": "cultural_context",
+        "question": "What cultural context or geographical location is implied by the images?"
+    },
+    {
+        "aspect": "time_of_day",
+        "question": "How does the time of day in image 1 contrast with that in image 2?"
+    },
+    {
+        "aspect": "wildlife_behavior",
+        "question": "What behaviors of the animals in the images can be inferred from their activities?"
+    },
+    {
+        "aspect": "animal_species",
+        "question": "Are the animals in the images from the same species? If not, what are the main differences?"
+    },
+    {
+        "aspect": "Cultural Differences",
+        "question": "How do the cultural elements of the two images compare?"
+    },
+    {
+        "aspect": "Architectural Styles",
+        "question": "Can you identify the architectural styles in the images and how they compare?"
+    },
+    {
+        "aspect": "Geographical Indications",
+        "question": "Can you identify the geographical locations suggested by the images and how they relate to the cultural and architectural elements?"
+    },
+    {
+        "aspect": "architectural styles",
+        "question": "Which architectural style does each building in the images represent?"
+    },
+    {
+        "aspect": "cultural significance",
+        "question": "What cultural significance do the architectural styles in the images hold?"
+    },
+    {
+        "aspect": "ecosystem diversity",
+        "question": "How do the ecosystems in the images differ and what organisms exist in these ecosystems?"
+    },
+    {
+        "aspect": "weather and climate",
+        "question": "What clues in the images hint at the type of climate in these ecosystems?"
+    },
+    {
+        "aspect": "adaptation of species",
+        "question": "How have the organisms in these ecosystems adapted to their environment?"
+    },
+    {
+        "aspect": "historical accuracy",
+        "question": "Does the painting from image 1 accurately depict the historical event described in image 2?"
+    },
+    {
+        "aspect": "symbolism and representation",
+        "question": "What symbols in image 3 are similar to or contrast with the symbols in image 1 and image 2?"
+    },
+    {
+        "aspect": "emotional resonance",
+        "question": "Which elements from images 1, 2, and 3 echo similar emotional tones or themes?"
+    },
+    {
+        "aspect": "cultural symbolism",
+        "question": "What is the cultural symbolism of the objects or elements seen in the images?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "What historical events or periods do the images seem to represent or imply?"
+    },
+    {
+        "aspect": "geographical comparison",
+        "question": "How does the geographical location depicted in image 1 contrast with the location in image 2?"
+    },
+    {
+        "aspect": "environmental_impact",
+        "question": "What environmental changes could the actions in the images cause?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What historical events or periods are suggested by the elements depicted in the images?"
+    },
+    {
+        "aspect": "cultural_diversity",
+        "question": "How do the images reflect cultural diversity?"
+    },
+    {
+        "aspect": "celebration_context",
+        "question": "What do the images tell us about the celebration or event taking place?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What cultural significance can we infer from the given images?"
+    },
+    {
+        "aspect": "emotional_tone",
+        "question": "Which image conveys a more festive or celebratory mood?"
+    },
+    {
+        "aspect": "cultural aspects",
+        "question": "What cultural elements are similar between image 1 and image 2?"
+    },
+    {
+        "aspect": "architectural designs",
+        "question": "How do the architectural designs of the buildings in image 1 and 2 reflect the culture of their respective regions?"
+    },
+    {
+        "aspect": "geographical features",
+        "question": "How do the geographical features in image 1 and 2 influence the culture and architecture of the respective regions?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What historical era do the dresses in the images belong to?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What are the cultural significances of the accessories worn by the subjects in the images?"
+    },
+    {
+        "aspect": "fashion_trends",
+        "question": "How do the fashion trends represented in the images differ?"
+    },
+    {
+        "aspect": "color_symbolism",
+        "question": "What does the predominant color in each image symbolize in their respective cultures?"
+    },
+    {
+        "aspect": "traditional vs modern architecture",
+        "question": "How do the architectural styles from image 1 and image 3 differ in terms of their design principles?"
+    },
+    {
+        "aspect": "cultural significance",
+        "question": "What cultural implications can be drawn from the elements present in images 2 and 4?"
+    },
+    {
+        "aspect": "interactions and contrasts",
+        "question": "How would the character from image 4 interact with the environment in image 1? Would there be any contrasts?"
+    },
+    {
+        "aspect": "historical importance of locations",
+        "question": "What historical significance do the locations in the images hold?"
+    },
+    {
+        "aspect": "cultural symbolism",
+        "question": "What cultural symbols can be identified in the images and what do they represent?"
+    },
+    {
+        "aspect": "geographical comparison",
+        "question": "How do the geographical features of the locations in the images differ?"
+    },
+    {
+        "aspect": "cultural symbolism",
+        "question": "What symbolic elements in image 1 and image 2 represent the different cultures depicted?"
+    },
+    {
+        "aspect": "architectural styles",
+        "question": "How do the architectural styles in image 1 and image 2 reflect the historical periods they represent?"
+    },
+    {
+        "aspect": "architecture_style",
+        "question": "What styles of architecture are represented in the images?"
+    },
+    {
+        "aspect": "historical_era",
+        "question": "Based on the architecture and attire in the images, what historical eras do they represent?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What cultural significance can be derived from the architectural structures in the images?"
+    },
+    {
+        "aspect": "interaction_between_objects",
+        "question": "How does the bird in image 1 interact with the tree in image 3?"
+    },
+    {
+        "aspect": "seasonal_changes",
+        "question": "How does the landscape in image 1 differ from that in image 2, and what could be the reason for this difference?"
+    },
+    {
+        "aspect": "animal_behavior",
+        "question": "Can you infer the behavior of the bird in image 1 based on its surroundings in image 3?"
+    },
+    {
+        "aspect": "cultural diversity",
+        "question": "How do the images depict cultural diversity in different regions?"
+    },
+    {
+        "aspect": "architecture and history",
+        "question": "How do the architectural styles in the images reflect the history of their respective regions?"
+    },
+    {
+        "aspect": "geographical features",
+        "question": "What geographical features can be seen in the images, and how might they have influenced the human activities depicted?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What historical period do the settings of the images suggest?"
+    },
+    {
+        "aspect": "artistic_styles",
+        "question": "What artistic styles are depicted in the images?"
+    },
+    {
+        "aspect": "cultural_symbols",
+        "question": "What cultural symbols can be identified in the images and what do they represent?"
+    },
+    {
+        "aspect": "cultural significance",
+        "question": "What are the cultural implications of the symbols found in image 1 and image 2?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "What is the historical context of the scene in image 1 and how does it compare to the scene in image 2?"
+    },
+    {
+        "aspect": "environmental adaptation",
+        "question": "How has the environment in image 3 adapted to suit the presence of the structure in the image?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "How does the architecture style of the building in image 1 compare to that in image 2 in terms of history and cultural significance?"
+    },
+    {
+        "aspect": "ecological_significance",
+        "question": "Can you analyse the differences in the flora and fauna present in the environments of image 1 and image 3?"
+    },
+    {
+        "aspect": "environmental_adaptability",
+        "question": "Can the species from image 3 survive in the environment of image 1? Why or why not?"
+    },
+    {
+        "aspect": "interactivity",
+        "question": "How would the environment of image 2 change if the building from image 1 was placed there?"
+    },
+    {
+        "aspect": "Historical context and architecture",
+        "question": "Do the architectural styles from Image 1 and Image 3 belong to the same historical period?"
+    },
+    {
+        "aspect": "Flora and fauna",
+        "question": "Can the animals from Image 2 and Image 4 co-exist in the same habitat?"
+    },
+    {
+        "aspect": "Climate and geography",
+        "question": "Based on the geographical features and climate seen in Image 1 and Image 2, could they be from the same region?"
+    },
+    {
+        "aspect": "historical context and architecture",
+        "question": "How does the architecture of the castle in image 1 compare with the palace in image 2 in terms of historical period and style?"
+    },
+    {
+        "aspect": "cultural significance",
+        "question": "What significance might the red flags in image 1 and the golden statue in image 2 hold in their respective cultures?"
+    },
+    {
+        "aspect": "geographical location",
+        "question": "Based on the environment and architecture, where could the locations in image 1 and image 2 be?"
+    },
+    {
+        "aspect": "Historical context",
+        "question": "What historical time periods do the images represent and how do they differ?"
+    },
+    {
+        "aspect": "Architectural styles",
+        "question": "How are the architectural styles depicted in the images different or similar?"
+    },
+    {
+        "aspect": "Cultural significance",
+        "question": "What role does the architecture play in the cultural or societal context of each image?"
+    },
+    {
+        "aspect": "Cultural symbolism",
+        "question": "What symbols in the images relate to the cultures they represent?"
+    },
+    {
+        "aspect": "Historical contexts",
+        "question": "How do the historical periods of the images influence their contents and meanings?"
+    },
+    {
+        "aspect": "Architectural styles",
+        "question": "What do the architectural styles in the images tell us about the periods and locations they represent?"
+    },
+    {
+        "aspect": "cultural symbolism",
+        "question": "Can you identify and interpret any cultural symbols present in the images?"
+    },
+    {
+        "aspect": "visual storytelling",
+        "question": "What narrative elements can you derive from the images, and how do they connect to form a coherent story?"
+    },
+    {
+        "aspect": "historical context",
+        "question": "Are there elements in the images that give a clue about the historical period they might belong to?"
+    },
+    {
+        "aspect": "geographical indicators",
+        "question": "What geographical features or landmarks in the images can give us clues about their locations?"
+    },
+    {
+        "aspect": "Cultural Differences",
+        "question": "How do the cultural elements in image 1 and 3 differ?"
+    },
+    {
+        "aspect": "Habitat and Climate",
+        "question": "How does the climate in image 2 affect the living conditions compared to image 4?"
+    },
+    {
+        "aspect": "Architectural Styles",
+        "question": "How do the architectural styles in image 1 and 4 reflect their respective cultures?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "What historical period do the images represent?"
+    },
+    {
+        "aspect": "cultural_significance",
+        "question": "What cultural significance can be deduced from the scene in each image?"
+    },
+    {
+        "aspect": "emotional_tone",
+        "question": "What kind of emotions do these images evoke?"
+    },
+    {
+        "aspect": "cultural_diversity",
+        "question": "How do the images depict the cultural practices?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "Can you identify any historical context or era based on the images?"
+    },
+    {
+        "aspect": "ecology_and_environment",
+        "question": "What do the images suggest about the environment and its biodiversity?"
+    },
+    {
+        "aspect": "cultural_differences",
+        "question": "How does the interior design style of the living room in image 1 compare to the style in image 2?"
+    },
+    {
+        "aspect": "natural_elements",
+        "question": "Would the plant species from image 3 thrive in the exterior environment shown in image 2?"
+    },
+    {
+        "aspect": "historical_context",
+        "question": "Can you infer the historical period from the clothing and architecture in the images?"
+    },
+    {
+        "aspect": "cultural_diversity",
+        "question": "What cultural elements can be identified in the images?"
+    },
+    {
+        "aspect": "environment_and_lifestyle",
+        "question": "What do the images tell about the lifestyle and environment of the people represented?"
+    },
+    {
+        "aspect": "seasonal changes",
+        "question": "How does the seasonal shift from image 1 to image 2 affect the environment and the activities performed?"
+    },
+    {
+        "aspect": "animal behavior",
+        "question": "What behaviors of the animals in images can be observed? How do they compare?"
+    },
+    {
+        "aspect": "human interaction with nature",
+        "question": "How are humans interacting with nature in these images? What could be inferred about their relationship with the environment?"
+    },
+    {
+        "aspect": "animal_habitats",
+        "question": "How does the habitat of the bird in image 1 differ from the habitat of the fish in image 3?"
+    },
+    {
+        "aspect": "animal_adaptations",
+        "question": "What adaptations can you identify in the bird from image 1 and the kangaroo from image 2 that enable them to survive in their respective habitats?"
+    },
+    {
+        "aspect": "ecosystem_interactions",
+        "question": "How might the bird from image 1 interact with the ecosystem of the kangaroo from image 2 if they were to coexist?"
+    }
+]

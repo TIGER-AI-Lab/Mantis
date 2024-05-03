@@ -1,0 +1,62 @@
+[
+    {
+        "id": "000000033471",
+        "images": ["coco/train2017/000000033471.jpg"],
+        "conversations": [
+            {
+                "from": "human",
+                "value": "<image>\nWhat are the colors of the bus in the image?"
+            },
+            {
+                "from": "gpt",
+                "value": "The bus in the image is white and red."
+            },
+            {
+                "from": "human",
+                "value": "What feature can be seen on the back of the bus?"
+            },
+            {
+                "from": "gpt",
+                "value": "The back of the bus features an advertisement."
+            },
+            {
+                "from": "human",
+                "value": "Is the bus driving down the street or pulled off to the side?"
+            },
+            {
+                "from": "gpt",
+                "value": "The bus is driving down the street, which is crowded with people and other vehicles."
+            }
+        ]
+    },
+    {
+        "id": "000000033471",
+        "image": "coco/train2017/000000033471.jpg",
+        "conversations": [
+            {
+                "from": "human",
+                "value": "<image>\nWhat are the colors of the bus in the image?"
+            },
+            {
+                "from": "gpt",
+                "value": "The bus in the image is white and red."
+            },
+            {
+                "from": "human",
+                "value": "What feature can be seen on the back of the bus?"
+            },
+            {
+                "from": "gpt",
+                "value": "The back of the bus features an advertisement."
+            },
+            {
+                "from": "human",
+                "value": "Is the bus driving down the street or pulled off to the side?"
+            },
+            {
+                "from": "gpt",
+                "value": "The bus is driving down the street, which is crowded with people and other vehicles."
+            }
+        ]
+    }
+]

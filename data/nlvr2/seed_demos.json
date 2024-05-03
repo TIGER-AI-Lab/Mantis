@@ -1,0 +1,164 @@
+[
+    {
+        "validation": {
+            "28": "False"
+        },
+        "sentence": "There is an empty glass.",
+        "left_url": "http://www.belgiansmaak.com/wp-content/gallery/belgian-beers-post/dynamic/31.-Tilquin.jpg-nggid041318-ngg0dyn-0x0x100-00f0w010c010r110f110r010t010.jpg",
+        "writer": "103",
+        "label": "False",
+        "right_url": "https://www.craftbrewingbusiness.com/wp-content/uploads/2017/09/unnamed-1.jpg",
+        "synset": "beer bottle",
+        "query": "group of beer bottles41",
+        "identifier": "test1-0-1-0",
+        "extra_validations": {
+            "56": "False",
+            "83": "False",
+            "19": "False",
+            "92": "False"
+        },
+        "question": "On the two images provided, is there any empty glass in the left image or the right image?",
+        "response": "No, all the glasses are full in both images, so there is no empty glass in either image."
+    },
+    {
+        "identifier": "train-5281-0-1",
+        "sentence": "Each image contains exactly three foreground zebra that are close together in similar poses.",
+        "left_url": "https://cdn-thumbs.freeart.com/fa19916747.jpg",
+        "writer": "61",
+        "label": "False",
+        "directory": 25,
+        "right_url": "https://www.featurepics.com/FI/Thumb/20071107/Zebras-Watering-Hole-511533.jpg",
+        "synset": "zebra",
+        "query": "three zebras1",
+        "validation": {
+            "121": "False"
+        },
+        "question": "Are there three foreground zebras close together in similar poses in each image?",
+        "response": "No, the number of zebras close together in at least one of the images is not three."
+    },
+    {
+        "identifier": "train-5281-3-0",
+        "sentence": "there are 6 zebras in the image pair",
+        "left_url": "https://wallpaperstock.net/wallpapers/thumbs1/32450wide.jpg",
+        "writer": "62",
+        "label": "False",
+        "directory": 25,
+        "right_url": "http://www.wujinshike.com/data/wallpapers/121/WDF_1636738.jpg",
+        "synset": "zebra",
+        "query": "three zebras1",
+        "validation": {
+            "160": "False"
+        },
+        "question": "Are there 6 zebras in total in the two images?",
+        "response": "No, the total number of zebras of the two images is not six."
+    },
+    {
+        "identifier": "train-12601-0-1",
+        "sentence": "All dogs shown have erect ears, each image contains one dog, the dog on the left is sitting upright, and the dog on the right is standing angled rightward.",
+        "left_url": "https://i.pinimg.com/236x/ca/98/9d/ca989d01740f74d07dd85902fcc87c08--judah-doberman-love.jpg",
+        "writer": "61",
+        "label": "True",
+        "directory": 15,
+        "right_url": "https://i.pinimg.com/736x/f2/5e/82/f25e82280fd7784eddc1764b7df0cfa6--anjing-doberman-conan.jpg",
+        "synset": "Doberman",
+        "validation": {
+            "66": "True"
+        },
+        "question": "In the two images featuring dogs, how are the dogs positioned and what type of ears do they have?",
+        "response": "In each of the two images, there is one dog with erect ears. The dog in the left image is sitting upright, while the dog in the right image is standing and angled rightward."
+    },
+    {
+        "identifier": "train-12727-3-1",
+        "sentence": "Each image shows two side-by-side cups.",
+        "left_url": "http://www.wikihow.com/images/2/2b/Make-Ginger-Tea-(Indian-Style-Chai)-Intro.jpg",
+        "writer": "61",
+        "label": "True",
+        "directory": 45,
+        "right_url": "https://image.freepik.com/fotos-gratis/duas-xicaras-na-mesa-de-madeira_1373-290.jpg",
+        "synset": "cup",
+        "validation": {
+            "61": "True"
+        },
+        "question": "How many side-by-side cups are shown in each image? Are the number of cups the same in the two images?",
+        "response": "In each of the two images, there are two cups. As a result, the number of cups is the same in the two images."
+    },
+    {
+        "identifier": "train-6759-3-0",
+        "sentence": "There are no more than 4 people in the image on the right.",
+        "left_url": "http://img.mt-bbs.com/forum/201705/18/120422icketc44nc4cfjxu.jpg",
+        "writer": "3",
+        "label": "True",
+        "directory": 4,
+        "right_url": "http://d3rde5ck80dcsn.cloudfront.net/wp-content/uploads/2015/11/trident-1.png",
+        "synset": "bookshop",
+        "query": "bookstore store7",
+        "validation": {
+            "127": "True"
+        },
+        "question": "Is there more than 4 people in the image on the right?",
+        "response": "No, there are no more than four people in the image on the right."
+    },
+    {
+        "identifier": "train-4100-0-0",
+        "sentence": "There is one seal with a plain white background.",
+        "left_url": "https://i.pinimg.com/736x/00/92/f8/0092f84fc43ff83e52c3ccd4703cbb96--lion-facts-sea-lions.jpg",
+        "writer": "146",
+        "label": "True",
+        "directory": 15,
+        "right_url": "http://parkerlab.bio.uci.edu/pictures/photography%20pictures/2016_01_25_GraveCove_SELECT/Big/tn_0K0A1227_tweak.jpg",
+        "synset": "sea lion",
+        "query": "packs of sea lions55",
+        "validation": {
+            "61": "True"
+        },
+        "question": "How many seals are shown in the image and what is the background like?",
+        "response": "There is one seal shown in the image, and the background is plain white."
+    },
+    {
+        "identifier": "train-12903-1-1",
+        "sentence": "All of the models are shown from the front, and are wearing tops that can be seen to loop around the neck.",
+        "left_url": "https://cdn.images.express.co.uk/img/dynamic/130/590x/secondary/Can-you-spot-what-s-wrong-with-this-bikini-girls-picture-908557.jpg",
+        "writer": "160",
+        "label": "True",
+        "directory": 27,
+        "right_url": "https://i.pinimg.com/736x/a8/1f/b0/a81fb0238a175054a8bfb3bf2ca7da94--beach-babe-beach-girls.jpg",
+        "synset": "bikini",
+        "validation": {
+            "61": "True"
+        },
+        "question": "How are the models shown in the images and what type of tops are they wearing?",
+        "response": "All of the models in the images are shown from the front and are wearing tops that loop around the neck."
+    },
+    {
+        "identifier": "train-7674-1-0",
+        "sentence": "There is no less than 14 filled beakers.",
+        "left_url": "https://www.avogadro-lab-supply.com/item_images/Beaker5mLThumb.jpg",
+        "writer": "31",
+        "label": "False",
+        "directory": 94,
+        "right_url": "http://cdn8.bigcommerce.com/s-hhwcxf/images/stencil/1280x1280/products/274/693/81005__06019.1453480383.JPG?c=2&imbypass=on",
+        "synset": "beaker",
+        "query": "lab beakers35",
+        "validation": {
+            "127": "False"
+        },
+        "question": "Are there more than 14 filled beakers in the two images?",
+        "response": "No, there are not more than fourteen filled beakers in the two images."
+    },
+    {
+        "identifier": "train-3345-0-0",
+        "sentence": "At least one dog is in water, surrounded by water.",
+        "left_url": "https://media.apnarm.net.au/media/images/2013/07/30/9-1957607-31dingo_fct905x682x54_ct620x465.jpg",
+        "writer": "61",
+        "label": "False",
+        "directory": 92,
+        "right_url": "http://d3lp4xedbqa8a5.cloudfront.net/s3/digital-cougar-assets/AusGeo/2014/03/13/38894/dingo-fraser-island-australian-geographic.jpg",
+        "synset": "dingo",
+        "query": "dingo animal12",
+        "validation": {
+            "61": "False"
+        },
+        "question": "For the dog shown in each image, is there at least one dog in water and surrounded by water?",
+        "response": "No, there is not at least one dog in water and surrounded by water in each image."
+    }
+]

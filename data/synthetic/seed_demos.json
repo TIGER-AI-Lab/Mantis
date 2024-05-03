@@ -1,0 +1,354 @@
+[
+    {
+        "aspect": "number of objects",
+        "question": "How many <objects> are there in all the images?"
+    },
+    {
+        "aspect": "number of objects",
+        "question": "How many more <objects> are there in image 1 than in image 2?"
+    },
+    {
+        "aspect": "number of objects",
+        "question": "How many less <objects> are there in image 1 than in image 2?"
+    },
+    {
+        "aspect": "color of objects",
+        "question": "Is the color of <object> in image 1 the same as that in image 2?"
+    },
+    {
+        "aspect": "color of objects",
+        "question": "Is the color of <object> in image 1 different from that in image 2?"
+    },
+    {
+        "aspect": "size of objects",
+        "question": "Can the <object> in image 1 fit into the <object> in image 2 considering the size of the <object> in image 1?"
+    },
+    {
+        "aspect": "size of objects",
+        "question": "Is the <object> in image 1 bigger than the <object> in image 2?"
+    },
+    {
+        "aspect": "size of objects",
+        "question": "Is the <object> in image 1 smaller than the <object> in image 2?"
+    },
+    {
+        "aspect": "weight of objects",
+        "question": "Is the <object> in image 1 heavier than the <object> in image 2?"
+    },
+    {
+        "aspect": "weight of objects",
+        "question": "Is the <object> in image 1 lighter than the <object> in image 2?"
+    },
+    {
+        "aspect": "distance between objects",
+        "question": "Is the <object> in image 1 closer to the <object> in image 2?"
+    },
+    {
+        "aspect": "distance between objects",
+        "question": "Is the <object> in image 1 farther from the <object> in image 2?"
+    },
+    {
+        "aspect": "relative position in the image",
+        "question": "Is the <object> in image 1 on the left of the <object> in image 2?"
+    },
+    {
+        "aspect": "language understanding",
+        "question": "Can you write a sentence combining the words in the two images?"
+    },
+    {
+        "aspect": "common sense",
+        "question": "Is there any <object> that does not fit common sense in any of the images provided?"
+    },
+    {
+        "aspect": "texture of objects",
+        "question": "What is the texture of the <object> in image 1 compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "material of objects",
+        "question": "What material is the <object> in image 1 made of compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "emotional response to objects",
+        "question": "What is the emotional impact of the <object> in image 1 compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "historical significance of objects",
+        "question": "What historical period do the <objects> in the images represent?"
+    },
+    {
+        "aspect": "orientation of objects",
+        "question": "How does the orientation of the <object> in image 1 compare to the <object> in image 2?"
+    },
+    {
+        "aspect": "pattern recognition",
+        "question": "Are there any patterns on the <object> in image 1 that match with the <object> in image 2?"
+    },
+    {
+        "aspect": "contextual understanding",
+        "question": "How would the context change if the <object> in image 1 were placed in the setting of image 2?"
+    },
+    {
+        "aspect": "cultural relevance of objects",
+        "question": "What cultural significance does the <object> in image 1 have compared to the <object> in image 2?"
+    },
+    {
+        "aspect": "age estimation of objects or subjects",
+        "question": "Which image shows older/younger <objects/subjects>?"
+    },
+    {
+        "aspect": "symmetry and asymmetry in objects",
+        "question": "Are the <objects> in both images symmetrical or asymmetrical?"
+    },
+    {
+        "aspect": "motion or static state of objects",
+        "question": "Is the <object/subject> in motion or static in both images?"
+    },
+    {
+        "aspect": "usage or function of objects",
+        "question": "What is the apparent function or use of the <object> in each image?"
+    },
+    {
+        "aspect": "environmental context of objects",
+        "question": "Which image depicts a more urban/rural environment?"
+    },
+    {
+        "aspect": "historical or temporal context of images",
+        "question": "Do the images represent the same historical period or different ones?"
+    },
+    {
+        "aspect": "technological aspects in images",
+        "question": "Which image contains more advanced/simple technology?"
+    },
+    {
+        "aspect": "natural versus artificial elements in images",
+        "question": "Which image shows more natural/artificial elements?"
+    },
+    {
+        "aspect": "lighting and shadow effects in images",
+        "question": "How does the lighting/shadowing compare between the two images?"
+    },
+    {
+        "aspect": "perspective and depth perception in images",
+        "question": "Which image demonstrates a greater sense of depth or perspective?"
+    },
+    {
+        "aspect": "weather conditions in images",
+        "question": "What kind of weather conditions are depicted in each image?"
+    },
+    {
+        "aspect": "seasonal attributes in images",
+        "question": "Do the images represent different seasons?"
+    },
+    {
+        "aspect": "time of day in images",
+        "question": "Does one image seem to be taken at a different time of day than the other?"
+    },
+    {
+        "aspect": "interaction between subjects in images",
+        "question": "Is there any interaction between subjects in the images? How does it differ?"
+    },
+    {
+        "aspect": "biological characteristics in images",
+        "question": "What biological characteristics are apparent in the subjects of each image?"
+    },
+    {
+        "aspect": "geographical location implications in images",
+        "question": "Do the images suggest different geographical locations?"
+    },
+    {
+        "aspect": "economic or social status indicators in images",
+        "question": "Are there indicators of economic or social status in the images? How do they compare?"
+    },
+    {
+        "aspect": "artistic style or genre of images",
+        "question": "Do the images represent different artistic styles or genres?"
+    },
+    {
+        "aspect": "interactivity between objects and environments",
+        "question": "Can a person take the <object> from image 1 to the place shown in image 2? How would it fit in?"
+    },
+    {
+        "aspect": "adaptability of subjects or objects in new environments",
+        "question": "Would the <object/animal/person> from image 1 survive or thrive in the environment of image 2?"
+    },
+    {
+        "aspect": "feasibility of actions in varied contexts",
+        "question": "How would the <object> from image 1 be used differently in the setting of image 2?"
+    },
+    {
+        "aspect": "impact of environmental changes on objects or subjects",
+        "question": "If the <subject> from image 1 interacted with the <object> in image 2, what would likely happen?"
+    },
+    {
+        "aspect": "environmental or ecological implications of placing objects in new settings",
+        "question": "What are the potential environmental impacts of moving the <object> from image 1 to the location in image 2?"
+    },
+    {
+        "aspect": "congruence of objects with different time periods",
+        "question": "Would the technology in image 1 be functional or obsolete in the time period or setting of image 2?"
+    },
+    {
+        "aspect": "cultural appropriateness of objects in diverse settings",
+        "question": "Are the <clothing/items> from image 1 culturally appropriate or historically accurate for the setting in image 2?"
+    },
+    {
+        "aspect": "practicality of using objects in alternate scenarios",
+        "question": "How would the light/shadow effects on the <object/subject> in image 1 change in the environment of image 2?"
+    },
+    {
+        "aspect": "safety considerations in changing object placements",
+        "question": "Is it safe to transport the <animal/chemical/substance> from image 1 to the environment in image 2? Why?"
+    },
+    {
+        "aspect": "ethical considerations in altering contexts",
+        "question": "What ethical considerations arise from placing the <subject/object> of image 1 into the context of image 2?"
+    },
+    {
+        "aspect": "emotional tone or mood in images",
+        "question": "How would the mood or emotional tone change if elements from image 1 were introduced into image 2?"
+    },
+    {
+        "aspect": "emotional tone or mood in images",
+        "question": "Which image conveys a happier/sadder or more positive/negative mood?"
+    },
+    {
+        "aspect": "historical accuracy of combining elements from different images",
+        "question": "Could the <object/subject> from image 1 realistically exist or be found in the period/location of image 2?"
+    },
+    {
+        "aspect": "cultural symbols and meanings in images",
+        "question": "How would the inclusion of the <object/subject> from image 1 alter the cultural or social implications of image 2?"
+    },
+    {
+        "aspect": "cultural symbols and meanings in images",
+        "question": "Are there any cultural symbols in the images and how do they differ?"
+    },
+    {
+        "aspect": "anachronism and historical consistency",
+        "question": "Would the <object> from image 1 be considered anachronistic or out of place in the setting of image 2?"
+    },
+    {
+        "aspect": "daily use and functionality of objects",
+        "question": "How would the <kitchen appliance> from image 1 be used in the <setting> of image 2?"
+    },
+    {
+        "aspect": "daily use and functionality of objects",
+        "question": "Can the <furniture> in image 1 fit and be functional in the <room> shown in image 2?"
+    },
+    {
+        "aspect": "maintenance and care requirements of objects",
+        "question": "What are the maintenance challenges for the <vehicle> in image 1 if used in the location of image 2?"
+    },
+    {
+        "aspect": "cost and economic value of objects in diverse contexts",
+        "question": "How would the cost of the <object> from image 1 vary if it were in the economy of the place shown in image 2?"
+    },
+    {
+        "aspect": "health and wellness implications of objects and environments",
+        "question": "What health benefits or risks does the <object/activity> in image 1 pose in the environment of image 2?"
+    },
+    {
+        "aspect": "sustainability and environmental friendliness of objects",
+        "question": "Is the <object> from image 1 environmentally sustainable if used extensively in the setting of image 2?"
+    },
+    {
+        "aspect": "transportation and mobility aspects of objects",
+        "question": "How would someone transport the <large object> from image 1 to the location in image 2?"
+    },
+    {
+        "aspect": "communication and technology usage in daily life",
+        "question": "What technological adaptations would be needed for the <device> from image 1 to work in the setting of image 2?"
+    },
+    {
+        "aspect": "cuisine and food-related aspects in different cultures",
+        "question": "How would the <food item> from image 1 be received in the cultural context of image 2?"
+    },
+    {
+        "aspect": "recreational and leisure activities in various environments",
+        "question": "Would the <recreational activity> from image 1 be feasible or popular in the environment of image 2?"
+    },
+    {
+        "aspect": "work and professional environments and their tools",
+        "question": "How would a professional in the <work environment> of image 1 adapt to the setting in image 2?"
+    },
+    {
+        "aspect": "urban and rural lifestyle differences",
+        "question": "What lifestyle changes would be necessary for a person from the urban setting of image 1 to live in the rural setting of image 2?"
+    },
+    {
+        "aspect": "seasonal activities and their appropriate gear or settings",
+        "question": "What seasonal clothing or equipment from image 1 would be inappropriate or unnecessary in the climate of image 2?"
+    },
+    {
+        "aspect": "seasonal activities and their appropriate gear or settings",
+        "question": "How would the seasonal attributes of image 1 affect the <object/subject> if placed in the season of image 2?"
+    },
+    {
+        "aspect": "safety and risk factors associated with objects and environments",
+        "question": "Are there any safety concerns in using the <object> from image 1 in the environment of image 2?"
+    },
+    {
+        "aspect": "social norms and etiquettes related to objects and environments",
+        "question": "How do social norms differ regarding the use of <object/setting> between image 1 and image 2?"
+    },
+    {
+        "aspect": "scientific principles and natural laws relevant to objects",
+        "question": "How does the principle of <scientific concept> apply to the <object> in image 1 compared to image 2?"
+    },
+    {
+        "aspect": "historical significance and evolution of objects and environments",
+        "question": "What historical era is represented by the <objects/settings> in the images, and how do they compare?"
+    },
+    {
+        "aspect": "geographical features and their influence on objects and settings",
+        "question": "How do the geographical features in image 1 affect the <object/subject> compared to those in image 2?"
+    },
+    {
+        "aspect": "artistic elements and aesthetic qualities in images",
+        "question": "Can you compare the artistic styles or aesthetic elements present in both images?"
+    },
+    {
+        "aspect": "technological advancements and future possibilities",
+        "question": "How might the <object/technology> in image 1 evolve in the context of the future setting shown in image 2?"
+    },
+    {
+        "aspect": "architectural styles and construction methods",
+        "question": "What architectural differences are evident between the buildings in image 1 and image 2?"
+    },
+    {
+        "aspect": "botanical and zoological aspects in different environments",
+        "question": "How do the flora and fauna in image 1 compare with those in the ecosystem of image 2?"
+    },
+    {
+        "aspect": "meteorological conditions and their effects on settings",
+        "question": "What weather conditions are depicted in each image, and how do they affect the environment?"
+    },
+    {
+        "aspect": "astronomical phenomena visible or inferred in images",
+        "question": "Are there any astronomical phenomena or elements in either image, and how do they compare?"
+    },
+    {
+        "aspect": "psychological and emotional responses to different environments",
+        "question": "How might the environments in each image influence the psychological state of a person?"
+    },
+    {
+        "aspect": "sociopolitical context and its influence on environments",
+        "question": "What are the sociopolitical implications of the settings or activities shown in the images?"
+    },
+    {
+        "aspect": "economic systems and their impact on lifestyles",
+        "question": "How do the economic conditions in image 1 compare to those suggested in image 2?"
+    },
+    {
+        "aspect": "linguistic diversity and communication methods",
+        "question": "Are there linguistic elements in the images, and how do they reflect communication styles?"
+    },
+    {
+        "aspect": "philosophical concepts illustrated or implied in images",
+        "question": "What philosophical themes or ideas are suggested by the contents of the images?"
+    },
+    {
+        "aspect": "educational and learning environments and tools",
+        "question": "How do the educational tools or environments in the images compare, and what do they suggest about learning methods?"
+    }
+]

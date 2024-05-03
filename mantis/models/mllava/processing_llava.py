@@ -16,7 +16,8 @@
 Processor class for Llava.
 """
 
-
+import os
+import json
 from typing import List, Optional, Union, Dict
 
 # from ...feature_extraction_utils import BatchFeature
@@ -30,6 +31,9 @@ from transformers.image_utils import ImageInput
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from transformers.utils import TensorType
+from transformers.processing_utils import transformers_module
+from transformers.utils.hub import is_remote_url, download_url, cached_file, is_offline_mode
+from transformers.utils import IMAGE_PROCESSOR_NAME
 
 from PIL import Image
 import logging
@@ -52,8 +56,8 @@ class MLlavaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    image_processor_class = ("CLIPImageProcessor", "SiglipImageProcessor")
+    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast", "PreTrainedTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
@@ -171,6 +175,7 @@ class MLlavaProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+        add_image_ids: bool = True,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -218,13 +223,14 @@ class MLlavaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        texts, images = self.preprocess_interleaved_images_and_text(text, images)
+        if add_image_ids:
+            text, images = self.preprocess_interleaved_images_and_text(text, images)
         if images is not None:
             pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"] # [batch_size, num_channels, height, width], e.g. [1, 3, 336, 336]
         else:
             pixel_values = None
         text_inputs = self.tokenizer(
-            texts, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
         # text_inputs: 
         # 1. input_ids: [batch_size, sequence_length], e.g. [1, 6]
@@ -264,4 +270,112 @@ class MLlavaProcessor(ProcessorMixin):
             else:
                 results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
         return results
+
+    @classmethod
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        args = []
+        
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", False)
+        proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
+
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "processor", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
+            
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isdir(pretrained_model_name_or_path):
+            processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_processor_file = pretrained_model_name_or_path
+            is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            processor_file = pretrained_model_name_or_path
+            resolved_processor_file = download_url(pretrained_model_name_or_path)
+        else:
+            processor_file = IMAGE_PROCESSOR_NAME
+            try:
+                # Load from local folder or from cache or download from model Hub and cache
+                resolved_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=True,
+                )
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
+                # the original exception.
+                raise
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load processor for '{pretrained_model_name_or_path}'. If you were trying to load"
+                    " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                    f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                    f" directory containing a {IMAGE_PROCESSOR_NAME} file"
+                )
+        
+        # Existing processors on the Hub created before #27761 being merged don't have `processor_config.json` (if not
+        # updated afterward), and we need to keep `from_pretrained` work. So here it fallbacks to the empty dict.
+        # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
+        # However, for models added in the future, we won't get the expected error if this file is missing.
+        if resolved_processor_file is None:
+            image_processor_dict = {}
+
+        try:
+            # Load processor dict
+            with open(resolved_processor_file, "r", encoding="utf-8") as reader:
+                text = reader.read()
+            image_processor_dict = json.loads(text)
+
+        except json.JSONDecodeError:
+            raise EnvironmentError(
+                f"It looks like the config file at '{resolved_processor_file}' is not a valid JSON file."
+            )
+            
+        for attribute_name in cls.attributes:
+            class_name = getattr(cls, f"{attribute_name}_class")
+            if isinstance(class_name, tuple):
+                if attribute_name == "tokenizer":
+                    classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                    use_fast = kwargs.get("use_fast", True)
+                    if use_fast and classes[1] is not None:
+                        attribute_class = classes[1]
+                    else:
+                        attribute_class = classes[0]
+                elif attribute_name == "image_processor":
+                    image_processor_type = image_processor_dict.get("image_processor_type", None)
+                    if image_processor_type is not None:
+                        assert image_processor_type in class_name, f"Invalid image processor type: {image_processor_type}"
+                        attribute_class = getattr(transformers_module, image_processor_type)
+                    else:
+                        attribute_class = getattr(transformers_module, class_name[0])
+                else:
+                    raise ValueError(f"Invalid attribute name: {attribute_name}")
+            else:
+                attribute_class = getattr(transformers_module, class_name)
+
+            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+        return args
         

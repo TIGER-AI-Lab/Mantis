@@ -42,6 +42,9 @@ setup(
         "datasets>=2.17.1",
         "sentencepiece"
     ],
+    extra_requires={
+        "train": [],
+    }
 )
 
 

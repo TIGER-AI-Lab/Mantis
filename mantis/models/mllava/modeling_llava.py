@@ -249,15 +249,15 @@ LLAVA_INPUTS_DOCSTRING = r"""
     LLAVA_START_DOCSTRING,
 )
 class LlavaForConditionalGeneration(LlavaPreTrainedModel):
-    def __init__(self, config: LlavaConfig):
+    def __init__(self, config: LlavaConfig, vision_tower=None, language_model=None):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config) if vision_tower is None else vision_tower
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
-        )
+        ) if language_model is None else language_model
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
@@ -430,6 +430,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             if pixel_values is not None and input_ids.shape[1] != 1:
                 if isinstance(pixel_values, list):
                     pixel_values = torch.cat([x for x in pixel_values if x is not None], dim=0)
+                # for siglip, need to transform the pixel_values to the right data type
+                if pixel_values.dtype != self.vision_tower.dtype:
+                    pixel_values = pixel_values.type(self.vision_tower.dtype)
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
                 # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
                 selected_image_feature = image_outputs.hidden_states[vision_feature_layer]

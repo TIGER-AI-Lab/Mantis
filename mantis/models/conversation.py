@@ -10,6 +10,7 @@ class SeparatorStyle(Enum):
     MPT = auto()
     PLAIN = auto()
     LLAMA_2 = auto()
+    LLAMA_3 = auto()
     MFuyu = auto()
 
 
@@ -89,6 +90,15 @@ class Conversation:
                 else:
                     ret += ""
             ret = ret.lstrip(self.sep)
+        elif self.sep_style == SeparatorStyle.LLAMA_3:
+            ret = self.system + self.sep
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, _, _ = message
+                    ret += f"<|start_header_id|>{role}<|end_header_id|>\n\n" + message + self.sep
+                else:
+                    ret += f"<|start_header_id|>{role}<|end_header_id|>\n\n"
         elif self.sep_style == SeparatorStyle.MFuyu:
             seps = [self.sep, self.sep2]
             ret = self.system + "\n"
@@ -404,6 +414,15 @@ conv_mllava_v1 = Conversation(
     sep="</s>",
 )
 
+conv_llama_3 = Conversation(
+    system="<|start_header_id|>system<|end_header_id|>\n\nYou are a pirate chatbot who always responds in pirate speak!",
+    roles=("user", "assistant"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.LLAMA_3,
+    sep="<|eot_id|>",
+)
+
 default_conversation = conv_mfuyu_v1
 conv_templates = {
     "default": conv_vicuna_v0,
@@ -419,6 +438,9 @@ conv_templates = {
     "llava_v1": conv_llava_v1,
     "v1_mmtag": conv_llava_v1_mmtag,
     "llava_llama_2": conv_llava_llama_2,
+    "llama_3": conv_llama_3,
+    "mllava_v1": conv_mllava_v1,
+    "mllava_v1_mmtag": conv_mllava_v1_mmtag,
 
     "mpt": conv_mpt,
 }

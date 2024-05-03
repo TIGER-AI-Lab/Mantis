@@ -1,0 +1,7 @@
+data:
+  - 
+    name: "llava-pretrain"
+    type: json
+    path: "../../data/llava-pretrain/data/train.json"
+    format: chat
+    split: train
