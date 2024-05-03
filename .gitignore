@@ -161,3 +161,7 @@ cython_debug/
 
 
 /*.ipynb
+/mantis/benchmark/*.ttf
+/mantis/benchmark/*.ipynb
+/mantis/benchmark/logs
+/mantis/benchmark/results*
