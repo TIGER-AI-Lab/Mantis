@@ -114,6 +114,7 @@
       <div class="container is-max-desktop">
         <div class="columns is-centered">
           <div class="column has-text-centered">
+
             <h1 class="title is-1 publication-title">Mantis: Interleaved Multi-Image Instruction Tuning</h1>
             <h3 class="title is-3 publication-title">Balancing Multi-Image and Single-Image Abilities of Large Multimodal Models</h3>
             <div class="is-size-5 publication-authors">
@@ -162,7 +163,7 @@
                 </span>
 
                 <span class="link-block">
-                  <a href="https://github.com/TIGER-AI-Lab/Mantis/tree/main" target="_blank"
+                  <a href="https://github.com/TIGER-AI-Lab/Mantis/" target="_blank"
                     class="external-link button is-normal is-rounded is-dark">
                     <span class="icon">
                       <i class="fab fa-github"></i>
@@ -172,22 +173,42 @@
                 </span>
 
                 <span class="link-block">
-                  <a href="https://huggingface.co/TIGER-Lab" target="_blank"
+                  <a href="https://huggingface.co/TIGER-Lab/Mantis-Instruct" target="_blank"
                     class="external-link button is-normal is-rounded is-dark">
                     <span class="icon">
                       <i class="fas fa-database"></i>
                     </span>
-                    <span>Dataset</span>
+                    <span>Mantis-Instruct </span>
                   </a>
                 </span>
 
                 <span class="link-block">
-                  <a href="https://huggingface.co/TIGER-Lab" target="_blank"
+                  <a href="https://huggingface.co/TIGER-Lab/Mantis-Eval" target="_blank"
                     class="external-link button is-normal is-rounded is-dark">
                     <span class="icon">
-                      <i class="fas fa-share-square"></i>
+                      <i class="fas fa-database"></i>
                     </span>
-                    <span>Model</span>
+                    <span>Mantis-Eval </span>
+                  </a>
+                </span>
+
+                <span class="link-block">
+                  <a href="https://huggingface.co/collections/TIGER-Lab/mantis-6619b0834594c878cdb1d6e4" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      🔥 
+                    </span>
+                    <span>Models</span>
+                  </a>
+                </span>
+
+                <span class="link-block">
+                  <a href="https://huggingface.co/spaces/TIGER-Lab/Mantis" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      🤗
+                    </span>
+                    <span> Spaces</span>
                   </a>
                 </span>
 
@@ -200,11 +221,131 @@
   </section>
 
   <section class="section"  style="background-color:#efeff081">
+    
     <div class="container is-max-desktop" id="gradio">
-      <gradio-app src="https://huggingface.co/spaces/DongfuJiang/Mllava"></gradio-app>
+        <iframe
+        src="https://tiger-lab-mantis.hf.space"
+        frameborder="0"
+        width="100%"
+        height="1800"
+      ></iframe>
     </div>
   </section>
 
+  <section class="section"  style="background-color:#efeff081">
+    <div class="container is-max-desktop">
+      <!-- Abstract. -->
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-six-fifths">
+          <h2 class="title is-3">Abstract</h2>
+          <div class="content has-text-justified">
+            <p>
+              🤔 The recent years have witnessed a great array of large multimodal models (LMMs) to effectively solve single-image vision language tasks. <b>However, their abilities to solve multi-image visual language tasks is yet to be improved.</b> <br>
+              😦 The existing multi-image LMMs (e.g. OpenFlamingo, Emu, Idefics, etc) mostly gain their multi-image ability through <b>pre-training on hundreds of millions</b> of noisy interleaved image-text data from web, which is <b>neither efficient nor effective</b>.
+              <ol type="1">
+
+                <li><b>Mantis-Instruct Data</b>. <span style="font-size: 95%;">We present the first fully text-image interleaved multimodal instruction tuning dataset, containing 721K examples from 14 subsets and covering multi-image skills including <b>co-reference</b>, <b>reasoning</b>, <b>comparing</b>, <b>temporal understanding</b></span></li>
+                <li><b>Mantis Model</b>. <span style="font-size: 95%;">We introduce <it><b>Mantis</b>, an LLaMA-3 based LMM with <b>interleaved text and image as inputs</b>, train on Mantis-Instruct under academic-level resources (i.e. 36 hours on 16xA100-40G)</li>
+                <li><b>Performance</b>. <span style="font-size: 95%;">
+                  Mantis reaches the <b>state-of-the-art performance on five multi-image benchmarks </b>(NLVR2, Q-Bench, BLINK, MVBench, Mantis-Eval), and also maintain <b>a strong single-image performance</b> on par with CogVLM and Emu2. 
+                <li><b>Open-source</b>. <span style="font-size: 95%;"> Our curated Mantis-Instruct data, along with the training/evaluation codes, model checkpoints are all released to the public</li>
+              </ol>  
+           </p>
+  
+          </div>
+        </div>
+      </div>
+        
+    </div>
+  </section>
+
+
+  <section class="section">
+    <!-- Results. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-six-fifths">
+        <h2 class="title is-3"><img id="painting_icon" width="3%" src="https://cdn-icons-png.flaticon.com/512/5886/5886212.png"> Interleaved Multi-Image Instruction-Tuning data</h2>
+      </div>
+    </div>
+    <!-- </div> -->
+    <!--/ Results. -->    
+  <div class="container is-max-desktop">
+  
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <div class="content has-text-justified">
+          <p>
+            <ul>
+              <li>
+                Mantis-Instruct has a total of <b>721K</b> instances, consisting of <b>14 subsets</b> to cover all the multi-image skills. 
+              </li>
+              <li>
+                Among the 14 subsets, 10 subsets are from the existing datasets. For example, NLVR2, IconQA, etc for <u>reasoning</u> skill; DreamSim, Birds-to-Words, etc for <u>comparison</u> skill; NExT-QA, STAR, for <u>temporal understanding</u>
+              </li>
+              <li>
+                We additionally curate four new datasets LLaVA-665k-multi, LRV-multi to cover <u>coref</u> skill and Contrast-Caption, Multi-VQA to broaden <u>reasoning</u> skill, where Multi-VQA is generated by prompting GPT-4.
+              </li>
+              <li>
+                Please check out <a href="https://huggingface.co/TIGER-Lab/Mantis-Instruct">🤗 Mantis-Instruct</a> on hugging face datasets for usage.
+              </li>
+            </ul>
+            
+             
+            
+  
+  <!-- CSS Code: Place this code in the document's head (between the 'head' tags) -->
+  <style>
+    table.GeneratedTable {
+      width: 100%;
+      background-color: #ffffff;
+      border-collapse: collapse;
+      border-width: 2px;
+      border-color: #c1c4c5;
+      border-style: solid;
+      color: #000000;
+    }
+    
+    table.GeneratedTable td, table.GeneratedTable th {
+      border-width: 2px;
+      border-color: #9b9d9e;
+      border-style: solid;
+      padding: 3px;
+    }
+    
+    table.GeneratedTable thead {
+      background-color: #6691ee;
+    }
+    </style>
+    
+    <!-- HTML Code: Place this code in the document's body (between the 'body' tags) where the table should appear -->
+    <div class="column is-six-fifths" width="80%">
+    <table class="GeneratedTable">
+      <thead>
+        <tr>
+          <th>Subset</th>
+          <th>Multi-Image Skill</th>
+          <th>Sample Size</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/blob/main/conversation_58k.json">conversation_58k.json</a> </td>
+          <td>126 MB</td>
+          <td>58K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/blob/main/detail_23k.json">detail_23k.json</a></td>
+          <td>20.5 MB</td>
+          <td>23K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/blob/main/complex_reasoning_77k.json">complex_reasoning_77k.json</a></td>
+          <td>79.6 MB</td>
+          <td>77K</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
   <script>
     // Handle message showing
