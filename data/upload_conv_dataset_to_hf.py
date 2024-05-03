@@ -58,7 +58,7 @@ def load_images(image_files):
 
 
 
-def create_hf_dataset(dataset:List[dict], split):
+def create_hf_dataset(dataset:List[dict], split, revision="main"):
     """
     dataset is a list of dict, each dict is a sample
     {
@@ -75,7 +75,9 @@ def create_hf_dataset(dataset:List[dict], split):
     this function will create a hf dataset
     Args:
         dataset (List[dict]): _description_
+        
     """
+    assert revision in ["main", "script"], f"revision must be main or script, but got {revision}"
     print("Creating hf dataset...")
     hf_dataset = datasets.Dataset.from_list(
         dataset,
@@ -94,6 +96,14 @@ def create_hf_dataset(dataset:List[dict], split):
         ),
         split=split,
     )
+    if revision == "main":
+        # change the image feature to bytes and path to support the viewer
+        new_features = hf_dataset.features.copy()
+        new_features["images"] = [{
+            "bytes": datasets.Value("binary"),
+            "path": datasets.Value("string"),
+        }]
+        hf_dataset = hf_dataset.cast(new_features)
     return hf_dataset
 
 def main(
@@ -183,17 +193,30 @@ def main(
         elif num_parts > 1:
             part_split = f"{split}_part_{part_id}"
             
-        # create hf dataset    
-        hf_dataset = create_hf_dataset(part_data, part_split)
+        # create hf dataset: main revision
+        hf_dataset = create_hf_dataset(part_data, part_split, revision="main")
         
         # upload hugingface dataset
-        print(f"Uploading to part {dataset_name}:{part_split} to {repo_id}...")
+        print(f"Uploading to part {dataset_name}:{part_split} to {repo_id}, revision: main...")
         hf_dataset.push_to_hub(
             repo_id=repo_id,
             config_name=dataset_name,
             split=part_split,
             token=token,
             commit_message=f"Add {dataset_name} {part_split} dataset",
+            revision="main",
+        )
+        
+        hf_dataset = create_hf_dataset(part_data, part_split, revision="script")
+        # upload hugingface dataset
+        print(f"Uploading to part {dataset_name}:{part_split} to {repo_id}, revision: script...")
+        hf_dataset.push_to_hub(
+            repo_id=repo_id,
+            config_name=dataset_name,
+            split=part_split,
+            token=token,
+            commit_message=f"Add {dataset_name} {part_split} dataset",
+            revision="script",
         )
         del hf_dataset
         del part_data
@@ -219,6 +242,7 @@ def main(
                 token=token,
                 repo_type="dataset",
                 commit_message=f"Add {dataset_name} {split} images",
+                revision="script",
             )
         finally:
             os.remove(zip_file)
