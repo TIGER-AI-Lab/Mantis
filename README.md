@@ -53,7 +53,7 @@ cd mantis/train/train_fuyu.sh
 
 ## Data
 - [🤗 Mantis-Instruct](https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct) 721K text-image interleaved datasets for multi-image instruction tuning
-- [🤗 Mantis-Eval](https://huggingface.co/datasets/TIGER-Lab/) 217 high-quality examples for evaluating LMM's multi-image skills
+- [🤗 Mantis-Eval](https://huggingface.co/datasets/TIGER-Lab/Mantis-Eval) 217 high-quality examples for evaluating LMM's multi-image skills
 
 
 ## Citation
