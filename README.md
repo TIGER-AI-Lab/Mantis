@@ -1,4 +1,6 @@
 # Mantis: Multi-Image Instruction Tuning
+
+![Mantis](./docs/assets/images/radar_chart.png)
 <a target="_blank" href="https://arxiv.org/abs/2405.01483">
 <img style="height:22pt" src="https://img.shields.io/badge/-Paper-black?style=flat&logo=arxiv"></a>
 <a target="_blank" href="https://github.com/TIGER-AI-Lab/Mantis">
