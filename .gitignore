@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 
 /test*
+/hf_space
