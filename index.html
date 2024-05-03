@@ -214,6 +214,14 @@
 
               </div>
             </div>
+
+            <centering>
+              <div style="text-align: center;">
+                <img id="teaser" width="70%" src="images/radar_chart.png">     
+              </div>
+            
+            </centering> 
+
           </div>
         </div>
       </div>
@@ -274,6 +282,13 @@
     <div class="columns is-centered">
       <div class="column is-full-width">
         <div class="content has-text-justified">
+          <centering>
+            <div style="text-align: center;">
+              <img id="teaser" width="70%" src="images/miqa_cases.png">     
+            </div>
+    
+          
+          </centering> 
           <p>
             <ul>
               <li>
@@ -290,9 +305,6 @@
               </li>
             </ul>
             
-             
-            
-  
   <!-- CSS Code: Place this code in the document's head (between the 'head' tags) -->
   <style>
     table.GeneratedTable {
@@ -329,23 +341,239 @@
       </thead>
       <tbody>
         <tr>
-          <td><a href="https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/blob/main/conversation_58k.json">conversation_58k.json</a> </td>
-          <td>126 MB</td>
-          <td>58K</td>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/llava_665k_multi">LLaVA-665k-multi</a> </td>
+          <td>Coref</td>
+          <td>313K</td>
         </tr>
         <tr>
-          <td><a href="https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/blob/main/detail_23k.json">detail_23k.json</a></td>
-          <td>20.5 MB</td>
-          <td>23K</td>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/lrv_multi">LRV-multi</a> </td>
+          <td>Coref</td>
+          <td>8K</td>
         </tr>
         <tr>
-          <td><a href="https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/blob/main/complex_reasoning_77k.json">complex_reasoning_77k.json</a></td>
-          <td>79.6 MB</td>
-          <td>77K</td>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/nlvr2">NLVR2</a> </td>
+          <td>Reason</td>
+          <td>86K</td>
         </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/iconqa">IconQA</a> </td>
+          <td>Reason</td>
+          <td>64K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/contrastive_caption">Contrast-Caption</a> </td>
+          <td>Reason</td>
+          <td>36K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/imagecode">ImageCoDe</a> </td>
+          <td>Reason</td>
+          <td>17K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/multi_vqa">Multi-VQA</a> </td>
+          <td>Reason</td>
+          <td>5K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/coinstruct">Co-Instruct</a> </td>
+          <td>Compare</td>
+          <td>151K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/dreamsim">Dreamsim</a> </td>
+          <td>Compare</td>
+          <td>16K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/spot-the-diff">Spot-the-Diff</a> </td>
+          <td>Compare</td>
+          <td>8K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/birds-to-words">Birds-to-Words</a> </td>
+          <td>Compare</td>
+          <td>3K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/visual_story_telling">VIST</a> </td>
+          <td>Temporal</td>
+          <td>7K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/nextqa">NExT-QA</a> </td>
+          <td>Temporal</td>
+          <td>4K</td>
+        </tr>
+        <tr>
+          <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct/viewer/star">STAR</a> </td>
+          <td>Temporal</td>
+          <td>3K</td>
+        </tr>
+        
       </tbody>
     </table>
   </div>
+
+
+  <section class="section">
+    <!-- Results. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-six-fifths">
+        <h2 class="title is-3"><img id="painting_icon" width="3%" src="images/mantis-logo.png"> Mantis: </h2>
+      </div>
+    </div>
+    <!-- </div> -->
+    <!--/ Results. -->    
+  <div class="container is-max-desktop">
+  
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <div class="content has-text-justified"> 
+          <p>
+            Mantis applies the LLaVA's architecture, using <a href="https://huggingface.co/openai/clip-vit-large-patch14-336">CLIP</a>/<a href="https://huggingface.co/google/siglip-so400m-patch14-384">SigLIP</a> as vision encoders and <a href="https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct">Meta-Llama-3-8B-Instruct</a> as language model. To support super-resolution, we also train a variant based on <a href="https://huggingface.co/google/siglip-so400m-patch14-384">SigLIP</a> and <a href="https://huggingface.co/adept/fuyu-8b">Fuyu-8B</a>. 
+            We consider a two-stage instruction-tuning procedure:
+            connects pre-trained <a href="https://openai.com/research/clip">CLIP ViT-L/14</a> visual encoder and large language model <a href="https://github.com/lm-sys/FastChat">Vicuna</a>, using a simple projection matrix.   We consider a two-stage instruction-tuning procedure:
+
+            Please check out our 
+            <a href="https://huggingface.co/collections/TIGER-Lab/mantis-6619b0834594c878cdb1d6e4">[Model Zoo]</a>.
+          </p>
+        </div>          
+      </div>
+    </div>
+  
+  
+  </section>
+  
+  
+
+
+  <section class="section">
+    <!-- Results. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-six-fifths">
+        <h2 class="title is-3"><img id="painting_icon" width="3%" src="https://cdn-icons-png.flaticon.com/512/3515/3515174.png"> Performance</h2>
+      </div>
+    </div>
+  
+  
+  
+    <!-- </div> -->
+    <!--/ Results. -->    
+  <div class="container is-max-desktop">
+  
+  
+    <!-- Grounedtext2img. -->
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-4"><img id="painting_icon" width="4%" src="https://cdn-icons-png.flaticon.com/512/1698/1698535.png"> <span style="font-size: 100%;">Multi-Image VQA:</span> Towards GPT-4-level multi-image understanding</h2>
+        
+
+        <div class="column is-six-fifths" width="80%">
+          <table class="GeneratedTable">
+            <thead>
+              <tr>
+                <th>Benchmark</th>
+                <th>Multi-Image Skill</th>
+                <th>Held-in/Held-out</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="https://huggingface.co/datasets/TIGER-Lab/NLVR2">NLVR2</a> </td>
+                <td>Reason</td>
+                <td>Held-in</td>
+              </tr>
+              <tr>
+                <td><a href="https://huggingface.co/spaces/q-future/Q-Bench-Leaderboard">Q-bench</a> </td>
+                <td>Reason</td>
+                <td>Held-in</td>
+              </tr>
+              <tr>
+                <td><a href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Eval">Mantis-Eval</a> </td>
+                <td>Reason & Co-reference</td>
+                <td>Held-out</td>
+              </tr>
+              <tr>
+                <td><a href="https://zeyofu.github.io/blink">BLINK</a> </td>
+                <td>Reason</td>
+                <td>Held-out</td>
+              </tr>
+              <tr>
+                <td><a href="https://huggingface.co/datasets/OpenGVLab/MVBench">MVBench</a> </td>
+                <td>Temporal</td>
+                <td>Held-out</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <p style="font-family:Times New Roman"><b>
+          We select 5 multi-image benchmarks that cover the four crucial multi-image skills: co-reference, reasoning, comparing, temporal understanding to evaluate Mantis.
+        </b>
+        <centering>
+          <div style="text-align: center;">
+            <img id="teaser" width="70%" src="images/many_image_vqa.png">     
+          </div>
+        </centering> 
+        
+      <p style="font-family:Times New Roman"><b>
+        Evaluation on 5 benchmarks, including NLVR2, Q-Bench, BLINK, MVBench, Mantis-Eval, shows that Mantis achieves the state-of-the-art performance. It demonstrates that Mantis effectively learn the 4 crucial multi-image skills (co-reference, reasoning, comparing, temporal understanding) from the interleaved text-image instructions dataset, Mantis-Instruct. We have surpassed the second best  Idefics2-8B (pre-trained on 140M interleaved image-text data) by an average of 9 absolute points, and is only behind GPT-4 by 2 points.</b>               
+      </div>
+    </div>
+  
+    <!-- Grounedtext2img. -->
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-4"> <img id="painting_icon" width="3%" src="https://scienceqa.github.io/img/logo.png"><span style="font-size: 100%;"> Single Image VQA:</span> Maintain strong performance </h2>
+        
+        <centering>
+          <div style="text-align: center;">
+            <img id="teaser" width="70%" src="images/single_image_vqa.png">     
+          </div>
+        </centering> 
+
+          <p style="font-family:Times New Roman"><b>We also evaluate Mantis-8B-CLIP and Mantis-8B-SigLIP on various single-image tasks, including TextVQA, VQA-v2, MMBench, MMMU, etc. Mantis models reach on-par average performance with CogVLM, and Emu2-Chat</b>
+                
+      </div>
+    </div>
+  </section>
+
+
+</section>
+
+<section class="section">
+
+  <div class="columns is-centered has-text-centered">
+    <div class="column is-six-fifths">
+      <h2 class="title is-3"> Examples on Visual Instruction Following</h2>
+    </div>
+  </div>
+
+
+
+    <div class="columns is-centered has-text-centered">
+    <div class="column is-six-fifths">
+      <img id="teaser" width="85%" src="images/cases.jpeg">
+    </div>
+    </div>  
+
+</section>
+
+<section class="section" id="BibTeX">
+  <div class="container is-max-desktop content">
+    <h2 class="title">BibTeX</h2>
+    <pre><code>
+@inproceedings{Jiang2024MANTISIM,
+  title={MANTIS: Interleaved Multi-Image Instruction Tuning},
+  author={Dongfu Jiang and Xuan He and Huaye Zeng and Cong Wei and Max W.F. Ku and Qian Liu and Wenhu Chen},
+  publisher={arXiv2405.01483}
+  year={2024},
+}
+</code></pre>
+  </div>
+</section>
+  
 
   <script>
     // Handle message showing
