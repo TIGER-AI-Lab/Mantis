@@ -14,6 +14,7 @@ setup(
         "torch",
         "Pillow",
         "torch",
+        "accelerate",
         "torchvision",
     ],
     extra_requires={

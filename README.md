@@ -1,14 +1,33 @@
 # Mantis: Multi-Image Instruction Tuning
+<a target="_blank" href="https://arxiv.org/abs/2405.01483">
+<img style="height:22pt" src="https://img.shields.io/badge/-Paper-black?style=flat&logo=arxiv">
+</a>
+<a target="_blank" href="https://github.com/TIGER-AI-Lab/Mantis">
+<img style="height:22pt" src="https://img.shields.io/badge/-Code-green?style=flat&logo=github">
+</a>
+<a target="_blank" href="https://tiger-ai-lab.github.io/Mantis/">
+<img style="height:22pt" src="https://img.shields.io/badge/-🌐%20Website-red?style=flat"> 
+</a>
+<a target="_blank" href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct">
+<img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Dataset-red?style=flat"></a>
+<a target="_blank" href="https://huggingface.co/spaces/TIGER-Lab/Mantis">
+<img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Demo-red?style=flat"></a> 
+<a target="_blank" href="https://huggingface.co/collections/TIGER-Lab/mantis-6619b0834594c878cdb1d6e4">
+<img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Models-red?style=flat">
+</a>
+<!-- <a target="_blank" href="https://twitter.com/billyuchenlin/status/1668666357058277377">
+<img style="height:22pt" src="https://img.shields.io/badge/-Tweet-blue?style=flat&logo=twitter">
+</a> -->
+<br>
+---
 
 **Mantis** is a multimodal conversational AI model that can chat with users about images and text. It's optimized for multi-image reasoning, where inverleaved text and images can be used to generate responses.
 
-- Website: https://tiger-ai-lab.github.io/Mantis/
 
-- Paper: https://arxiv.org/abs/2405.01483
-
-- 🤗 Hugging face space Demo: [Mantis](https://huggingface.co/spaces/TIGER-Lab/Mantis)
-
-- 🤗 Models: [TIGER-Lab/Mantis](https://huggingface.co/collections/TIGER-Lab/mantis-6619b0834594c878cdb1d6e4)
+## 🔥News
+- [2024-05-03] We have release our training codes, data, evaluation codes to the community! Check the following sections for more details.
+- [2024-05-02] We release the first multi-image abled LMM model Mantis-8B based on LLaMA3! Interact with Mantis-8B-SigLIP on [Hugging Face Spaces](https://huggingface.co/spaces/TIGER-Lab/Mantis) or [Colab Demo](./examples/run_mantis.py)
+- [2024-05-02] Mantis's technical report is now available on [arXiv](https://arxiv.org/abs/2405.01483). Kudos to the team!
 
 ## Installation
 ```bash
@@ -28,7 +47,7 @@ python run_mantis.py
 ## Training
 Install the requirements with the following command:
 ```bash
-pip install -e[train,dev]
+pip install -e[train,eval]
 ```
 
 We support training of Mantis based on the Fuyu architecture and the LLaVA architecture. You can train the model with the following command:
@@ -50,6 +69,9 @@ cd mantis/train/train_mllava.sh
 cd mantis/train/train_fuyu.sh
 ```
 
+## Evaluation
+To reproduce our evaluation results, please check [mantis/benchmark/README.md](./mantis/benchmark/README.md)
+
 ## Data
 - [🤗 Mantis-Instruct](https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct) 721K text-image interleaved datasets for multi-image instruction tuning
 - [🤗 Mantis-Eval](https://huggingface.co/datasets/TIGER-Lab/Mantis-Eval) 217 high-quality examples for evaluating LMM's multi-image skills
@@ -64,6 +86,12 @@ We provide the following models in the 🤗 Hugging Face model hub:
 The following intermediate checkpoints after pre-training the multi-modal projectors are also available for experiments reproducibility (**Please note the follwing checkpoints still needs further fine-tuning on Mantis-Eval to be intelligent. They are not working models.**):
 - [TIGER-Lab/Mantis-8B-clip-llama3-pretraind](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3-pretraind)
 - [TIGER-Lab/Mantis-8B-siglip-llama3-pretraind](https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3-pretraind)
+
+
+
+## Acknowledgement
+- Thanks LLaVA and LLaVA-hf team for providing the LLaVA codebase, and hugging face compatibility!
+- Thanks [Haoning Wu](https://teowu.github.io/) for providing codes of MVBench evaluation!
 
 
 ## Citation
