@@ -7,6 +7,7 @@ data:
     split: train
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "dreamsim"
     type: huggingface
@@ -14,6 +15,7 @@ data:
     format: chat
     split: train
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "contrastive_caption"
     type: huggingface
@@ -21,6 +23,7 @@ data:
     format: chat
     split: train
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "birds-to-words"    
     type: huggingface
@@ -28,6 +31,7 @@ data:
     format: chat
     split: train
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "visual_story_telling"
     type: huggingface
@@ -36,6 +40,7 @@ data:
     split: train
     max_num_images: 20
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   -
     name: "spot-the-diff"
     type: huggingface
@@ -43,6 +48,7 @@ data:
     format: chat
     split: train
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "lrv"
     type: huggingface
@@ -50,12 +56,14 @@ data:
     format: chat
     split: train
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "nextqa"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "star"
     type: huggingface
@@ -63,6 +71,7 @@ data:
     format: chat
     split: train
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "llava_665k_multi"
     type: huggingface
@@ -71,6 +80,7 @@ data:
     split: train
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "coinstruct"
     type: huggingface
@@ -80,6 +90,7 @@ data:
     max_size: 100000 # 150K original
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "dvqa"
     type: huggingface
@@ -89,6 +100,7 @@ data:
     max_size: 30000 # 200k original
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "chartqa"
     type: huggingface
@@ -97,6 +109,7 @@ data:
     split: train
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "docvqa"
     type: huggingface
@@ -105,6 +118,7 @@ data:
     split: train
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "multi_vqa"
     type: huggingface
@@ -113,6 +127,7 @@ data:
     split: train
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "iconqa"
     type: huggingface
@@ -121,6 +136,7 @@ data:
     split: train
     shuffle: true
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
+    revision: script
   - 
     name: "imagecode"
     type: huggingface

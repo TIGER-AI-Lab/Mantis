@@ -68,7 +68,8 @@ class ChatDataset(torch.utils.data.Dataset):
         max_num_images=10, 
         vl_only=False,
         offline_sha=None,
-        sample_ratio=1.0
+        sample_ratio=1.0,
+        revision="script"
     ):
         self.processor = processor
         self.data_path = Path(data_path)
@@ -98,7 +99,7 @@ class ChatDataset(torch.utils.data.Dataset):
                 self.data = read_local_cached_dataset(data_path, name, split, offline_sha)
             else:
                 self.print(f"Loading dataset '{data_path}' {name} {split} from online huggingface datasets")
-                self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True)
+                self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision)
             avg_num_images = sum([len(x) for x in self.data['images'] if x]) / len(self.data['images'])
             print(f"Average number of images: {avg_num_images}")
             if avg_num_images > max_num_images:
@@ -362,10 +363,11 @@ def load_data_from_config(data_args, processor):
         dataset_type = sub_dataset_config.get('type', 'huggingface')
         offline_sha = sub_dataset_config.get('offline_sha', None)
         vl_only = sub_dataset_config.get('vl_only', False)
+        revision = sub_dataset_config.get('revision', "script")
         assert split in ['train', 'val', 'test'], f"Unknown split {split}"
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,
-                data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha)
+                data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)
         elif sub_dataset_config['format'] == 'vqa':
             sub_dataset = VQADataset(processor, data_path, name, split, max_seq_len)
         else:

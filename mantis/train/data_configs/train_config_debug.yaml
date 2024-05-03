@@ -6,3 +6,4 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script

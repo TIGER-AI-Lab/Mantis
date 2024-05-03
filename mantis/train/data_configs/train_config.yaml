@@ -6,24 +6,28 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script
   - 
     name: "dreamsim"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "contrastive_caption"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "birds-to-words"    
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "visual_story_telling"
     type: huggingface
@@ -31,30 +35,35 @@ data:
     format: chat
     split: train
     max_num_images: 20
+    revision: script
   -
     name: "spot-the-diff"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "lrv"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "nextqa"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "star"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
+    revision: script
   - 
     name: "llava_665k_multi"
     type: huggingface
@@ -62,6 +71,7 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script
   - 
     name: "coinstruct"
     type: huggingface
@@ -70,6 +80,7 @@ data:
     split: train
     max_size: 100000 # 150K original
     shuffle: true
+    revision: script
   - 
     name: "dvqa"
     type: huggingface
@@ -78,6 +89,7 @@ data:
     split: train
     max_size: 30000 # 200k original
     shuffle: true
+    revision: script
   - 
     name: "chartqa"
     type: huggingface
@@ -85,6 +97,7 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script
   - 
     name: "docvqa"
     type: huggingface
@@ -92,6 +105,7 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script
   - 
     name: "multi_vqa"
     type: huggingface
@@ -99,6 +113,7 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script
   - 
     name: "iconqa"
     type: huggingface
@@ -106,6 +121,7 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script
   - 
     name: "imagecode"
     type: huggingface
@@ -113,3 +129,4 @@ data:
     format: chat
     split: train
     shuffle: true
+    revision: script
