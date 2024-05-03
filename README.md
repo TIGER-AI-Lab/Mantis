@@ -58,11 +58,10 @@ cd mantis/train/train_fuyu.sh
 
 ## Citation
 ```bibtex
-@misc{jiang2024mantis,
-    title={Mantis: Interleaved Multi-Image Instruction Tuning},
-    url={https://tiger-ai-lab.github.io/Blog/mantis},
-    author={Jiang, Dongfu and He, Xuan and Zeng, Huaye and Wei, Cong and Max Ku and Liu, Qian and Chen, Wenhu},
-    month={April},
-    year={2024}
+@article{jiang2024mantis,
+  title={MANTIS: Interleaved Multi-Image Instruction Tuning},
+  author={Jiang, Dongfu and He, Xuan and Zeng, Huaye and Wei, Con and Ku, Max and Liu, Qian and Chen, Wenhu},
+  journal={arXiv preprint arXiv:2405.01483},
+  year={2024}
 }
 ```
