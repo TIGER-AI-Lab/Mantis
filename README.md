@@ -1,13 +1,10 @@
 # Mantis: Multi-Image Instruction Tuning
 <a target="_blank" href="https://arxiv.org/abs/2405.01483">
-<img style="height:22pt" src="https://img.shields.io/badge/-Paper-black?style=flat&logo=arxiv">
-</a>
+<img style="height:22pt" src="https://img.shields.io/badge/-Paper-black?style=flat&logo=arxiv"></a>
 <a target="_blank" href="https://github.com/TIGER-AI-Lab/Mantis">
-<img style="height:22pt" src="https://img.shields.io/badge/-Code-green?style=flat&logo=github">
-</a>
+<img style="height:22pt" src="https://img.shields.io/badge/-Code-green?style=flat&logo=github"></a>
 <a target="_blank" href="https://tiger-ai-lab.github.io/Mantis/">
-<img style="height:22pt" src="https://img.shields.io/badge/-🌐%20Website-red?style=flat"> 
-</a>
+<img style="height:22pt" src="https://img.shields.io/badge/-🌐%20Website-red?style=flat"> </a>
 <a target="_blank" href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct">
 <img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Dataset-red?style=flat"></a>
 <a target="_blank" href="https://huggingface.co/spaces/TIGER-Lab/Mantis">
@@ -19,13 +16,19 @@
 <img style="height:22pt" src="https://img.shields.io/badge/-Tweet-blue?style=flat&logo=twitter">
 </a> -->
 <br>
+
 ---
 
-**Mantis** is a multimodal conversational AI model that can chat with users about images and text. It's optimized for multi-image reasoning, where inverleaved text and images can be used to generate responses.
+🤔 The recent years have witnessed a great array of large multimodal models (LMMs) to effectively solve single-image vision language tasks. However, their abilities to solve multi-image visual language tasks is yet to be improved.
 
+😦 The existing multi-image LMMs (e.g. OpenFlamingo, Emu, Idefics, etc) mostly gain their multi-image ability through pre-training on hundreds of millions of noisy interleaved image-text data from web, which is neither efficient nor effective.
+
+🔥 Therefore, we present Mantis, an LLaMA-3 based LMM with interleaved text and image as inputs, train on Mantis-Instruct under **academic-level** resources (i.e. 36 hours on 16xA100-40G). 
+
+🚀 Mantis achieves state-of-the-art performance on 5 multi-image benchmarks (NLVR2, Q-Bench, BLINK, MVBench, Mantis-Eval), and maintaining a strong single-image performance on par with CogVLM and Emu2.
 
 ## 🔥News
-- [2024-05-03] We have release our training codes, data, evaluation codes to the community! Check the following sections for more details.
+- [2024-05-03] We have release our [training codes](./mantis/train/README.md), [dataset](https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct), [evaluation codes](./mantis/benchmark/README.md) codes to the community! Check the following sections for more details.
 - [2024-05-02] We release the first multi-image abled LMM model Mantis-8B based on LLaMA3! Interact with Mantis-8B-SigLIP on [Hugging Face Spaces](https://huggingface.co/spaces/TIGER-Lab/Mantis) or [Colab Demo](./examples/run_mantis.py)
 - [2024-05-02] Mantis's technical report is now available on [arXiv](https://arxiv.org/abs/2405.01483). Kudos to the team!
 
