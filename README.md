@@ -2,7 +2,9 @@
 
 **Mantis** is a multimodal conversational AI model that can chat with users about images and text. It's optimized for multi-image reasoning, where inverleaved text and images can be used to generate responses.
 
-- Website: [Mantis](https://tiger-ai-lab.github.io/Mantis/)
+- Website: https://tiger-ai-lab.github.io/Mantis/
+
+- Paper: https://arxiv.org/abs/2405.01483
 
 - 🤗 Hugging face space Demo: [Mantis](https://huggingface.co/spaces/TIGER-Lab/Mantis)
 
