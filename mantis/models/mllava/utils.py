@@ -44,7 +44,6 @@ def chat_mllava(
     conv.messages = []
     if history is not None:
         for message in history:
-            message["role"] = message["role"].upper()
             assert message["role"] in conv.roles
             conv.append_message(message["role"], message["text"])
     else:
@@ -109,7 +108,6 @@ def chat_mllava_stream(
     conv.messages = []
     if history is not None:
         for message in history:
-            message["role"] = message["role"].upper()
             assert message["role"] in conv.roles
             conv.append_message(message["role"], message["text"])
     else:

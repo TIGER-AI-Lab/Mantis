@@ -61,10 +61,11 @@ def MLLM_Models(model_name:str):
     elif model_name.lower().startswith("gpt4v"):
         from .gpt4v_eval import GPT4V
         return GPT4V
-    elif model_name.lower().startswith("mfuyu"):
-        return partial(get_mfuyu, model_name=model_name)
-    elif model_name.lower().startswith("mllava") or model_name.lower().startswith("llava_next") or "bakllava" in model_name.lower() or model_name.lower().startswith("llava_"):
-        return partial(get_mllava, model_name=model_name)
+    elif model_name.lower().startswith("mantis"):
+        if "fuyu" in model_name.lower():
+            return partial(get_mfuyu, model_name=model_name)
+        else:
+            return partial(get_mllava, model_name=model_name)
     else:
         raise ValueError(f'Invalid model name: {model_name}, must be one of {MLLM_LIST}')
     

@@ -75,8 +75,8 @@ def get_prediction(question_type:str, raw_answer:str, ref_answer:str, options:Li
 
 def main(
     model_name: str,
-    dataset_path: str="TIGER-Lab/Mantis-Instruct_eval",
-    dataset_name: str="mantis_eval",
+    dataset_path: str="TIGER-Lab/Mantis-eval",
+    dataset_name: str="",
     results_dir: str="results",
     max_size=None,
     num_shots: int=0,
@@ -112,7 +112,7 @@ def main(
     if not check_existing:
         if not os.path.exists(dataset_path):
             
-            dataset = datasets.load_dataset(dataset_path, dataset_name, split='test')
+            dataset = datasets.load_dataset(dataset_path, split='test')
             if max_size:
                 dataset = dataset.select(range(min(len(dataset), max_size)))
             if isinstance(sub_sample_size, int):
