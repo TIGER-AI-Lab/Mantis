@@ -1,13 +1,8 @@
 # Mantis: Multi-Image Instruction Tuning
 
-![Mantis](./docs/assets/images/overall_barchart.jpeg)
----
-
-
 **Mantis** is a multimodal conversational AI model that can chat with users about images and text. It's optimized for multi-image reasoning, where inverleaved text and images can be used to generate responses.
 
-
-- Check out our blog for more details: [Mantis: Interleaved Multi-Image Instruction Tuning](https://tiger-ai-lab.github.io/Blog/mantis)
+- Website: [Mantis](https://tiger-ai-lab.github.io/Mantis/)
 
 - 🤗 Hugging face space Demo: [Mantis](https://huggingface.co/spaces/TIGER-Lab/Mantis)
 
