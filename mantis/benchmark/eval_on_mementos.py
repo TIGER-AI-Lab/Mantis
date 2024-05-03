@@ -1,19 +1,10 @@
 import fire
 import os
 import datasets
-import PIL
-import torch
 import tempfile
-from peft import PeftModel, PeftConfig
-from mantis.models.mfuyu import (
-    MFuyuForCausalLM, 
-    MFuyuProcessor, 
-    chat_mfuyu, 
-)
+
 from mantis.mllm_tools import MLLM_Models
-from easy_openai import openai_completions
-from mementos_eval_utils import generate_keywords_list, eval_mementos_subset, ActionGraph, ObjectGraph
-from typing import List
+from mementos_eval_utils import generate_keywords_list, eval_mementos_subset
 from tqdm import tqdm
 
 

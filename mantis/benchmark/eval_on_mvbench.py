@@ -1,7 +1,5 @@
 import fire
 import json
-import regex as re
-import numpy as np
 from pathlib import Path
 from mvbench_eval_utils import MVBench_dataset
 from mantis.mllm_tools import MLLM_Models

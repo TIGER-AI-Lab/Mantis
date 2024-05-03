@@ -9,20 +9,31 @@ images = [Image.open(image1), Image.open(image2)]
 
 # load processor and model
 from mantis.models.mllava import MLlavaProcessor, LlavaForConditionalGeneration
-processor = MLlavaProcessor.from_pretrained("TIGER-Lab/Mantis-bakllava-7b")
-model = LlavaForConditionalGeneration.from_pretrained("TIGER-Lab/Mantis-bakllava-7b", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+processor = MLlavaProcessor.from_pretrained("TIGER-Lab/Mantis-8B-siglip-llama3")
+model = LlavaForConditionalGeneration.from_pretrained("TIGER-Lab/Mantis-8B-siglip-llama3", device_map="cuda", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
+
+generation_kwargs = {
+    "max_new_tokens": 1024,
+    "num_beams": 1,
+    "do_sample": False
+}
 
 # chat
-text = "<image> <image> What's the difference between these two images? Please describe as much as you can."
-response, history = chat_mllava(text, images, model, processor)
+text = "Describe the difference of <image> and <image> as much as you can."
+response, history = chat_mllava(text, images, model, processor, **generation_kwargs)
 
 print("USER: ", text)
 print("ASSISTANT: ", response)
-# The image on the right has a larger number of wallets displayed compared to the image on the left. The wallets in the right image are arranged in a grid pattern, while the wallets in the left image are displayed in a more scattered manner. The wallets in the right image have various colors, including red, purple, and brown, while the wallets in the left image are primarily brown.
 
-text = "How many items are there in image 1 and image 2 respectively?"
-response, history = chat_mllava(text, images, model, processor, history=history)
+text = "How many wallets are there in image 1 and image 2 respectively?"
+response, history = chat_mllava(text, images, model, processor, history=history, **generation_kwargs)
 
 print("USER: ", text)
 print("ASSISTANT: ", response)
-# There are two items in image 1 and four items in image 2.
+
+"""
+USER:  Describe the difference of <image> and <image> as much as you can.
+ASSISTANT:  The second image has more variety in terms of colors and designs. While the first image only shows two brown leather pouches, the second image features four different pouches in various colors and designs, including a purple one with a gold coin, a red one with a gold coin, a black one with a gold coin, and a brown one with a gold coin. This variety makes the second image more visually interesting and dynamic.
+USER:  How many wallets are there in image 1 and image 2 respectively?
+ASSISTANT:  There are two wallets in image 1, and four wallets in image 2.
+"""

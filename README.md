@@ -16,7 +16,6 @@ conda create -n mantis python=3.9
 conda activate mantis
 pip install -e .
 # install flash-attention
-pip install flash-attn --no-build-isolation
 ```
 ## Inference
 
@@ -26,12 +25,12 @@ cd examples
 python run_mantis.py
 ```
 
-Alternatively, you can run the following command with pure hugging face codes, without using the Mantis library:
+## Training
+Install the requirements with the following command:
 ```bash
-python run_mantis_hf.py # with pure hugging face codes
+pip install -e[train,dev]
 ```
 
-## Training
 We support training of Mantis based on the Fuyu architecture and the LLaVA architecture. You can train the model with the following command:
 
 **Training Mantis based on LLaMA3 with CLIP/SigLIP encoder:**
@@ -54,6 +53,17 @@ cd mantis/train/train_fuyu.sh
 ## Data
 - [🤗 Mantis-Instruct](https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct) 721K text-image interleaved datasets for multi-image instruction tuning
 - [🤗 Mantis-Eval](https://huggingface.co/datasets/TIGER-Lab/Mantis-Eval) 217 high-quality examples for evaluating LMM's multi-image skills
+
+
+## Model Zoo
+We provide the following models in the 🤗 Hugging Face model hub:
+- [TIGER-Lab/Mantis-8B-clip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3)
+- [TIGER-Lab/Mantis-8B-siglip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3)
+- [https://huggingface.co/TIGER-Lab/Mantis-8B-Fuyu](https://huggingface.co/TIGER-Lab/Mantis-8B-Fuyu)
+
+The following intermediate checkpoints after pre-training the multi-modal projectors are also available for experiments reproducibility (**Please note the follwing checkpoints still needs further fine-tuning on Mantis-Eval to be intelligent. They are not working models.**):
+- [TIGER-Lab/Mantis-8B-clip-llama3-pretraind](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3-pretraind)
+- [TIGER-Lab/Mantis-8B-siglip-llama3-pretraind](https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3-pretraind)
 
 
 ## Citation
