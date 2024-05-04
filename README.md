@@ -12,11 +12,9 @@
 <a target="_blank" href="https://huggingface.co/spaces/TIGER-Lab/Mantis">
 <img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Demo-red?style=flat"></a> 
 <a target="_blank" href="https://huggingface.co/collections/TIGER-Lab/mantis-6619b0834594c878cdb1d6e4">
-<img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Models-red?style=flat">
-</a>
-<!-- <a target="_blank" href="https://twitter.com/billyuchenlin/status/1668666357058277377">
-<img style="height:22pt" src="https://img.shields.io/badge/-Tweet-blue?style=flat&logo=twitter">
-</a> -->
+<img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Models-red?style=flat"></a>
+<a target="_blank" href="https://twitter.com/DongfuJiang/status/1786552974598078677">
+<img style="height:22pt" src="https://img.shields.io/badge/-Tweet-blue?style=flat&logo=twitter"></a>
 <br>
 
 ---
