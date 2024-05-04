@@ -50,7 +50,7 @@ data:
     offline_sha: 11293b396d9be943fd8e4795ca703a76a0c2a0cc3b8cef295a3b6bf4bb8ea344
     revision: script
   - 
-    name: "lrv"
+    name: "lrv_multi"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat

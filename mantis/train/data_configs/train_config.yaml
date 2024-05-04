@@ -44,7 +44,7 @@ data:
     split: train
     revision: script
   - 
-    name: "lrv"
+    name: "lrv_multi"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat

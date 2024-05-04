@@ -51,6 +51,7 @@ python run_mantis.py
 Install the requirements with the following command:
 ```bash
 pip install -e[train,eval]
+cd mantis/train
 ```
 
 We support training of Mantis based on the Fuyu architecture and the LLaVA architecture. You can train the model with the following command:
@@ -58,19 +59,25 @@ We support training of Mantis based on the Fuyu architecture and the LLaVA archi
 **Training Mantis based on LLaMA3 with CLIP/SigLIP encoder:**
 - Pretrain Mantis-LLaMA3 Multimodal projector on pretrain data (Stage 1):
 ```bash
-cd mantis/train/pretrain_mllava.sh
+bash pretrain_mllava.sh
 ```
 
 - Fine-tune the pretrained Mantis-LLaMA3 on Mantis-Instruct (Stage 2):
 ```bash
-cd mantis/train/train_mllava.sh
+bash train_mllava.sh
 ```
 
 **Training Mantis based on Fuyu-8B:**
 - Fine-tune Fuyu-8B on Mantis-Instruct to get Mantis-Fuyu:
 ```bash
-cd mantis/train/train_fuyu.sh
+bash train_fuyu.sh
 ```
+
+**Note**: 
+- Our training scripts contain auto inference bash commands to infer the number of GPUs and the number of GPU nodes use for the training. So you only need to modify the data config path and the base models.
+- The training data will be automatically downloaded from hugging face when you run the training scripts.
+
+See [mantis/train/README.md](./mantis/train/README.md) for more details.
 
 ## Evaluation
 To reproduce our evaluation results, please check [mantis/benchmark/README.md](./mantis/benchmark/README.md)
