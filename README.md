@@ -59,25 +59,27 @@ We support training of Mantis based on the Fuyu architecture and the LLaVA archi
 **Training Mantis based on LLaMA3 with CLIP/SigLIP encoder:**
 - Pretrain Mantis-LLaMA3 Multimodal projector on pretrain data (Stage 1):
 ```bash
-bash pretrain_mllava.sh
+bash scripts/pretrain_mllava.sh
 ```
 
 - Fine-tune the pretrained Mantis-LLaMA3 on Mantis-Instruct (Stage 2):
 ```bash
-bash train_mllava.sh
+bash scripts/train_mllava.sh
 ```
 
 **Training Mantis based on Fuyu-8B:**
 - Fine-tune Fuyu-8B on Mantis-Instruct to get Mantis-Fuyu:
 ```bash
-bash train_fuyu.sh
+bash scripts/train_fuyu.sh
 ```
 
 **Note**: 
 - Our training scripts contain auto inference bash commands to infer the number of GPUs and the number of GPU nodes use for the training. So you only need to modify the data config path and the base models.
 - The training data will be automatically downloaded from hugging face when you run the training scripts.
 
-See [mantis/train/README.md](./mantis/train/README.md) for more details.
+See [mantis/train/README.md](./mantis/train/README.md) for more details. 
+
+Check all the training scripts in [mantist/train/scripts](./mantis/train/scripts)
 
 ## Evaluation
 To reproduce our evaluation results, please check [mantis/benchmark/README.md](./mantis/benchmark/README.md)
