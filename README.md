@@ -84,7 +84,7 @@ To reproduce our evaluation results, please check [mantis/benchmark/README.md](.
 We provide the following models in the 🤗 Hugging Face model hub:
 - [TIGER-Lab/Mantis-8B-clip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3)
 - [TIGER-Lab/Mantis-8B-siglip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3)
-- [https://huggingface.co/TIGER-Lab/Mantis-8B-Fuyu](https://huggingface.co/TIGER-Lab/Mantis-8B-Fuyu)
+- [TIGER-Lab/Mantis-8B-Fuyu](https://huggingface.co/TIGER-Lab/Mantis-8B-Fuyu)
 
 The following intermediate checkpoints after pre-training the multi-modal projectors are also available for experiments reproducibility (**Please note the follwing checkpoints still needs further fine-tuning on Mantis-Eval to be intelligent. They are not working models.**):
 - [TIGER-Lab/Mantis-8B-clip-llama3-pretraind](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3-pretraind)
