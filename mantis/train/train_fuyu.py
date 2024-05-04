@@ -75,14 +75,14 @@ class ModelArguments:
     )
     lora_r: Optional[int] = field(
         metadata={"help": "LoRA r", "default": 128, "required": False},
-        default=64,
+        default=128,
     )
     lora_alpha: Optional[float] = field(
         metadata={"help": "LoRA alpha", "default": 256, "required": False},
-        default=32,
+        default=256,
     )
     lora_dropout: Optional[float] = field(
-        metadata={"help": "LoRA dropout", "default": 0.1, "required": False},
+        metadata={"help": "LoRA dropout", "default": 0.05, "required": False},
         default=0.05,
     )
     lora_bias: Optional[str] = field(
@@ -138,7 +138,9 @@ def load_model(model_args, training_args):
         if training_args.fp16:
             model.to(torch.float16)
         print("Adding LoRA adapters...")
+        model.enable_input_require_grads()
         model = get_peft_model(model, lora_config)
+        print("Successfully added LoRA adapters")
         
     print("Successfully loaded model from:", model_args.model_name_or_path)
     return model, processor

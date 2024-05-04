@@ -18,8 +18,8 @@ if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="MFuyu/llava_clip_llama3_8b_pretrain_8192"
-    # model_name_or_path="MFuyu/llava_siglip_llama3_8b_pretrain_8192"
+    model_name_or_path="TIGER-Lab/Mantis-8B-clip-llama3-pretraind"
+    # model_name_or_path="TIGER-Lab/Mantis-8B-siglip-llama3-pretraind"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -127,7 +127,7 @@ echo "Running ${RUN_NAME}"
 
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
-    config_file="./accelerate_configs/accelerate_config_zero2_slurm.yaml"
+    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
     echo $config_file
 else
     echo "lora is disabled"

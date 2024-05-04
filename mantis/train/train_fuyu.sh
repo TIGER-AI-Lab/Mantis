@@ -136,7 +136,7 @@ echo "Running ${RUN_NAME}"
 
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
-    config_file="./accelerate_configs/accelerate_config_zero2_slurm.yaml"
+    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
     echo $config_file
 else
     echo "lora is disabled"

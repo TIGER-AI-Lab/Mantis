@@ -166,3 +166,4 @@ cython_debug/
 /mantis/benchmark/logs
 /mantis/benchmark/results*
 /test*
+/mantis/train/wandb

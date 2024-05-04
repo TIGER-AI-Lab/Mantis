@@ -1,19 +1,15 @@
-from transformers import Trainer, TrainingArguments, default_data_collator
+from transformers import Trainer, TrainingArguments
 from transformers.hf_argparser import HfArgumentParser
 from dataclasses import dataclass, field
-from PIL import Image
-import requests
 import torch
 import os
 import wandb
 import regex as re
-from train_utils import load_json_data, load_image, load_images, get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3
+from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3, find_all_linear_names
 from conversation import conv_mllava_v1 as default_conv, conv_templates
 from mantis.train.data import load_data, load_data_from_config
 from pathlib import Path
-from tqdm import tqdm
-from typing import Optional, Union, List
-from accelerate import Accelerator
+from typing import Optional
 from pathlib import Path
 
 os.environ["WANDB_RESUME"] = "allow"
@@ -73,14 +69,14 @@ class ModelArguments:
     )
     lora_r: Optional[int] = field(
         metadata={"help": "LoRA r", "default": 128, "required": False},
-        default=64,
+        default=128,
     )
     lora_alpha: Optional[float] = field(
         metadata={"help": "LoRA alpha", "default": 256, "required": False},
-        default=32,
+        default=256,
     )
     lora_dropout: Optional[float] = field(
-        metadata={"help": "LoRA dropout", "default": 0.1, "required": False},
+        metadata={"help": "LoRA dropout", "default": 0.05, "required": False},
         default=0.05,
     )
     lora_bias: Optional[str] = field(
@@ -229,7 +225,7 @@ def load_model(model_args, training_args):
         lora_config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
-            target_modules=["query_key_value", "dense", "dense_h_to_4h", "dense_4h_to_h", "lm_head"],
+            target_modules=find_all_linear_names(model),
             lora_dropout=model_args.lora_dropout,
             bias=model_args.lora_bias,
             task_type="CAUSAL_LM",
@@ -239,6 +235,7 @@ def load_model(model_args, training_args):
         if training_args.fp16:
             model.to(torch.float16)
         print("Adding LoRA adapters...")
+        model.enable_input_require_grads()
         model = get_peft_model(model, lora_config)
         print("Successfully added LoRA adapters")
     return model, processor
