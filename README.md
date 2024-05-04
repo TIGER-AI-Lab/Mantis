@@ -6,7 +6,7 @@
 <a target="_blank" href="https://github.com/TIGER-AI-Lab/Mantis">
 <img style="height:22pt" src="https://img.shields.io/badge/-Code-green?style=flat&logo=github"></a>
 <a target="_blank" href="https://tiger-ai-lab.github.io/Mantis/">
-<img style="height:22pt" src="https://img.shields.io/badge/-🌐%20Website-red?style=flat"> </a>
+<img style="height:22pt" src="https://img.shields.io/badge/-🌐%20Website-red?style=flat"></a>
 <a target="_blank" href="https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct">
 <img style="height:22pt" src="https://img.shields.io/badge/-🤗%20Dataset-red?style=flat"></a>
 <a target="_blank" href="https://huggingface.co/spaces/TIGER-Lab/Mantis">
