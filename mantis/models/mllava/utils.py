@@ -46,16 +46,33 @@ def chat_mllava(
         for message in history:
             assert message["role"] in conv.roles
             conv.append_message(message["role"], message["text"])
+        if text:
+            assert conv.messages[-1][0] == conv.roles[1], "The last message in the history should be the assistant, if the given text is not empty"
+            conv.append_message(conv.roles[0], text)
+            conv.append_message(conv.roles[1], "")
+            history.append({"role": conv.roles[0], "text": text})
+            history.append({"role": conv.roles[1], "text": ""})
+        else:
+            if conv.messages[-1][0] == conv.roles[1]:
+                assert conv.messages[-1][1] == "", "No user message should be provided"
+            else:
+                assert conv.messages[-1][0] == conv.roles[0], "The last message in the history should be the user, if the given text is empty"
+                conv.append_message(conv.roles[0], "")
+                history.append({"role": conv.roles[0], "text": ""})
     else:
         history = []
-    conv.append_message(conv.roles[0], text)
-    conv.append_message(conv.roles[1], "")
+        history.append({"role": conv.roles[0], "text": text})
+        history.append({"role": conv.roles[1], "text": ""})
+        conv.append_message(conv.roles[0], text)
+        conv.append_message(conv.roles[1], "")
+    assert conv.messages[-1][0] == conv.roles[1] and conv.messages[-1][1] == "", "Format check"
+    assert history[-1]["role"] == conv.roles[1] and history[-1]["text"] == "", "Format check"
     
     prompt = conv.get_prompt()
     if images:
         for i in range(len(images)):
             if isinstance(images[i], str):
-                images[i] = PIL.Image.open(images[i])
+                images[i] = PIL.Image.open(images[i]).convert("RGB")
     
     inputs = processor(images=images, text=prompt, return_tensors="pt", truncation=True, max_length=max_input_length)
     for k, v in inputs.items():
@@ -75,8 +92,7 @@ def chat_mllava(
     generated_ids = output_ids[inputs["input_ids"].shape[-1]:]
     generated_text = processor.decode(generated_ids, skip_special_tokens=True)
 
-    history.append({"role": conv.roles[0], "text": text})
-    history.append({"role": conv.roles[1], "text": generated_text})
+    history[-1]["text"] = generated_text
     
     return generated_text, history
 
@@ -104,16 +120,43 @@ def chat_mllava_stream(
         
 
     """
-    conv = default_conv.copy()
+    if "llama-3" in model.language_model.name_or_path.lower():
+        conv = conv_templates['llama_3']
+        terminators = [
+            processor.tokenizer.eos_token_id,
+            processor.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        ]
+    else:
+        conv = default_conv
+        terminators = None
+    kwargs["eos_token_id"] = terminators
+    conv = conv.copy()
     conv.messages = []
     if history is not None:
         for message in history:
             assert message["role"] in conv.roles
             conv.append_message(message["role"], message["text"])
+        if text:
+            assert conv.messages[-1][0] == conv.roles[1], "The last message in the history should be the assistant, if the given text is not empty"
+            conv.append_message(conv.roles[0], text)
+            conv.append_message(conv.roles[1], "")
+            history.append({"role": conv.roles[0], "text": text})
+            history.append({"role": conv.roles[1], "text": ""})
+        else:
+            if conv.messages[-1][0] == conv.roles[1]:
+                assert conv.messages[-1][1] == "", "No user message should be provided"
+            else:
+                assert conv.messages[-1][0] == conv.roles[0], "The last message in the history should be the user, if the given text is empty"
+                conv.append_message(conv.roles[0], "")
+                history.append({"role": conv.roles[0], "text": ""})
     else:
         history = []
-    conv.append_message(conv.roles[0], text)
-    conv.append_message(conv.roles[1], "")
+        history.append({"role": conv.roles[0], "text": text})
+        history.append({"role": conv.roles[1], "text": ""})
+        conv.append_message(conv.roles[0], text)
+        conv.append_message(conv.roles[1], "")
+    assert conv.messages[-1][0] == conv.roles[1] and conv.messages[-1][1] == "", "Format check"
+    assert history[-1]["role"] == conv.roles[1] and history[-1]["text"] == "", "Format check"
     
     prompt = conv.get_prompt()
     if images:
@@ -138,8 +181,6 @@ def chat_mllava_stream(
     inputs.update(kwargs)
     thread = Thread(target=model.generate, kwargs=inputs)
     thread.start()
-    history.append({"role": conv.roles[0], "text": text})
-    history.append({"role": conv.roles[1], "text": ""})
     for _output in streamer:
         history[-1]["text"] += _output
         yield history[-1]["text"], history

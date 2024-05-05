@@ -29,13 +29,29 @@ def chat_mfuyu(
     conv.messages = []
     if history is not None:
         for message in history:
-            message["role"] = message["role"].upper()
             assert message["role"] in conv.roles
             conv.append_message(message["role"], message["text"])
+        if text:
+            assert conv.messages[-1][0] == conv.roles[1], "The last message in the history should be the assistant, if the given text is not empty"
+            conv.append_message(conv.roles[0], text)
+            conv.append_message(conv.roles[1], "")
+            history.append({"role": conv.roles[0], "text": text})
+            history.append({"role": conv.roles[1], "text": ""})
+        else:
+            if conv.messages[-1][0] == conv.roles[1]:
+                assert conv.messages[-1][1] == "", "No user message should be provided"
+            else:
+                assert conv.messages[-1][0] == conv.roles[0], "The last message in the history should be the user, if the given text is empty"
+                conv.append_message(conv.roles[0], "")
+                history.append({"role": conv.roles[0], "text": ""})
     else:
         history = []
-    conv.append_message(conv.roles[0], text)
-    conv.append_message(conv.roles[1], "")
+        history.append({"role": conv.roles[0], "text": text})
+        history.append({"role": conv.roles[1], "text": ""})
+        conv.append_message(conv.roles[0], text)
+        conv.append_message(conv.roles[1], "")
+    assert conv.messages[-1][0] == conv.roles[1] and conv.messages[-1][1] == "", "Format check"
+    assert history[-1]["role"] == conv.roles[1] and history[-1]["text"] == "", "Format check"
     
     prompt = conv.get_prompt()
     
@@ -52,7 +68,6 @@ def chat_mfuyu(
     generated_ids = output_ids[inputs["input_ids"].shape[-1]:]
     generated_text = processor.decode(generated_ids, skip_special_tokens=True)
 
-    history.append({"role": conv.roles[0], "text": text})
-    history.append({"role": conv.roles[1], "text": generated_text})
+    history[-1]["text"] = generated_text
     
     return generated_text, history
