@@ -106,6 +106,10 @@ The following intermediate checkpoints after pre-training the multi-modal projec
 - Thanks [Haoning Wu](https://teowu.github.io/) for providing codes of MVBench evaluation!
 
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=TIGER-AI-Lab/Mantis&type=Date)](https://star-history.com/#TIGER-AI-Lab/Mantis&Date)
+
 ## Citation
 ```bibtex
 @article{jiang2024mantis,
