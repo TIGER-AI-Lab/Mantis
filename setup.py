@@ -17,7 +17,7 @@ setup(
         "accelerate",
         "torchvision",
     ],
-    extra_requires={
+    extras_require={
         "train": [
             "fire",
             "easy-openai @ git+https://github.com/jdf-prog/easy-openai.git",
@@ -44,7 +44,7 @@ setup(
             "opencv-python",
             "pyarrow",
             "dask",
-            "datasets>=2.17.1",
+            "datasets",
         ],
         "eval": [
             "tqdm",
