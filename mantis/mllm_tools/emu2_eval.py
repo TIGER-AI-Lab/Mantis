@@ -11,9 +11,6 @@ from accelerate import infer_auto_device_map, load_checkpoint_and_dispatch
 from accelerate.big_modeling import dispatch_model, get_balanced_memory
 
 
-
-
-
 class Emu2():
     support_multi_image = True
     merged_image_files = []

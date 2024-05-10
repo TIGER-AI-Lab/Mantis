@@ -165,5 +165,15 @@ cython_debug/
 /mantis/benchmark/*.ipynb
 /mantis/benchmark/logs
 /mantis/benchmark/results*
-/test*
+/mantis/evaluation/results
+/mantis/evaluation/results_debug*
+/mantis/train/logs/
+/mantis/train/*.txt
 /mantis/train/wandb
+/test*
+/BLINK_Benchmark
+/data/*.zip
+/data/*/*
+!/data/*/*.py
+!/data/*/*.sh
+/mantis/mllm_tools/model_utils

@@ -12,6 +12,10 @@ bash eval_single_model.sh "openflamingo"
 bash eval_single_model.sh "cogvlm"
 bash eval_single_model.sh "gpt4v" # we only eval mantis eval for gpt-4v
 bash eval_single_model.sh "emu2"
+bash eval_single_model.sh "otter_image"
+bash eval_single_model.sh "otter_video"
+bash eval_single_model.sh "vila"
+bash eval_single_model.sh "videollava"
 
 # mantis
 bash eval_single_model.sh "mantis-8b-clip-llama3"

@@ -74,3 +74,59 @@ def MLLM_Models(model_name:str):
     else:
         raise NotImplementedError
 ```
+
+
+## Special requirements for evaluating some models
+Due to the bad compatibility of some models, we need to install some additional packages, or use a brand new environment to run the evaluation code. We list their installation requirements below:
+(note, assume you are in the same directory as this README.md, which is `mantis/mllm_tools/`)
+
+### [VILA](https://github.com/Efficient-Large-Model/VILA)
+```bash
+mkdir -p model_utils && cd model_utils
+git clone https://github.com/Efficient-Large-Model/VILA.git
+
+cd VILA
+conda create -n vila python=3.10
+conda activate vila
+
+pip install --upgrade pip  # enable PEP 660 support
+wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.4.2/flash_attn-2.4.2+cu118torch2.0cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+pip install flash_attn-2.4.2+cu118torch2.0cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+pip install -e .
+pip install -e ".[train]"
+
+site_pkg_path=$(python -c 'import site; print(site.getsitepackages()[0])')
+cp -rv ./llava/train/transformers_replace/* $site_pkg_path/transformers/
+cd ../../
+
+# then install mantis for eval, in the root directory of the repo
+cd ../../
+pip install -e ".[eval]"
+```
+
+After that, you need to run all other evaluation scripts in the `vila` environment.
+
+### [Otter](https://github.com/Luodian/Otter)
+```bash
+mkdir -p model_utils && cd model_utils && git clone https://github.com/Luodian/Otter.git
+```
+
+Then you can test running by
+```bash
+python otterimage_eval.py
+python ottervideo_eval.py
+```
+
+### [VideoLLaVA]
+```bash
+mkdir -p model_utils && cd model_utils && git clone https://github.com/PKU-YuanGroup/Video-LLaVA.git
+
+cd Video-LLaVA
+conda create -n videollava python=3.9
+pip install -e .
+pip install opencv-python decord pythonvideo
+
+# then install mantis for eval, in the root directory of the repo
+cd ../../
+pip install -e ".[eval]"
+```

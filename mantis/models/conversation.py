@@ -11,6 +11,7 @@ class SeparatorStyle(Enum):
     PLAIN = auto()
     LLAMA_2 = auto()
     LLAMA_3 = auto()
+    IDEFICS_2 = auto()
     MFuyu = auto()
 
 
@@ -119,6 +120,18 @@ class Conversation:
                     ret += message + seps[i % 2]
                 else:
                     ret += ""
+        if self.sep_style == SeparatorStyle.IDEFICS_2:
+            if self.system:
+                ret = self.system + self.sep
+            else:
+                ret = ""
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, _, _ = message
+                    ret += role + ":" + message + self.sep + "\n"
+                else:
+                    ret += role + ":"
         else:
             raise ValueError(f"Invalid style: {self.sep_style}")
 
@@ -423,6 +436,15 @@ conv_llama_3 = Conversation(
     sep="<|eot_id|>",
 )
 
+conv_idefics_2 = Conversation(
+    system="",
+    roles=("User", "Assistant"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.IDEFICS_2,
+    sep="<end_of_utterance>",
+)
+
 default_conversation = conv_mfuyu_v1
 conv_templates = {
     "default": conv_vicuna_v0,
@@ -441,6 +463,7 @@ conv_templates = {
     "llama_3": conv_llama_3,
     "mllava_v1": conv_mllava_v1,
     "mllava_v1_mmtag": conv_mllava_v1_mmtag,
+    "idefics_2": conv_idefics_2,
 
     "mpt": conv_mpt,
 }

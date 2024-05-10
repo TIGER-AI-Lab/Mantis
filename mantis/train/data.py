@@ -17,7 +17,7 @@ from mantis.train.train_utils import (
     load_json_data,
 )
 from mantis.train.conversation import SeparatorStyle
-from typing import List
+from typing import List, Dict
 IGNORE_INDEX = -100
 DEFAULT_IMAGE_TOKEN = "<image>"
 
@@ -257,7 +257,9 @@ class ChatDataset(torch.utils.data.Dataset):
                 sep2_idxs.append(len(input_ids) - 1)
             for j in range(len(sep_idxs)):
                 target[sep_idxs[j]+1:sep2_idxs[j] + 1] = input_ids[sep_idxs[j]+1:sep2_idxs[j] + 1]
-        elif self.conv.sep_style == SeparatorStyle.SINGLE or self.conv.sep_style == SeparatorStyle.LLAMA_3:
+        elif self.conv.sep_style == SeparatorStyle.SINGLE or \
+            self.conv.sep_style == SeparatorStyle.LLAMA_3 or \
+            self.conv.sep_style == SeparatorStyle.IDEFICS_2:
             sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep)
             sep_idxs = torch.nonzero((input_ids == sep_id), as_tuple=True)[0].tolist()
             for i in range(len(sep_idxs)):
@@ -268,7 +270,7 @@ class ChatDataset(torch.utils.data.Dataset):
                 else:
                     target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
         elif self.conv.sep_style == SeparatorStyle.PLAIN:
-            source = conv
+            source = conv_str
             tokenized_len = len(self.processor(source[0][1], sub_images, return_tensors="pt")["input_ids"][0])
             target[tokenized_len:] = input_ids[tokenized_len:]
         else:
@@ -276,6 +278,13 @@ class ChatDataset(torch.utils.data.Dataset):
         # replace IGNORE_INDEX in target_ids with 0 and decode it, then print for debug
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split)
+            
+        # # for debug, print the targets
+        # _target = target.clone().detach()
+        # _target[_target == IGNORE_INDEX] = 0
+        # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
+        # print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        
 
         return encoding
 
@@ -336,8 +345,21 @@ class Collator():
         self.processor = processor
         self.max_length = max_length
     
+    def _right_pad_inputs_with_attention_mask(self, model_inputs: List[Dict]):
+        results = {}
+        assert len(model_inputs) == 1, "This method only supports a single input, but get {} inputs".format(len(model_inputs))
+        for k in model_inputs[0].keys():
+            if k == "pixel_values" and isinstance(model_inputs[0][k], list):
+                results[k] = [inputs[k] if inputs[k] is not None else None for inputs in model_inputs]
+            else:
+                results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
+        return results
+    
     def __call__(self, batch):
-        batch_encoding = self.processor._right_pad_inputs_with_attention_mask(model_inputs=batch)
+        if not hasattr(self.processor, "_right_pad_inputs_with_attention_mask"):
+            batch_encoding = self._right_pad_inputs_with_attention_mask(model_inputs=batch)
+        else:
+            batch_encoding = self.processor._right_pad_inputs_with_attention_mask(model_inputs=batch)
         return batch_encoding
 
 def load_data_from_config(data_args, processor):

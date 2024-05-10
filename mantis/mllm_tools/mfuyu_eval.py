@@ -1,13 +1,9 @@
 """need latest transformers from source
 pip install transformers>=4.35.2
 """
-import requests
 import torch
-from transformers import FuyuProcessor, FuyuForCausalLM, AutoTokenizer
 from mantis.models.mfuyu import MFuyuForCausalLM, MFuyuProcessor, chat_mfuyu
-from PIL import Image
 from typing import List
-from io import BytesIO
 from mantis.mllm_tools.mllm_utils import load_images 
 
 class MFuyu():

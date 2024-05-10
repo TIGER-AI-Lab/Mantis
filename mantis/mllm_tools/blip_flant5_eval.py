@@ -8,7 +8,10 @@ from typing import List
 import torch
 from typing import List
 from io import BytesIO
-from mantis.mllm_tools.mllm_utils import merge_images
+try:
+    from mllm_utils import merge_images
+except ImportError:
+    from .mllm_utils import merge_images
 
 class BLIP_FLANT5():
     support_multi_image = False

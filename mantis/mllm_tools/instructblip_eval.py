@@ -8,7 +8,10 @@ from typing import List
 import torch
 from typing import List
 from io import BytesIO
-from mantis.mllm_tools.mllm_utils import merge_images
+try:
+    from mllm_utils import merge_images
+except ImportError:
+    from .mllm_utils import merge_images
 
 def load_image(image_file):
     if image_file.startswith("http") or image_file.startswith("https"):

@@ -9,7 +9,7 @@ setup(
     packages=find_packages(),
     url='https://github.com/jdf-prog/many-image-qa',
     install_requires=[
-        "transformers>=4.39",
+        "transformers",
         "sentencepiece",
         "torch",
         "Pillow",
@@ -51,6 +51,8 @@ setup(
             "numpy",
             "easy-openai @ git+https://github.com/jdf-prog/easy-openai.git",
             "prettytable",
+            "fire",
+            "datasets"
         ]
     }
 )

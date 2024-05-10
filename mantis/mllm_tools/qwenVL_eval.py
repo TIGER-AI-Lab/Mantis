@@ -1,14 +1,10 @@
 """pip install transformers>=4.35.2 transformers_stream_generator torchvision tiktoken chardet matplotlib
 """ 
-import requests
 import tempfile
 import os
-import regex as re
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.generation import GenerationConfig
 from PIL import Image
 from typing import List
-from io import BytesIO
 class QwenVL():
     support_multi_image = False
     merged_image_files = []

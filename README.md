@@ -34,7 +34,7 @@
 
 ## Installation
 ```bash
-conda create -n mantis python=3.9
+conda create -n mantis python=3.10
 conda activate mantis
 pip install -e .
 # install flash-attention
@@ -53,6 +53,8 @@ Install the requirements with the following command:
 pip install -e[train,eval]
 cd mantis/train
 ```
+
+**Our training scripts follows the coding format and model structure of Hugging face. Different from LLaVA Github repo, you can directly load our models from Hugging Face model hub.**
 
 We support training of Mantis based on the Fuyu architecture and the LLaVA architecture. You can train the model with the following command:
 

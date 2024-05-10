@@ -1,13 +1,9 @@
 """pip install transformers>=4.35.2
 """
 import os
-import tempfile
-import requests
-from PIL import Image
 import torch
-from io import BytesIO
 from mantis.mllm_tools.mllm_utils import merge_images, load_images
-from mantis.models.mllava import MLlavaProcessor, LlavaForConditionalGeneration, chat_mllava, MLlavaForConditionalGeneration
+from mantis.models.mllava import MLlavaProcessor, LlavaForConditionalGeneration, chat_mllava
 from typing import List
 from transformers.utils import is_flash_attn_2_available
 
