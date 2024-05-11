@@ -16,6 +16,7 @@ setup(
         "torch",
         "accelerate",
         "torchvision",
+        "datasets==2.18.0"
     ],
     extras_require={
         "train": [
@@ -31,7 +32,6 @@ setup(
             "deepspeed",
             "peft",
             "bitsandbytes",
-            "flash-attn",
             "wandb",
             "ninja",
             "scipy",
@@ -45,6 +45,7 @@ setup(
             "pyarrow",
             "dask",
             "datasets",
+            "flash-attn",
         ],
         "eval": [
             "tqdm",

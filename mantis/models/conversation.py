@@ -12,7 +12,7 @@ class SeparatorStyle(Enum):
     LLAMA_2 = auto()
     LLAMA_3 = auto()
     IDEFICS_2 = auto()
-    MFuyu = auto()
+    MFUYU = auto()
 
 
 @dataclasses.dataclass
@@ -100,7 +100,7 @@ class Conversation:
                     ret += f"<|start_header_id|>{role}<|end_header_id|>\n\n" + message + self.sep
                 else:
                     ret += f"<|start_header_id|>{role}<|end_header_id|>\n\n"
-        elif self.sep_style == SeparatorStyle.MFuyu:
+        elif self.sep_style == SeparatorStyle.MFUYU:
             seps = [self.sep, self.sep2]
             ret = self.system + "\n"
             for i, (role, message) in enumerate(messages):
@@ -120,7 +120,7 @@ class Conversation:
                     ret += message + seps[i % 2]
                 else:
                     ret += ""
-        if self.sep_style == SeparatorStyle.IDEFICS_2:
+        elif self.sep_style == SeparatorStyle.IDEFICS_2:
             if self.system:
                 ret = self.system + self.sep
             else:
@@ -399,7 +399,7 @@ conv_mfuyu_v1 = Conversation(
     version="v1",
     messages=(),
     offset=0,
-    sep_style=SeparatorStyle.MFuyu,
+    sep_style=SeparatorStyle.MFUYU,
     sep="<0x04>", # begin of answer token
     sep2="|ENDOFTEXT|",
 ) # copied from conv_vicuna_v1

@@ -12,7 +12,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
     DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
-    # DATA_CONFIG_FILE="./data_configs/train_config.yaml"
+    # DATA_CONFIG_FILE="./data_configs/train_config.yaml"  # change to this for offical training
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
@@ -159,7 +159,7 @@ accelerate launch --config_file=$config_file \
     --eval_steps 500 \
     --save_total_limit 1 \
     --learning_rate 1e-5 \
-    --weight_decay 0.0 \
+    --weight_decay 0.01 \
     --warmup_ratio 0.03 \
     --lr_scheduler_type cosine \
     --logging_steps 1 \

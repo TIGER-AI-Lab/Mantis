@@ -1,4 +1,4 @@
-from transformers import Trainer, TrainingArguments
+from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
 from transformers.hf_argparser import HfArgumentParser
 from dataclasses import dataclass, field
 import torch
@@ -7,15 +7,15 @@ import wandb
 import regex as re
 from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3, find_all_linear_names
 from conversation import conv_idefics_2 as default_conv, conv_templates
-from mantis.train.data import load_data, load_data_from_config
+from mantis.train.data import load_data, load_data_from_config, set_ignore_index
 from pathlib import Path
 from typing import Optional
 from pathlib import Path
 
 os.environ["WANDB_RESUME"] = "allow"
 os.environ["WANDB_RUN_ID"] = wandb.util.generate_id()
-IGNORE_INDEX = -100
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+torch.set_printoptions(profile="full")
 
 # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
 # in PyTorch 1.12 and later.
@@ -67,17 +67,21 @@ class ModelArguments:
         metadata={"help": "Whether to use LoRA", "default": False, "required": False},
         default=False,
     )
+    qlora_enabled: Optional[bool] = field(
+        metadata={"help": "Whether to use QLoRA", "default": False, "required": False},
+        default=False,
+    )
     lora_r: Optional[int] = field(
-        metadata={"help": "LoRA r", "default": 128, "required": False},
-        default=128,
+        metadata={"help": "LoRA r", "default": 8, "required": False},
+        default=8,
     )
     lora_alpha: Optional[float] = field(
-        metadata={"help": "LoRA alpha", "default": 256, "required": False},
-        default=256,
+        metadata={"help": "LoRA alpha", "default": 8, "required": False},
+        default=8,
     )
     lora_dropout: Optional[float] = field(
-        metadata={"help": "LoRA dropout", "default": 0.05, "required": False},
-        default=0.05,
+        metadata={"help": "LoRA dropout", "default": 0.1, "required": False},
+        default=0.1,
     )
     lora_bias: Optional[str] = field(
         metadata={"help": "LoRA bias", "default": 'none', "required": False},
@@ -122,30 +126,41 @@ def load_model(model_args, training_args):
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
     processor = Idefics2Processor.from_pretrained(model_args.model_name_or_path)
-    model = Idefics2ForConditionalGeneration.from_pretrained(
-        model_args.model_name_or_path, torch_dtype=torch_dtype,
-        attn_implementation = model_args.attn_implementation
-    )
-    print("Successfully loaded model from:", model_args.model_name_or_path)
+    # processor.image_processor.do_image_splitting = False
     
     if model_args.lora_enabled:
-        from peft import LoraConfig, get_peft_model
+        from peft import LoraConfig
         lora_config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
-            target_modules=find_all_linear_names(model),
+            target_modules='.*(text_model|modality_projection|perceiver_resampler).*(down_proj|gate_proj|up_proj|k_proj|q_proj|v_proj|o_proj).*$',
             lora_dropout=model_args.lora_dropout,
-            bias=model_args.lora_bias,
-            task_type="CAUSAL_LM",
+            use_dora=False if model_args.qlora_enabled else True,
+            init_lora_weights="gaussian"
         )
-        if training_args.bf16:
-            model.to(torch.bfloat16)
-        if training_args.fp16:
-            model.to(torch.float16)
-        print("Adding LoRA adapters...")
-        model.enable_input_require_grads()
-        model = get_peft_model(model, lora_config)
-        print("Successfully added LoRA adapters")
+        if model_args.qlora_enabled:
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16
+            )
+        model = Idefics2ForConditionalGeneration.from_pretrained(
+            model_args.model_name_or_path,
+            torch_dtype=torch.float16,
+            quantization_config=bnb_config if model_args.qlora_enabled else None,
+        )
+        model.add_adapter(lora_config)
+        model.enable_adapters()
+        print("Successfully loaded lora model from:", model_args.model_name_or_path)
+    else:
+        model = Idefics2ForConditionalGeneration.from_pretrained(
+            model_args.model_name_or_path, torch_dtype=torch_dtype,
+            attn_implementation = model_args.attn_implementation
+        )
+        print("Successfully loaded model from:", model_args.model_name_or_path)
+    
+    # idefics2's ignore index is not -100.
+    set_ignore_index(model.image_token_id)
         
     return model, processor
     

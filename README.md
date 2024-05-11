@@ -38,6 +38,7 @@ conda create -n mantis python=3.10
 conda activate mantis
 pip install -e .
 # install flash-attention
+pip install flash-attn --no-build-isolation
 ```
 ## Inference
 

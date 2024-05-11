@@ -21,6 +21,10 @@ from typing import List, Dict
 IGNORE_INDEX = -100
 DEFAULT_IMAGE_TOKEN = "<image>"
 
+def set_ignore_index(new_ignore_index=-100):
+    global IGNORE_INDEX
+    IGNORE_INDEX = new_ignore_index
+
 def read_local_cached_dataset(data_path, name, split, offline_sha):
     assert offline_sha is not None, "offline_sha must be provided when HF_DATASETS_OFFLINE is True"
     repo, repo_dataset_name = data_path.split("/")
@@ -236,14 +240,14 @@ class ChatDataset(torch.utils.data.Dataset):
             self.conv.messages = conv_messages
             conv_str = self.conv.get_prompt()
             encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
-       
+
         if "image_patches" in encoding:
             encoding.pop("attention_mask")
             encoding['image_patches'] = encoding['image_patches'][0] # todo
         encoding["labels"] = torch.full_like(encoding["input_ids"], IGNORE_INDEX, dtype=encoding["input_ids"].dtype)
         input_ids = encoding["input_ids"][0]
         target = encoding["labels"][0]
-        if self.conv.sep_style == SeparatorStyle.MFuyu:
+        if self.conv.sep_style == SeparatorStyle.MFUYU:
             sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep)
             sep2_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep2)
             
@@ -258,12 +262,25 @@ class ChatDataset(torch.utils.data.Dataset):
             for j in range(len(sep_idxs)):
                 target[sep_idxs[j]+1:sep2_idxs[j] + 1] = input_ids[sep_idxs[j]+1:sep2_idxs[j] + 1]
         elif self.conv.sep_style == SeparatorStyle.SINGLE or \
-            self.conv.sep_style == SeparatorStyle.LLAMA_3 or \
-            self.conv.sep_style == SeparatorStyle.IDEFICS_2:
+            self.conv.sep_style == SeparatorStyle.LLAMA_3:
             sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep)
             sep_idxs = torch.nonzero((input_ids == sep_id), as_tuple=True)[0].tolist()
             for i in range(len(sep_idxs)):
                 if i % 2 == 0:
+                    continue
+                if i == len(sep_idxs) - 1:
+                    target[sep_idxs[i]+1:] = input_ids[sep_idxs[i]+1:]
+                else:
+                    target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
+        elif self.conv.sep_style == SeparatorStyle.IDEFICS_2:
+            if self.conv.system:
+                skip_offset = 0
+            else:
+                skip_offset = 1
+            sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep)
+            sep_idxs = torch.nonzero((input_ids == sep_id), as_tuple=True)[0].tolist()
+            for i in range(len(sep_idxs)):
+                if i % 2 == skip_offset:
                     continue
                 if i == len(sep_idxs) - 1:
                     target[sep_idxs[i]+1:] = input_ids[sep_idxs[i]+1:]
@@ -278,8 +295,9 @@ class ChatDataset(torch.utils.data.Dataset):
         # replace IGNORE_INDEX in target_ids with 0 and decode it, then print for debug
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split)
-            
-        # # for debug, print the targets
+        
+        # # for debug, print the targets to make sure the right tokens are learned
+        # # need to print to make sure that the masked tokens are correct.
         # _target = target.clone().detach()
         # _target[_target == IGNORE_INDEX] = 0
         # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
