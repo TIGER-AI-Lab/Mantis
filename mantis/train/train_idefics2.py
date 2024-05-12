@@ -1,11 +1,15 @@
-from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
-from transformers.hf_argparser import HfArgumentParser
+
+import dataclasses
 from dataclasses import dataclass, field
 import torch
 import os
 import wandb
 import regex as re
-from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3, find_all_linear_names
+from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
+from transformers.hf_argparser import HfArgumentParser
+from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
+from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
+from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3
 from conversation import conv_idefics_2 as default_conv, conv_templates
 from mantis.train.data import load_data, load_data_from_config, set_ignore_index
 from pathlib import Path
@@ -15,7 +19,6 @@ from pathlib import Path
 os.environ["WANDB_RESUME"] = "allow"
 os.environ["WANDB_RUN_ID"] = wandb.util.generate_id()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-torch.set_printoptions(profile="full")
 
 # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
 # in PyTorch 1.12 and later.
@@ -125,11 +128,29 @@ def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
-    processor = Idefics2Processor.from_pretrained(model_args.model_name_or_path)
-    # processor.image_processor.do_image_splitting = False
+    processor = Idefics2Processor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False) # seems high vmem usage when image splitting is enabled
     
-    if model_args.lora_enabled:
-        from peft import LoraConfig
+    if model_args.qlora_enabled:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_quant_storage=torch_dtype,
+            bnb_4bit_use_double_quant=True,
+        )
+    else:
+        bnb_config = None
+    model = Idefics2ForConditionalGeneration.from_pretrained(
+        model_args.model_name_or_path,
+        torch_dtype=torch_dtype,
+        attn_implementation=model_args.attn_implementation,
+        quantization_config=bnb_config if model_args.qlora_enabled else None,
+    )
+    if bnb_config:
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
+    print("Successfully loaded model from:", model_args.model_name_or_path)
+    
+    if model_args.lora_enabled or model_args.qlora_enabled:
         lora_config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
@@ -138,27 +159,8 @@ def load_model(model_args, training_args):
             use_dora=False if model_args.qlora_enabled else True,
             init_lora_weights="gaussian"
         )
-        if model_args.qlora_enabled:
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16
-            )
-        model = Idefics2ForConditionalGeneration.from_pretrained(
-            model_args.model_name_or_path,
-            torch_dtype=torch.float16,
-            quantization_config=bnb_config if model_args.qlora_enabled else None,
-        )
-        model.add_adapter(lora_config)
-        model.enable_adapters()
-        print("Successfully loaded lora model from:", model_args.model_name_or_path)
-    else:
-        model = Idefics2ForConditionalGeneration.from_pretrained(
-            model_args.model_name_or_path, torch_dtype=torch_dtype,
-            attn_implementation = model_args.attn_implementation
-        )
-        print("Successfully loaded model from:", model_args.model_name_or_path)
-    
+        model = get_peft_model(model, lora_config)
+        
     # idefics2's ignore index is not -100.
     set_ignore_index(model.image_token_id)
         
