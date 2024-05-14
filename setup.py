@@ -44,7 +44,7 @@ setup(
             "opencv-python",
             "pyarrow",
             "dask",
-            "datasets",
+            "datasets==2.18.0",
         ],
         "eval": [
             "tqdm",
@@ -52,7 +52,7 @@ setup(
             "easy-openai @ git+https://github.com/jdf-prog/easy-openai.git",
             "prettytable",
             "fire",
-            "datasets"
+            "datasets==2.18.0"
         ]
     }
 )

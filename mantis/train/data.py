@@ -209,6 +209,8 @@ class ChatDataset(torch.utils.data.Dataset):
                         assert all([image.exists() for image in image_file]), f"{image_file} does not exist"
                     elif isinstance(image_file, Path):
                         assert image_file.exists(), f"{image_file} does not exist"
+                else:
+                    image_file = None
                 conversations.append(conv_messages)
                 all_images.append(image_file)
             except Exception as e:
@@ -226,8 +228,9 @@ class ChatDataset(torch.utils.data.Dataset):
         sub_images = load_images(sub_images)
         # check the number of images
         image_token_count = sum([message[1].count(DEFAULT_IMAGE_TOKEN) for message in conv_messages])
-        if image_token_count < len(sub_images):
-            conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(sub_images) - image_token_count) + conv_messages[0][1]
+        if isinstance(sub_images, list):
+            if image_token_count < len(sub_images):
+                conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(sub_images) - image_token_count) + conv_messages[0][1]
         if self.conv.sep_style == SeparatorStyle.PLAIN:
             source = conv_messages
             assert len(source) == 2
@@ -295,6 +298,8 @@ class ChatDataset(torch.utils.data.Dataset):
         # replace IGNORE_INDEX in target_ids with 0 and decode it, then print for debug
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split)
+        
+        # print(self.data_path, self.name, self.split)
         
         # # for debug, print the targets to make sure the right tokens are learned
         # # need to print to make sure that the masked tokens are correct.
@@ -378,6 +383,16 @@ class Collator():
             batch_encoding = self._right_pad_inputs_with_attention_mask(model_inputs=batch)
         else:
             batch_encoding = self.processor._right_pad_inputs_with_attention_mask(model_inputs=batch)
+            
+        # # print shapes in the batch
+        # for k, v in batch_encoding.items():
+        #     if isinstance(v, torch.Tensor):
+        #         print(k, v.shape)
+        #     elif isinstance(v, list):
+        #         print(k, len(v), [x.shape for x in v])
+        #     else:
+        #         print(k, v)
+        
         return batch_encoding
 
 def load_data_from_config(data_args, processor):
