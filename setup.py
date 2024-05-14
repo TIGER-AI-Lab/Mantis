@@ -45,7 +45,6 @@ setup(
             "pyarrow",
             "dask",
             "datasets",
-            "flash-attn",
         ],
         "eval": [
             "tqdm",
