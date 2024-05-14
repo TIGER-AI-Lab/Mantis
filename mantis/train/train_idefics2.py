@@ -127,7 +127,8 @@ class ModelArguments:
 def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
-    from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
+    from transformers import Idefics2Processor, AutoConfig
+    from mantis.models.idefics2 import Idefics2ForConditionalGeneration
     processor = Idefics2Processor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False) # seems high vmem usage when image splitting is enabled
     
     if model_args.qlora_enabled:

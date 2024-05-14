@@ -11,8 +11,8 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
-    DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
-    # DATA_CONFIG_FILE="./data_configs/train_config.yaml"  # change to this for offical training
+    # DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
+    DATA_CONFIG_FILE="./data_configs/train_config.yaml"  # change to this for offical training
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
@@ -39,7 +39,7 @@ if [ -z $HF_TOKEN ]; then
     exit 1
 fi
 
-hf_hub_user_name="" # set this will push the model to your hub after training
+hf_hub_user_name="MFuyu" # set this will push the model to your hub after training
 max_seq_len=8192
 lora_enabled=true
 qlora_enabled=true
@@ -145,8 +145,7 @@ echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_
 accelerate launch --config_file=$config_file \
     --machine_rank $RANK --main_process_ip $MASTER_ADDR --main_process_port $MASTER_PORT \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
-    train_idefics2.py \
-    --model_name_or_path $model_name_or_path \
+    train_idefics2.py --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
     --data_format $DATA_FORMAT \
     --run_name $RUN_NAME \
@@ -164,10 +163,10 @@ accelerate launch --config_file=$config_file \
     --save_steps 500 \
     --eval_steps 500 \
     --save_total_limit 1 \
-    --learning_rate 1e-5 \
+    --learning_rate 5e-6 \
     --weight_decay 0.01 \
     --warmup_ratio 0.03 \
-    --lr_scheduler_type cosine \
+    --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
     --gradient_checkpointing True \
