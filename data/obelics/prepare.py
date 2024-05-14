@@ -68,10 +68,10 @@ def process_example(example, to_save_image_dir, output_file, index):
 
 def main(
     seed=42,
-    down_sampling_size=200_000,
+    down_sampling_size=300_000,
     output_file="./data/train.jsonl",
     to_save_image_dir="./data/images/",
-    max_workers=16,
+    max_workers=8,
 ):
     
     dataset = datasets.load_dataset("HuggingFaceM4/OBELICS", split="train", streaming=True)
