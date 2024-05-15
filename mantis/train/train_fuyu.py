@@ -11,7 +11,7 @@ from train_utils import load_json_data, load_image, load_images, get_peft_state_
 from conversation import conv_mfuyu_v1
 from mantis.models.mfuyu.processor import MFuyuProcessor
 from mantis.models.mfuyu.modeling_mfuyu import MFuyuForCausalLM
-from mantis.train.data import load_data, load_data_from_config
+from mantis.train.data import load_data, load_data_from_config, set_default_image_token, set_default_image_token_id, set_ignore_index
 from pathlib import Path
 from tqdm import tqdm
 from typing import Optional, Union, List
@@ -143,6 +143,12 @@ def load_model(model_args, training_args):
         print("Successfully added LoRA adapters")
         
     print("Successfully loaded model from:", model_args.model_name_or_path)
+    
+    image_placeholder_id = processor.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
+    image_newline_id = processor.tokenizer("|NEWLINE|", add_special_tokens=False)["input_ids"][1]
+    set_default_image_token_id(image_placeholder_id)
+    set_default_image_token("<image>")
+    set_ignore_index(IGNORE_INDEX)
     return model, processor
 
 def main(

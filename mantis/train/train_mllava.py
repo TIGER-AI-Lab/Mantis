@@ -7,7 +7,7 @@ import wandb
 import regex as re
 from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3, find_all_linear_names
 from conversation import conv_mllava_v1 as default_conv, conv_templates
-from mantis.train.data import load_data, load_data_from_config
+from mantis.train.data import load_data, load_data_from_config, set_default_image_token, set_default_image_token_id, set_ignore_index
 from pathlib import Path
 from typing import Optional
 from pathlib import Path
@@ -238,6 +238,10 @@ def load_model(model_args, training_args):
         model.enable_input_require_grads()
         model = get_peft_model(model, lora_config)
         print("Successfully added LoRA adapters")
+        
+    set_default_image_token("<image>")
+    set_default_image_token_id(processor.tokenizer.convert_tokens_to_ids("<image>"))
+    set_ignore_index(IGNORE_INDEX)
     return model, processor
 
 def main(

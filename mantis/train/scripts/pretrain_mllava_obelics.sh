@@ -24,7 +24,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Please set offline DATA_CONFIG_FILE"
     exit 1
 else
-    DATA_CONFIG_FILE="./data_configs/pretrain_mllava_obelics.yaml"
+    DATA_CONFIG_FILE="./data_configs/pretrain_obelics.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"

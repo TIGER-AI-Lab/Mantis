@@ -20,10 +20,19 @@ from mantis.train.conversation import SeparatorStyle
 from typing import List, Dict
 IGNORE_INDEX = -100
 DEFAULT_IMAGE_TOKEN = "<image>"
+DEFAULT_IMAGE_TOKEN_ID = None # should be set when loading the processor
 
 def set_ignore_index(new_ignore_index=-100):
     global IGNORE_INDEX
     IGNORE_INDEX = new_ignore_index
+
+def set_default_image_token(new_default_image_token="<image>"):
+    global DEFAULT_IMAGE_TOKEN
+    DEFAULT_IMAGE_TOKEN = new_default_image_token
+
+def set_default_image_token_id(new_default_image_token_id=None):
+    global DEFAULT_IMAGE_TOKEN_ID
+    DEFAULT_IMAGE_TOKEN_ID = new_default_image_token_id
 
 def read_local_cached_dataset(data_path, name, split, offline_sha):
     assert offline_sha is not None, "offline_sha must be provided when HF_DATASETS_OFFLINE is True"
@@ -226,12 +235,9 @@ class ChatDataset(torch.utils.data.Dataset):
         conv_messages = self.conversations[idx]
         sub_images = self.all_images[idx]
         sub_images = load_images(sub_images)
-        # check the number of images
-        image_token_count = sum([message[1].count(DEFAULT_IMAGE_TOKEN) for message in conv_messages])
-        if isinstance(sub_images, list):
-            if image_token_count < len(sub_images):
-                conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(sub_images) - image_token_count) + conv_messages[0][1]
+        
         if self.conv.sep_style == SeparatorStyle.PLAIN:
+            # NOTE: this is for the pretraining, where we only use the pure text or interleaved text and images
             source = conv_messages
             assert len(source) == 2, "we only use the text in the second message for pretraining."
             # assert DEFAULT_IMAGE_TOKEN in source[0][1]
@@ -245,6 +251,12 @@ class ChatDataset(torch.utils.data.Dataset):
             conv_str = text + self.conv.sep
             encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
         else:
+            # NOTE: this is for the conversation style finetuning
+            # check the number of images
+            image_token_count = sum([message[1].count(DEFAULT_IMAGE_TOKEN) for message in conv_messages])
+            if isinstance(sub_images, list):
+                if image_token_count < len(sub_images):
+                    conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(sub_images) - image_token_count) + conv_messages[0][1]
             self.conv.messages = conv_messages
             conv_str = self.conv.get_prompt()
             encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
@@ -295,9 +307,12 @@ class ChatDataset(torch.utils.data.Dataset):
                 else:
                     target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
         elif self.conv.sep_style == SeparatorStyle.PLAIN:
-            source = conv_str
-            tokenized_len = len(self.processor(source[0][1], sub_images, return_tensors="pt")["input_ids"][0])
-            target[tokenized_len:] = input_ids[tokenized_len:]
+            assert DEFAULT_IMAGE_TOKEN_ID is not None, "Please set the default image token id by calling set_default_image_token_id, this is required to masking the image tokens for pretraining."
+            # mask the image tokens in the text
+            target[input_ids != DEFAULT_IMAGE_TOKEN_ID] = input_ids[input_ids != DEFAULT_IMAGE_TOKEN_ID]
+            # source = conv_str
+            # tokenized_len = len(self.processor(source[0][1], sub_images, return_tensors="pt")["input_ids"][0])
+            # target[tokenized_len:] = input_ids[tokenized_len:]
         else:
             raise ValueError(f"Unknown separator style {self.conv.sep_style}")
         # replace IGNORE_INDEX in target_ids with 0 and decode it, then print for debug
