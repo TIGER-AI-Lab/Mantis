@@ -132,8 +132,14 @@ def main(
         image_dir = Path(image_dir)
     else:
         print("WARNING: image_dir is None, will not upload images")
-    with open(dataset_file) as f:
-        dataset = json.load(f)
+    
+    # load json and jsonl respectively
+    if dataset_file.suffix == ".json":
+        with open(dataset_file) as f:
+            dataset = json.load(f)
+    elif dataset_file.suffix == ".jsonl":
+        with open(dataset_file) as f:
+            dataset = [json.loads(line) for line in f]
     if max_size and max_size > 0 and len(dataset) > max_size:
         dataset = dataset[:max_size]
         print(f"Truncated dataset to {max_size}")

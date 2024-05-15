@@ -80,8 +80,4 @@ test_mode="parquet"
 
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name imagecode --dataset_file imagecode/data/train.json --image_dir imagecode/data
 
-# python upload_test_dataset_to_hf.py --repo_id $test_repo_id --image_upload_mode $test_mode --split test --dataset_name q-bench2-a1-single-dev --dataset_file qbench/data/q-bench2-a1-single-dev.json --image_dir qbench/data/all_single_images
-# python upload_test_dataset_to_hf.py --repo_id $test_repo_id --image_upload_mode $test_mode --split test --dataset_name q-bench2-a1-compare-dev --dataset_file qbench/data/q-bench2-a1-compare-dev.json --image_dir qbench/data/llvisionqa_compare_dev
-# python upload_test_dataset_to_hf.py --repo_id $test_repo_id --image_upload_mode $test_mode --split test --dataset_name q-bench2-a1-single-test --dataset_file qbench/data/q-bench2-a1-single-test.json --image_dir qbench/data/all_single_images
-# python upload_test_dataset_to_hf.py --repo_id $test_repo_id --image_upload_mode $test_mode --split test --dataset_name q-bench2-a1-compare-test --dataset_file qbench/data/q-bench2-a1-compare-test.json --image_dir qbench/data/llvisionqa_compare_test
-
+# python upload_conv_dataset_to_hf.py --repo_id "TIGER-Lab/OBELICS-min" --image_upload_mode $train_mode --split train --dataset_name obelics_111k --dataset_file obelics/data/train.jsonl --image_dir obelics/data/images
