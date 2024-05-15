@@ -24,15 +24,15 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Please set offline DATA_CONFIG_FILE"
     exit 1
 else
-    DATA_CONFIG_FILE="./data_configs/pretrain_mllava.yaml"
+    DATA_CONFIG_FILE="./data_configs/pretrain_mllava_obelics.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     echo "Please set offline model path"
     exit 1
 else
-    vision_backbone="openai/clip-vit-large-patch14-336"
-    # vision_backbone="google/siglip-so400m-patch14-384"
+    # vision_backbone="openai/clip-vit-large-patch14-336"
+    vision_backbone="google/siglip-so400m-patch14-384"
     llm_backbone="meta-llama/Meta-Llama-3-8B-Instruct"
     # llm_backbone="lmsys/vicuna-7b-v1.5"
     

@@ -233,11 +233,16 @@ class ChatDataset(torch.utils.data.Dataset):
                 conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(sub_images) - image_token_count) + conv_messages[0][1]
         if self.conv.sep_style == SeparatorStyle.PLAIN:
             source = conv_messages
-            assert len(source) == 2
-            assert DEFAULT_IMAGE_TOKEN in source[0][1]
-            assert len(sub_images) == 1 if isinstance(sub_images, list) else isinstance(sub_images, PIL.Image.Image)
-            source[0][1]= DEFAULT_IMAGE_TOKEN
-            conv_str = source[0][1]+ source[1][1]+ self.conv.sep
+            assert len(source) == 2, "we only use the text in the second message for pretraining."
+            # assert DEFAULT_IMAGE_TOKEN in source[0][1]
+            # assert len(sub_images) == 1 if isinstance(sub_images, list) else isinstance(sub_images, PIL.Image.Image)
+            if isinstance(sub_images, PIL.Image.Image):
+                sub_images = [sub_images]
+            text = source[1][1]
+            image_token_count = source[1][1].count(DEFAULT_IMAGE_TOKEN)
+            if image_token_count < len(sub_images):
+                text = f"{DEFAULT_IMAGE_TOKEN} " * (len(sub_images) - image_token_count) + text
+            conv_str = text + self.conv.sep
             encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
         else:
             self.conv.messages = conv_messages
