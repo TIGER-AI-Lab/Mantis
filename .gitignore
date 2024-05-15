@@ -177,3 +177,5 @@ cython_debug/
 !/data/*/*.py
 !/data/*/*.sh
 /mantis/mllm_tools/model_utils
+/.vscode
+/mantis/benchmark/cache_dir
