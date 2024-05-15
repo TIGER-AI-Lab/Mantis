@@ -105,7 +105,7 @@ def create_hf_dataset(dataset:List[dict], split, revision="main"):
         }]
         hf_dataset = hf_dataset.cast(new_features)
     return hf_dataset
-
+            
 def main(
     dataset_file: str,
     dataset_name: str,
@@ -115,7 +115,8 @@ def main(
     num_parts: int=1,
     image_dir: str=None,
     upload_zip_images: bool=True,
-    max_size=None
+    max_size=None,
+    max_zip_size="20G",
 ):
     """
     if image_upload_mode is "zip", then the images will be zipped and uploaded to hf under ./{dataset_name}/{split}_images.zip through upload_file
@@ -132,6 +133,8 @@ def main(
         image_dir = Path(image_dir)
     else:
         print("WARNING: image_dir is None, will not upload images")
+        
+    max_zip_size = int(max_zip_size[:-1]) * (1024 ** 3) # only support G
     
     # load json and jsonl respectively
     if dataset_file.suffix == ".json":
@@ -230,28 +233,69 @@ def main(
     
     # zip image files and upload to hf under ./{dataset_name}/train_images.zip
     all_split_image_paths = list(set(all_split_image_paths))
+    
+    image_sizes = [os.path.getsize(image_file) for image_file in all_split_image_paths]
+    # split the images into multiple parts if the total size is too large
+    image_parts = [[]] # [[image_path1, image_path2, ...], [image_path3, image_path4, ...], ...]
+    image_part_zip_names = []
+    cur_part_size = 0
+    for image_path, image_size in tqdm(zip(all_split_image_paths, image_sizes), desc="Splitting images"):
+        if cur_part_size + image_size > max_zip_size:
+            print(f"Part {len(image_parts)} size: {cur_part_size} bytes")
+            image_parts.append([])
+            cur_part_size = 0
+        image_parts[-1].append(str(image_path))
+        cur_part_size += image_size
+    
     if image_dir is not None and image_upload_mode == "zip" and upload_zip_images:
         api = HfApi()
         print(f"Zipping image files in {image_dir}...")
-        zip_file = Path(f"{dataset_name}_{split}_images.zip")
-        zip_file.unlink(missing_ok=True)
-        zip_file = str(zip_file)
-        try:
-            with zipfile.ZipFile(zip_file, "w") as zf:
-                for image_file in tqdm(all_split_image_paths, desc="Zipping images"):
-                    zf.write(image_file, arcname=str(image_file.relative_to(image_dir)))
-            print(f"Uploading to {repo_id}...")
-            api.upload_file(
-                path_or_fileobj=zip_file,
-                path_in_repo=f"{dataset_name}/{split}_images.zip",
-                repo_id=repo_id,
-                token=token,
-                repo_type="dataset",
-                commit_message=f"Add {dataset_name} {split} images",
-                revision="script",
-            )
-        finally:
-            os.remove(zip_file)
+        for part_id, image_part_paths in enumerate(image_parts):
+            if part_id == 0 and len(image_part_paths) == 1:
+                zip_file = Path(f"{dataset_name}_{split}_images.zip")
+                zip_in_repo = f"{split}_images.zip"
+                commit_message = f"Add {dataset_name} {split} images"
+                
+            else:
+                zip_file = Path(f"{dataset_name}_{split}_images_part{part_id}.zip")
+                zip_in_repo = f"{split}_images_part{part_id}.zip"
+                commit_message = f"Add {dataset_name} {split} images Part {part_id}"
+            zip_file.unlink(missing_ok=True)
+            zip_file = str(zip_file)
+            try:
+                with zipfile.ZipFile(zip_file, "w") as zf:
+                    for image_file in tqdm(image_part_paths, desc="Zipping images"):
+                        zf.write(image_file, arcname=str(image_file.relative_to(image_dir)))
+                print(f"Uploading to {repo_id}...")
+                api.upload_file(
+                    path_or_fileobj=zip_file,
+                    path_in_repo=f"{dataset_name}/{zip_in_repo}",
+                    repo_id=repo_id,
+                    token=token,
+                    repo_type="dataset",
+                    commit_message=commit_message,
+                    revision="script",
+                )
+            finally:
+                os.remove(zip_file)
+            image_part_zip_names.append(zip_in_repo)
+    
+    # upload {split}_images_zips.txt, each line with a part zip name
+    try:
+        with open(f"{dataset_name}_{split}_images_zips.txt", "w") as f:
+            for zip_name in image_part_zip_names:
+                f.write(zip_name + "\n")
+        api.upload_file(
+            path_or_fileobj=f"{dataset_name}_{split}_images_zips.txt",
+            path_in_repo=f"{dataset_name}/{split}_images_zips.txt",
+            repo_id=repo_id,
+            token=token,
+            repo_type="dataset",
+            commit_message=f"Add {dataset_name} {split} images zips txt list",
+            revision="script",
+        )
+    finally:
+        os.remove(f"{dataset_name}_{split}_images_zips.txt")
             
     print("Done!")
     

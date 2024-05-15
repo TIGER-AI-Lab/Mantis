@@ -44,6 +44,7 @@ setup(
             "opencv-python",
             "pyarrow",
             "dask",
+            "einops-exts"
             "datasets==2.18.0",
         ],
         "eval": [
