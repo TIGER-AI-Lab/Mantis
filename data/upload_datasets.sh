@@ -80,4 +80,4 @@ test_mode="parquet"
 
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name imagecode --dataset_file imagecode/data/train.json --image_dir imagecode/data
 
-python upload_conv_dataset_to_hf.py --repo_id "TIGER-Lab/OBELICS-min-debug" --image_upload_mode $train_mode --split train --dataset_name obelics_111k --dataset_file obelics/data/train.jsonl --image_dir obelics/data/images
+# python upload_conv_dataset_to_hf.py --repo_id "TIGER-Lab/OBELICS-min-debug" --image_upload_mode $train_mode --split train --dataset_name obelics_111k --dataset_file obelics/data/train.jsonl --image_dir obelics/data/images

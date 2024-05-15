@@ -239,12 +239,13 @@ def main(
     image_parts = [[]] # [[image_path1, image_path2, ...], [image_path3, image_path4, ...], ...]
     image_part_zip_names = []
     cur_part_size = 0
-    for image_path, image_size in tqdm(zip(all_split_image_paths, image_sizes), desc="Splitting images"):
+    print("Splitting images into parts...")
+    for image_path, image_size in zip(all_split_image_paths, image_sizes):
         if cur_part_size + image_size > max_zip_size:
             print(f"Part {len(image_parts)} size: {cur_part_size} bytes")
             image_parts.append([])
             cur_part_size = 0
-        image_parts[-1].append(str(image_path))
+        image_parts[-1].append(image_path)
         cur_part_size += image_size
     
     if image_dir is not None and image_upload_mode == "zip" and upload_zip_images:
