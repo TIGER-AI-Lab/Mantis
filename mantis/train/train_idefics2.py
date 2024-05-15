@@ -74,6 +74,10 @@ class ModelArguments:
         metadata={"help": "Whether to use QLoRA", "default": False, "required": False},
         default=False,
     )
+    dora_enabled: Optional[bool] = field(
+        metadata={"help": "Whether to use Dora", "default": False, "required": False},
+        default=True,
+    )
     lora_r: Optional[int] = field(
         metadata={"help": "LoRA r", "default": 8, "required": False},
         default=8,
@@ -157,7 +161,7 @@ def load_model(model_args, training_args):
             lora_alpha=model_args.lora_alpha,
             target_modules='.*(text_model|modality_projection|perceiver_resampler).*(down_proj|gate_proj|up_proj|k_proj|q_proj|v_proj|o_proj).*$',
             lora_dropout=model_args.lora_dropout,
-            use_dora=False if model_args.qlora_enabled else True,
+            use_dora=model_args.dora_enabled,
             init_lora_weights="gaussian"
         )
         model = get_peft_model(model, lora_config)

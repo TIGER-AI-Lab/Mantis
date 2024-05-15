@@ -1,0 +1,9 @@
+data:  
+  - 
+    name: "video_eval"
+    type: json
+    path: "../../data/video_eval/data/subset20k_for_mantis/train.json"
+    format: chat
+    split: train
+    shuffle: true
+    revision: script
