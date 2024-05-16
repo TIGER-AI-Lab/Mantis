@@ -181,3 +181,4 @@ cython_debug/
 /mantis/benchmark/cache_dir
 /checkpoints
 /hf_space
+/sailctl_scripts
