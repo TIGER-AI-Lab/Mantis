@@ -179,3 +179,5 @@ cython_debug/
 /mantis/mllm_tools/model_utils
 /.vscode
 /mantis/benchmark/cache_dir
+/checkpoints
+/hf_space
