@@ -1,6 +1,7 @@
 import torch.nn as nn
 from .helpers import GatedCrossAttentionBlock
-from .utils import getattr_recursive, setattr_recursive
+from .utils import getattr_recursive, setattr_recursive, extend_instance
+from typing import Optional
 
 
 class FlamingoLayer(nn.Module):
@@ -38,7 +39,7 @@ class FlamingoLayer(nn.Module):
 
     def forward(
         self,
-        lang_x,
+        input_ids,
         attention_mask=None,
         **decoder_layer_kwargs,
     ):
@@ -52,18 +53,18 @@ class FlamingoLayer(nn.Module):
                     "media_locations must be conditioned before forward pass"
                 )
 
-            lang_x = self.gated_cross_attn_layer(
-                lang_x,
+            input_ids = self.gated_cross_attn_layer(
+                input_ids,
                 self.vis_x,
                 media_locations=self.media_locations,
                 use_cached_media=self.use_cached_media,
             )
 
         # Normal decoder layer
-        lang_x = self.decoder_layer(
-            lang_x, attention_mask=attention_mask, **decoder_layer_kwargs
+        input_ids = self.decoder_layer(
+            input_ids, attention_mask=attention_mask, **decoder_layer_kwargs
         )
-        return lang_x
+        return input_ids
 
 
 class FlamingoLMMixin(nn.Module):
@@ -165,3 +166,29 @@ class FlamingoLMMixin(nn.Module):
             layer.condition_vis_x(None)
             layer.condition_media_locations(None)
             layer.condition_use_cached_media(None)
+            
+            
+    def _get_resized_embeddings(
+        self,
+        old_embeddings: nn.Embedding,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+    ) -> nn.Embedding:
+        if old_embeddings is not None:
+            # save the class of the old embeddings, make sure to use the same class for the new
+            old_embeddings_class = old_embeddings.__class__
+            
+            embeddings = super()._get_resized_embeddings(
+                old_embeddings, new_num_tokens, pad_to_multiple_of
+            )
+            # print(old_embeddings_class)
+            extend_instance(embeddings, old_embeddings_class)
+            # this is to make sure the compatibility with mpt's SharedEmbedding
+            # print(embeddings.__class__) 
+            return embeddings
+        else:
+            return super()._get_resized_embeddings(
+                old_embeddings, new_num_tokens, pad_to_multiple_of
+            )
+        
+        

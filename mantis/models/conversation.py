@@ -445,6 +445,15 @@ conv_idefics_2 = Conversation(
     sep="<end_of_utterance>",
 )
 
+conv_openflamingo = Conversation(
+    system="",
+    roles=("User", "Assistant"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.IDEFICS_2,
+    sep="<|endofchunk|>",
+)
+
 default_conversation = conv_mfuyu_v1
 conv_templates = {
     "default": conv_vicuna_v0,
@@ -464,6 +473,7 @@ conv_templates = {
     "mllava_v1": conv_mllava_v1,
     "mllava_v1_mmtag": conv_mllava_v1_mmtag,
     "idefics_2": conv_idefics_2,
+    "openflamingo": conv_openflamingo,
 
     "mpt": conv_mpt,
 }

@@ -46,6 +46,7 @@ setup(
             "dask",
             "einops-exts"
             "datasets==2.18.0",
+            "open_clip_torch"
         ],
         "eval": [
             "tqdm",

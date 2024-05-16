@@ -60,7 +60,7 @@ class Flamingo(nn.Module):
     def forward(
         self,
         vision_x: torch.Tensor,
-        lang_x: torch.Tensor,
+        input_ids: torch.Tensor,
         attention_mask: torch.Tensor = None,
         labels: torch.Tensor = None,
         clear_conditioned_layers: bool = True,
@@ -73,7 +73,7 @@ class Flamingo(nn.Module):
         Args:
             vision_x (torch.Tensor): Vision input
                 shape (B, T_img, F, C, H, W) with F=1
-            lang_x (torch.Tensor): Language input ids
+            input_ids (torch.Tensor): Language input ids
                 shape (B, T_txt)
             attention_mask (torch.Tensor, optional): Attention mask. Defaults to None.
             labels (torch.Tensor, optional): Labels. Defaults to None.
@@ -106,10 +106,10 @@ class Flamingo(nn.Module):
         else:
             # Case: do not use caching (i.e. this is a standard forward pass);
             self._encode_vision_x(vision_x=vision_x)
-            self._condition_media_locations(input_ids=lang_x)
+            self._condition_media_locations(input_ids=input_ids)
 
         output = self.lang_encoder(
-            input_ids=lang_x,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             labels=labels,
             past_key_values=past_key_values,
@@ -124,7 +124,7 @@ class Flamingo(nn.Module):
     def generate(
         self,
         vision_x: torch.Tensor,
-        lang_x: torch.Tensor,
+        input_ids: torch.Tensor,
         attention_mask: torch.Tensor = None,
         **kwargs,
     ):
@@ -136,7 +136,7 @@ class Flamingo(nn.Module):
                 shape (B, T_img, F, C, H, W)
                 images in the same chunk are collated along T_img, and frames are collated along F
                 currently only F=1 is supported (single-frame videos)
-            lang_x (torch.Tensor): Language input
+            input_ids (torch.Tensor): Language input
                 shape (B, T_txt)
             **kwargs: see generate documentation in Hugging Face CausalLM models. Some notable kwargs:
                 max_length (int, optional): Maximum length of the output. Defaults to None.
@@ -152,7 +152,7 @@ class Flamingo(nn.Module):
                 do_sample (bool, optional): Do sample. Defaults to False.
                 early_stopping (bool, optional): Early stopping. Defaults to False.
         Returns:
-            torch.Tensor: lang_x with generated tokens appended to it
+            torch.Tensor: input_ids with generated tokens appended to it
         """
         num_beams = kwargs.pop("num_beams", 1)
         if num_beams > 1:
@@ -163,7 +163,7 @@ class Flamingo(nn.Module):
 
         eos_token_id = kwargs.pop("eos_token_id", self.eoc_token_id)
         output = self.lang_encoder.generate(
-            input_ids=lang_x,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             eos_token_id=eos_token_id,
             num_beams=num_beams,
@@ -302,7 +302,7 @@ class Flamingo(nn.Module):
 
     def _condition_media_locations(self, input_ids: torch.Tensor):
         """
-        Compute the media token locations from lang_x and condition the language model on these.
+        Compute the media token locations from input_ids and condition the language model on these.
         Args:
             input_ids (torch.Tensor): Language input
                 shape (B, T_txt)
@@ -336,3 +336,10 @@ class Flamingo(nn.Module):
         """
         self.lang_encoder.clear_conditioned_layers()
         self.lang_encoder._use_cached_vision_x = False
+
+    def __getattr__(self, name: str):
+        """Forward missing attributes to the wrapped module."""
+        try:
+            return super().__getattr__(name)  # defer to nn.Module's logic
+        except AttributeError:
+            return getattr(self.lang_encoder, name)

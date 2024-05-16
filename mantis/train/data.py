@@ -321,8 +321,8 @@ class ChatDataset(torch.utils.data.Dataset):
         
         # print(self.data_path, self.name, self.split)
         
-        # # for debug, print the targets to make sure the right tokens are learned
-        # # need to print to make sure that the masked tokens are correct.
+        # for debug, print the targets to make sure the right tokens are learned
+        # need to print to make sure that the masked tokens are correct.
         # _target = target.clone().detach()
         # _target[_target == IGNORE_INDEX] = 0
         # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
