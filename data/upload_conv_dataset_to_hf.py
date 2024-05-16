@@ -2,13 +2,14 @@ import fire
 import os
 import datasets
 import zipfile
+import requests
+import concurrent
+import json
 from pathlib import Path
 from typing import List
 from typing import List
 from io import BytesIO
 from PIL import Image
-import requests
-import json
 from pathlib import Path
 from tqdm import tqdm
 from huggingface_hub import HfApi
@@ -117,6 +118,7 @@ def main(
     upload_zip_images: bool=True,
     max_size=None,
     max_zip_size="20G",
+    num_workers: int=1,
 ):
     """
     if image_upload_mode is "zip", then the images will be zipped and uploaded to hf under ./{dataset_name}/{split}_images.zip through upload_file
@@ -251,7 +253,8 @@ def main(
     if image_dir is not None and image_upload_mode == "zip" and upload_zip_images:
         api = HfApi()
         print(f"Zipping image files in {image_dir}...")
-        for part_id, image_part_paths in enumerate(image_parts):
+        
+        def upload_image_part(image_part_paths, part_id):
             if part_id == 0 and len(image_part_paths) == 1:
                 zip_file = Path(f"{dataset_name}_{split}_images.zip")
                 zip_in_repo = f"{split}_images.zip"
@@ -279,7 +282,15 @@ def main(
                 )
             finally:
                 os.remove(zip_file)
-            image_part_zip_names.append(zip_in_repo)
+            return zip_in_repo
+        
+        futures = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+            for part_id, image_part_paths in enumerate(image_parts):
+                futures.append(executor.submit(upload_image_part, image_part_paths, part_id))
+            for future in concurrent.futures.as_completed(futures):
+                image_part_zip_names.append(future.result())
+        
     
     # upload {split}_images_zips.txt, each line with a part zip name
     try:
