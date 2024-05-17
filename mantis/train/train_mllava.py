@@ -1,4 +1,4 @@
-from transformers import Trainer, TrainingArguments
+from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
 from transformers.hf_argparser import HfArgumentParser
 from dataclasses import dataclass, field
 import torch
@@ -66,6 +66,14 @@ class ModelArguments:
     lora_enabled: Optional[bool] = field(
         metadata={"help": "Whether to use LoRA", "default": False, "required": False},
         default=False,
+    )
+    qlora_enabled: Optional[bool] = field(
+        metadata={"help": "Whether to use QLoRA", "default": False, "required": False},
+        default=False,
+    )
+    dora_enabled: Optional[bool] = field(
+        metadata={"help": "Whether to use Dora", "default": False, "required": False},
+        default=True,
     )
     lora_r: Optional[int] = field(
         metadata={"help": "LoRA r", "default": 128, "required": False},
@@ -138,6 +146,17 @@ def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     
+    if model_args.qlora_enabled:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_quant_storage=torch_dtype,
+            bnb_4bit_use_double_quant=True,
+        )
+    else:
+        bnb_config = None
+        
     if model_args.mllava_type == "llava":
         from mantis.models.mllava import LlavaForConditionalGeneration, MLlavaProcessor, LlavaConfig
         if model_args.do_pretrain:
@@ -180,7 +199,10 @@ def load_model(model_args, training_args):
             processor = MLlavaProcessor.from_pretrained(model_args.model_name_or_path)
             model = LlavaForConditionalGeneration.from_pretrained(
                 model_args.model_name_or_path, torch_dtype=torch_dtype, 
-                attn_implementation = model_args.attn_implementation)
+                attn_implementation = model_args.attn_implementation,
+                quantization_config=bnb_config if model_args.qlora_enabled else None,
+            )
+
             print("Successfully loaded model from:", model_args.model_name_or_path)
             
         
@@ -242,6 +264,7 @@ def load_model(model_args, training_args):
             lora_dropout=model_args.lora_dropout,
             bias=model_args.lora_bias,
             task_type="CAUSAL_LM",
+            use_dora=model_args.dora_enabled,
         )
         if training_args.bf16:
             model.to(torch.bfloat16)

@@ -57,7 +57,7 @@ cd ..
 echo "Finished VisualGenome images."
 
 
-cd ..
+# cd ..
 # prepare the data
 python prepare.py # -> llava_v1_5_mix665k_merged.json
 cd data

@@ -1,6 +1,7 @@
 nvidia-smi
 nvcc --version
 
+
 # offline training
 # export HF_HUB_OFFLINE=1
 # export TRANSFORMERS_OFFLINE=1
@@ -11,13 +12,14 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
     DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
-    # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
+    # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml" # change to this for offical training
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
-    model_name_or_path="${HF_HOME}/hub/models--adept--fuyu-8b/snapshots/f41defefdb89be0d28cac19d94ce216e37cb6be5" 
+    model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="adept/fuyu-8b"
+    # model_name_or_path="TIGER-Lab/Mantis-8B-clip-llama3-pretraind"
+    model_name_or_path="TIGER-Lab/Mantis-8B-siglip-llama3-pretraind"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -38,32 +40,24 @@ if [ -z $HF_TOKEN ]; then
     exit 1
 fi
 
-hf_hub_user_name="" # set this will push the model to your hub after training
+hf_hub_user_name="MFuyu" # set this will push the model to your hub after training
 max_seq_len=8192
-lora_enabled=false
+lora_enabled=true
+qlora_enabled=false
 DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
-resolution="720p"
-if [ $resolution = "480p" ]; then
-    max_image_size="(480,640)"
-elif [ $resolution = "720p" ]; then
-    max_image_size="(720,1280)"
-elif [ $resolution = "1080p" ]; then
-    max_image_size="(1080,1920)"
-else
-    echo "resolution not supported"
-    exit 1
-fi
+mllava_type="llava"
 
+# RUN_NAME="${mllava_type}_clip_llama3_8b_finetune"
+RUN_NAME="${mllava_type}_siglip_llama3_8b_finetune"
 export WANDB_PROJECT="Mantis"
-RUN_NAME="mfuyu_8b"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
-    RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}_lora"
+    RUN_NAME="${RUN_NAME}_${max_seq_len}_lora"
 else
     echo "lora is disabled"
-    RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}"
+    RUN_NAME="${RUN_NAME}_${max_seq_len}"
 fi
 echo "RUN_NAME = $RUN_NAME"
 
@@ -84,7 +78,6 @@ if [ -d $resume_from_checkpoint ]; then
 else
     echo "No checkpoint found, training from scratch"
 fi
-
 
 export NCCL_DEBUG=INFO;
 export CXX=g++;
@@ -124,7 +117,6 @@ if [ $WORKERS -gt 112 ]; then
 fi
 
 echo HOSTNAMES = $HOSTNAMES
-echo hostname = $(hostname)
 echo MASTER_ADDR= $MASTER_ADDR
 echo MASTER_PORT= $MASTER_PORT
 echo COUNT_NODE= $COUNT_NODE
@@ -151,14 +143,14 @@ echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_
 accelerate launch --config_file=$config_file \
     --machine_rank $RANK --main_process_ip $MASTER_ADDR --main_process_port $MASTER_PORT \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
-    train_fuyu.py \
+    train_mllava.py \
     --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
     --data_format $DATA_FORMAT \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \
-    --hub_model_id "$hub_model_id" \
+    --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
     --num_train_epochs 1 \
@@ -171,9 +163,9 @@ accelerate launch --config_file=$config_file \
     --eval_steps 500 \
     --save_total_limit 1 \
     --learning_rate 1e-5 \
-    --weight_decay 0.01 \
+    --weight_decay 0.0 \
     --warmup_ratio 0.03 \
-    --lr_scheduler_type "cosine" \
+    --lr_scheduler_type cosine \
     --logging_steps 1 \
     --tf32 True \
     --gradient_checkpointing True \
@@ -181,6 +173,8 @@ accelerate launch --config_file=$config_file \
     --report_to wandb \
     --do_train \
     --lora_enabled $lora_enabled \
+    --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
-    --max_image_size $max_image_size \
-    --resume_from_checkpoint "$resume_from_checkpoint"
+    --resume_from_checkpoint "$resume_from_checkpoint" \
+    --tune_xatten_layer_only $tune_xatten_layer_only \
+    --mllava_type $mllava_type \

@@ -1,17 +1,6 @@
-#!/bin/bash
-#SBATCH --job-name=train_fuyu
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
-#SBATCH -p a100
-#SBATCH --gpus-per-node=4
-#SBATCH --time=72:00:00
-#SBATCH --qos=a100_wenhuchen
-#SBATCH --mem=230GB
-#SBATCH --output=../../jobs/%j.out
-
 nvidia-smi
 nvcc --version
+
 
 # offline training
 # export HF_HUB_OFFLINE=1
@@ -20,22 +9,15 @@ nvcc --version
 
 if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
-    DATA_CONFIG_FILE=""
-    echo "Please set offline DATA_CONFIG_FILE"
-    exit 1
+    DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
-    DATA_CONFIG_FILE="./data_configs/pretrain_obelics.yaml"
+    DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml" # change to this for offical training
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
-    echo "Please set offline model path"
-    exit 1
+    model_name_or_path="{local_model_path}"
 else
-    # vision_backbone="openai/clip-vit-large-patch14-336"
-    vision_backbone="google/siglip-so400m-patch14-384"
-    llm_backbone="meta-llama/Meta-Llama-3-8B-Instruct"
-    # llm_backbone="lmsys/vicuna-7b-v1.5"
-    
+    model_name_or_path="MFuyu/llava_siglip_llama3_8b_pretrain_obelics_min_8192_lora"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -56,17 +38,17 @@ if [ -z $HF_TOKEN ]; then
     exit 1
 fi
 
-hf_hub_user_name="" # set this will push the model to your hub after training
-do_pretrain=True
+hf_hub_user_name="MFuyu" # set this will push the model to your hub after training
 max_seq_len=8192
-lora_enabled=false
+lora_enabled=true
+qlora_enabled=false
 DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=256
+global_batch_size=128
 mllava_type="llava"
 
-RUN_NAME="${mllava_type}_clip_llama3_8b_pretrain_8192"
-RUN_NAME="${mllava_type}_siglip_llama3_8b_pretrain_8192"
+RUN_NAME="${mllava_type}_clip_llama3_8b_finetune_obelics_min"
+# RUN_NAME="${mllava_type}_siglip_llama3_8b_finetune"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -85,6 +67,7 @@ if [ -z $hf_hub_user_name ]; then
 else
     echo "hf_hub_user_name = $hf_hub_user_name"
 fi
+
 # resume from checkpoint
 resume_from_checkpoint=""
 if [ -d $resume_from_checkpoint ]; then
@@ -132,24 +115,23 @@ if [ $WORKERS -gt 112 ]; then
 fi
 
 echo HOSTNAMES = $HOSTNAMES
-echo hostname = $(hostname)
 echo MASTER_ADDR= $MASTER_ADDR
 echo MASTER_PORT= $MASTER_PORT
+echo COUNT_NODE= $COUNT_NODE
+echo RANK= $RANK
 echo GPU=${GPU}
-echo COUNT_NODE=$COUNT_NODE
 echo WORKERS=$WORKERS
 echo "Running ${RUN_NAME}"
 
-# if lora is enabled, please use zero2
-# if lora is disabled, please use zero3
+
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
-    echo "Using zero2"
     config_file="./accelerate_configs/accelerate_config_zero2.yaml"
+    echo $config_file
 else
     echo "lora is disabled"
-    echo "Using zero2"
-    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
+    config_file="./accelerate_configs/accelerate_config_zero3.yaml"
+    echo $config_file
 fi
 
 per_device_train_batch_size=1
@@ -159,36 +141,38 @@ echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_
 accelerate launch --config_file=$config_file \
     --machine_rank $RANK --main_process_ip $MASTER_ADDR --main_process_port $MASTER_PORT \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
-    train_mllava.py --do_pretrain $do_pretrain \
-    --llm_backbone $llm_backbone \
-    --vision_backbone $vision_backbone \
+    train_mllava.py \
+    --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
     --data_format $DATA_FORMAT \
-    --conv_template "plain" \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \
     --hub_model_id $hub_model_id \
-    --hub_token $hub_token \
+    --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 1 \
+    --per_device_train_batch_size $per_device_train_batch_size \
+    --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 500 \
     --eval_steps 500 \
     --save_total_limit 1 \
-    --learning_rate 1e-3 \
+    --learning_rate 1e-5 \
     --weight_decay 0.0 \
     --warmup_ratio 0.03 \
-    --lr_scheduler_type "cosine" \
+    --lr_scheduler_type cosine \
     --logging_steps 1 \
     --tf32 True \
-    --gradient_checkpointing False \
+    --gradient_checkpointing True \
     --dataloader_num_workers $WORKERS \
     --report_to wandb \
     --do_train \
     --lora_enabled $lora_enabled \
+    --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
-    --resume_from_checkpoint "$resume_from_checkpoint"
+    --resume_from_checkpoint "$resume_from_checkpoint" \
+    --tune_xatten_layer_only $tune_xatten_layer_only \
+    --mllava_type $mllava_type \

@@ -1,3 +1,15 @@
+#!/bin/bash
+#SBATCH --job-name=train_fuyu
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=16
+#SBATCH -p a100
+#SBATCH --gpus-per-node=4
+#SBATCH --time=72:00:00
+#SBATCH --qos=a100_wenhuchen
+#SBATCH --mem=230GB
+#SBATCH --output=../../jobs/%j.out
+
 nvidia-smi
 nvcc --version
 
@@ -8,16 +20,21 @@ nvcc --version
 
 if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
-    DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
+    DATA_CONFIG_FILE=""
+    echo "Please set offline DATA_CONFIG_FILE"
+    exit 1
 else
-    DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
-    # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
+    DATA_CONFIG_FILE="./data_configs/obelics_min.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
-    model_name_or_path="${HF_HOME}/hub/models--adept--fuyu-8b/snapshots/f41defefdb89be0d28cac19d94ce216e37cb6be5" 
+    echo "Please set offline model path"
+    exit 1
 else
-    model_name_or_path="adept/fuyu-8b"
+    # vision_backbone="openai/clip-vit-large-patch14-336"
+    vision_backbone="google/siglip-so400m-patch14-384"
+    llm_backbone="meta-llama/Meta-Llama-3-8B-Instruct"
+    # llm_backbone="lmsys/vicuna-7b-v1.5"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -38,32 +55,23 @@ if [ -z $HF_TOKEN ]; then
     exit 1
 fi
 
-hf_hub_user_name="" # set this will push the model to your hub after training
+hf_hub_user_name="MFuyu" # set this will push the model to your hub after training
+do_pretrain=True
 max_seq_len=8192
 lora_enabled=false
 DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=128
-resolution="720p"
-if [ $resolution = "480p" ]; then
-    max_image_size="(480,640)"
-elif [ $resolution = "720p" ]; then
-    max_image_size="(720,1280)"
-elif [ $resolution = "1080p" ]; then
-    max_image_size="(1080,1920)"
-else
-    echo "resolution not supported"
-    exit 1
-fi
+global_batch_size=256
+mllava_type="llava"
 
+RUN_NAME="${mllava_type}_siglip_llama3_8b_pretrain_obelics_min"
 export WANDB_PROJECT="Mantis"
-RUN_NAME="mfuyu_8b"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
-    RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}_lora"
+    RUN_NAME="${RUN_NAME}_${max_seq_len}_lora"
 else
     echo "lora is disabled"
-    RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}"
+    RUN_NAME="${RUN_NAME}_${max_seq_len}"
 fi
 echo "RUN_NAME = $RUN_NAME"
 
@@ -75,7 +83,6 @@ if [ -z $hf_hub_user_name ]; then
 else
     echo "hf_hub_user_name = $hf_hub_user_name"
 fi
-
 # resume from checkpoint
 resume_from_checkpoint=""
 if [ -d $resume_from_checkpoint ]; then
@@ -84,7 +91,6 @@ if [ -d $resume_from_checkpoint ]; then
 else
     echo "No checkpoint found, training from scratch"
 fi
-
 
 export NCCL_DEBUG=INFO;
 export CXX=g++;
@@ -127,21 +133,21 @@ echo HOSTNAMES = $HOSTNAMES
 echo hostname = $(hostname)
 echo MASTER_ADDR= $MASTER_ADDR
 echo MASTER_PORT= $MASTER_PORT
-echo COUNT_NODE= $COUNT_NODE
-echo RANK= $RANK
 echo GPU=${GPU}
+echo COUNT_NODE=$COUNT_NODE
 echo WORKERS=$WORKERS
 echo "Running ${RUN_NAME}"
 
-
+# if lora is enabled, please use zero2
+# if lora is disabled, please use zero3
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
+    echo "Using zero2"
     config_file="./accelerate_configs/accelerate_config_zero2.yaml"
-    echo $config_file
 else
     echo "lora is disabled"
-    config_file="./accelerate_configs/accelerate_config_zero3.yaml"
-    echo $config_file
+    echo "Using zero2"
+    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
 fi
 
 per_device_train_batch_size=1
@@ -151,36 +157,36 @@ echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_
 accelerate launch --config_file=$config_file \
     --machine_rank $RANK --main_process_ip $MASTER_ADDR --main_process_port $MASTER_PORT \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
-    train_fuyu.py \
-    --model_name_or_path $model_name_or_path \
+    train_mllava.py --do_pretrain $do_pretrain \
+    --llm_backbone $llm_backbone \
+    --vision_backbone $vision_backbone \
     --data_config_file $DATA_CONFIG_FILE \
     --data_format $DATA_FORMAT \
+    --conv_template "plain" \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \
-    --hub_model_id "$hub_model_id" \
-    --hub_token "$hub_token" \
+    --hub_model_id $hub_model_id \
+    --hub_token $hub_token \
     --push_to_hub $push_to_hub \
     --num_train_epochs 1 \
-    --per_device_train_batch_size $per_device_train_batch_size \
-    --per_device_eval_batch_size 1 \
+    --per_device_train_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 500 \
     --eval_steps 500 \
     --save_total_limit 1 \
-    --learning_rate 1e-5 \
-    --weight_decay 0.01 \
+    --learning_rate 1e-3 \
+    --weight_decay 0.0 \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --gradient_checkpointing True \
+    --gradient_checkpointing False \
     --dataloader_num_workers $WORKERS \
     --report_to wandb \
     --do_train \
     --lora_enabled $lora_enabled \
     --max_seq_len $max_seq_len \
-    --max_image_size $max_image_size \
     --resume_from_checkpoint "$resume_from_checkpoint"

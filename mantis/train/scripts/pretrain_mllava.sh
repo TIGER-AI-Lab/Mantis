@@ -24,7 +24,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Please set offline DATA_CONFIG_FILE"
     exit 1
 else
-    DATA_CONFIG_FILE="./data_configs/pretrain_config.yaml"
+    DATA_CONFIG_FILE="./data_configs/llava_pretrain.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
