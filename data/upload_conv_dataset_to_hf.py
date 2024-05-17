@@ -175,10 +175,10 @@ def main(
             if image_paths is not None:
                 image_paths = [Path(path) for path in image_paths]
                 image_paths = [dataset_file.parent / path for path in image_paths]
-                all_split_image_paths.extend(image_paths)
                 if not all([path.exists() for path in image_paths]):
-                    print(f"Cannot find image files {image_paths}")
+                    print(f"Cannot find image files {image_paths}, drop this sample")
                     continue
+                all_split_image_paths.extend(image_paths)
                 
                 if image_upload_mode == "parquet":
                     images = load_images(image_paths)
