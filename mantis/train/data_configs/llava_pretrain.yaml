@@ -1,6 +1,6 @@
 data:
   - 
-    name: "llava-pretrain"
+    name: "llava_pretrain"
     type: huggingface
     path: "TIGER-Lab/llava-data"
     format: chat

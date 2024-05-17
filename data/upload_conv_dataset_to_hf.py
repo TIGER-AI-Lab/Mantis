@@ -117,8 +117,8 @@ def main(
     image_dir: str=None,
     upload_zip_images: bool=True,
     max_size=None,
-    max_zip_size="10G",
-    num_workers: int=1,
+    max_zip_size="5G",
+    num_workers: int=8,
 ):
     """
     if image_upload_mode is "zip", then the images will be zipped and uploaded to hf under ./{dataset_name}/{split}_images.zip through upload_file

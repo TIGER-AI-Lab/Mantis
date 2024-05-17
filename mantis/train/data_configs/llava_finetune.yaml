@@ -1,6 +1,6 @@
 data:
   - 
-    name: "llava-instruct"
+    name: "llava_instruct"
     type: huggingface
     path: "TIGER-Lab/llava-data"
     format: chat
