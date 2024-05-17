@@ -156,10 +156,6 @@ def load_model(model_args, training_args):
             bias=model_args.lora_bias,
             task_type="CAUSAL_LM",
         )
-        if training_args.bf16:
-            model.to(torch.bfloat16)
-        if training_args.fp16:
-            model.to(torch.float16)
         print("Adding LoRA adapters...")
         model.enable_input_require_grads()
         model = get_peft_model(model, lora_config)
