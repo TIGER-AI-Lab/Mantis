@@ -394,8 +394,10 @@ class Collator():
         for k in model_inputs[0].keys():
             if k == "pixel_values" and isinstance(model_inputs[0][k], list):
                 results[k] = [inputs[k] if inputs[k] is not None else None for inputs in model_inputs]
-            else:
+            elif model_inputs[0][k] is not None:
                 results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
+            else:
+                results[k] = None
         return results
     
     def __call__(self, batch):
