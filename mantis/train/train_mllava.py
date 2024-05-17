@@ -1,4 +1,5 @@
 from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
+from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
 from transformers.hf_argparser import HfArgumentParser
 from dataclasses import dataclass, field
 import torch
@@ -180,6 +181,7 @@ def load_model(model_args, training_args):
                 vocab_size=len(tokenizer),
                 attn_implementation=model_args.attn_implementation,
                 torch_dtype=torch_dtype,
+                quantization_config=bnb_config,
             )
             LlavaForConditionalGeneration._set_default_torch_dtype(torch_dtype)
             model = LlavaForConditionalGeneration(config, vision_backbone, llm_backbone)
@@ -255,8 +257,9 @@ def load_model(model_args, training_args):
         if "vision_tower" in name:
             param.requires_grad = False
 
+    if bnb_config:
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
     if model_args.lora_enabled:
-        from peft import LoraConfig, get_peft_model
         lora_config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,

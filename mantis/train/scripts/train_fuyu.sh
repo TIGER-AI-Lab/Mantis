@@ -41,6 +41,7 @@ fi
 hf_hub_user_name="" # set this will push the model to your hub after training
 max_seq_len=8192
 lora_enabled=false
+qlora_enabled=false
 DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
@@ -60,7 +61,12 @@ export WANDB_PROJECT="Mantis"
 RUN_NAME="mfuyu_8b"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
-    RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}_lora"
+    if [ $qlora_enabled = true ]; then
+        echo "qlora & dora is enabled"
+        RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}_qlora"
+    else
+        RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}_lora"
+    fi
 else
     echo "lora is disabled"
     RUN_NAME="${RUN_NAME}_${max_seq_len}_${resolution}"
@@ -181,6 +187,7 @@ accelerate launch --config_file=$config_file \
     --report_to wandb \
     --do_train \
     --lora_enabled $lora_enabled \
+    --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
     --max_image_size $max_image_size \
     --resume_from_checkpoint "$resume_from_checkpoint"

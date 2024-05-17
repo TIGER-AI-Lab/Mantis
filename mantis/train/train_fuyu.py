@@ -1,6 +1,7 @@
-from transformers import Trainer, TrainingArguments, default_data_collator
+from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
 from transformers.hf_argparser import HfArgumentParser
 from dataclasses import dataclass, field
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from PIL import Image
 import requests
 import torch
@@ -73,6 +74,14 @@ class ModelArguments:
         metadata={"help": "Whether to use LoRA", "default": False, "required": False},
         default=False,
     )
+    qlora_enabled: Optional[bool] = field(
+        metadata={"help": "Whether to use QLoRA", "default": False, "required": False},
+        default=False,
+    )
+    dora_enabled: Optional[bool] = field(
+        metadata={"help": "Whether to use Dora", "default": False, "required": False},
+        default=True,
+    )
     lora_r: Optional[int] = field(
         metadata={"help": "LoRA r", "default": 128, "required": False},
         default=128,
@@ -117,14 +126,28 @@ def load_model(model_args, training_args):
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     processor = MFuyuProcessor.from_pretrained(model_args.model_name_or_path)
     set_max_image_size(processor, model_args.max_image_size)
+    
+    if model_args.qlora_enabled:
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch_dtype,
+            bnb_4bit_quant_storage=torch_dtype,
+            bnb_4bit_use_double_quant=True,
+        )
+    else:
+        bnb_config = None
     model = MFuyuForCausalLM.from_pretrained(
         model_args.model_name_or_path, torch_dtype=torch_dtype, 
-        attn_implementation = model_args.attn_implementation)
+        attn_implementation = model_args.attn_implementation,
+        quantization_config=bnb_config if model_args.qlora_enabled else None,
+        )
+    if bnb_config:
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
     model.language_model.resize_token_embeddings(len(processor.tokenizer))
     model.config.text_config.vocab_size = len(processor.tokenizer)
     model.config.vocab_size = len(processor.tokenizer)
     if model_args.lora_enabled:
-        from peft import LoraConfig, get_peft_model
         lora_config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
