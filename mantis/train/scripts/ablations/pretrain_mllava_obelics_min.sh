@@ -57,7 +57,7 @@ fi
 
 hf_hub_user_name="MFuyu" # set this will push the model to your hub after training
 do_pretrain=True
-max_seq_len=8192
+max_seq_len=4096
 lora_enabled=false
 DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
