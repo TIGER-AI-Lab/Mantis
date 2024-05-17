@@ -1,7 +1,9 @@
 data:
   - 
-    name: "llava-pretrain"
-    type: json
-    path: "../../data/llava-instruct/data/llava_v1_5_mix665k.json"
+    name: "llava-instruct"
+    type: huggingface
+    path: "TIGER-Lab/llava-data"
     format: chat
     split: train
+    shuffle: true
+    revision: script
