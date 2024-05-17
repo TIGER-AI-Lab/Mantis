@@ -14,6 +14,12 @@ from mantis.train.data import load_data, load_data_from_config, set_ignore_index
 from huggingface_hub import hf_hub_download
 from mantis.models.openflamingo.factory import create_model_and_transforms
 from mantis.models.openflamingo.processor import OpenFlamingoProcessor
+from transformers.trainer import (
+    is_torch_xla_available, is_sagemaker_mp_enabled, IS_SAGEMAKER_MP_POST_1_10, 
+    version, accelerate_version, logger, remove_dummy_checkpoint, 
+    WEIGHTS_NAME, SAFE_WEIGHTS_NAME
+)
+from mantis.models.openflamingo.utils import filter_state_dict_to_trainable
 from pathlib import Path
 from typing import Optional
 from pathlib import Path
@@ -188,7 +194,65 @@ def load_model(model_args, training_args):
     set_default_image_token_id(model.media_token_id)
         
     return model, processor
+
+class OpenFlamingoTrainer(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
     
+    def save_model(self, output_dir: Optional[str] = None, _internal_call: bool = False):
+        """
+        Will save the model, so you can reload it using `from_pretrained()`.
+
+        Will only save from the main process.
+        """
+
+        if output_dir is None:
+            output_dir = self.args.output_dir
+
+        if is_torch_xla_available():
+            self._save_tpu(output_dir)
+        elif is_sagemaker_mp_enabled():
+            # Calling the state_dict needs to be done on the wrapped model and on all processes.
+            os.makedirs(output_dir, exist_ok=True)
+            state_dict = self.model_wrapped.state_dict()
+            state_dict = filter_state_dict_to_trainable(self.model_wrapped, state_dict)
+            if self.args.should_save:
+                self._save(output_dir, state_dict=state_dict)
+            if IS_SAGEMAKER_MP_POST_1_10:
+                # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
+                Path(os.path.join(output_dir, "user_content.pt")).touch()
+        elif self.is_fsdp_enabled:
+            if ("FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)) and (
+                version.parse(accelerate_version) > version.parse("0.24.1")
+            ):
+                state_dict = self.accelerator.get_state_dict(self.model)
+                state_dict = filter_state_dict_to_trainable(self.model, state_dict)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
+        elif self.is_deepspeed_enabled:
+            try:
+                state_dict = self.accelerator.get_state_dict(self.deepspeed)
+                state_dict = filter_state_dict_to_trainable(self.model, state_dict)
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
+            except ValueError:
+                logger.warning(
+                    " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
+                    " zero_to_fp32.py to recover weights"
+                )
+                if self.args.should_save:
+                    self._save(output_dir, state_dict={})
+                # remove the dummy state_dict
+                remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
+                self.model_wrapped.save_checkpoint(output_dir)
+
+        elif self.args.should_save:
+            self._save(output_dir)
+
+        # Push to the Hub when `save_model` is called by the user.
+        if self.args.push_to_hub and not _internal_call:
+            self.push_to_hub(commit_message="Model save")
+            
 def main(
     training_args: TrainingArguments,
     data_args: DataArguments,
@@ -209,6 +273,7 @@ def main(
     if training_args.resume_from_checkpoint == True:
         # search for the latest checkpoint
         all_checkpoints = list(Path(training_args.output_dir).glob("checkpoint-*"))
+        all_checkpoints = [x for x in all_checkpoints if (x / "trainer_state.json").exists() and not x.name.endswith("final")]
         if len(all_checkpoints) == 0:
             training_args.resume_from_checkpoint = None
             print("No checkpoint found, starting from scratch")
@@ -230,14 +295,13 @@ def main(
     else:
         train_dataset, val_dataset, test_dataset, collate_fn = load_data(data_args, processor)
     
-    
-    trainer = Trainer(
+    training_args.save_safetensors = False
+    trainer = OpenFlamingoTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         data_collator=collate_fn,
-        tokenizer=processor
     )
     if trainer.is_world_process_zero():
         print("Training arguments:")

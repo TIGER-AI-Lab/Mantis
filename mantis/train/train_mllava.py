@@ -300,6 +300,7 @@ def main(
     if training_args.resume_from_checkpoint == True:
         # search for the latest checkpoint
         all_checkpoints = list(Path(training_args.output_dir).glob("checkpoint-*"))
+        all_checkpoints = [x for x in all_checkpoints if (x / "trainer_state.json").exists() and not x.name.endswith("final")]
         if len(all_checkpoints) == 0:
             training_args.resume_from_checkpoint = None
             print("No checkpoint found, starting from scratch")
