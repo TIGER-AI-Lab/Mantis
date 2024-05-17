@@ -117,7 +117,7 @@ def main(
     image_dir: str=None,
     upload_zip_images: bool=True,
     max_size=None,
-    max_zip_size="20G",
+    max_zip_size="10G",
     num_workers: int=1,
 ):
     """
@@ -163,10 +163,16 @@ def main(
         sub_dataset = dataset[part_start_idx:part_end_idx]
         part_data = []
         for item in tqdm(sub_dataset, desc="Processing dataset"):
-            if image_dir is None or 'images' not in item or len(item['images']) == 0:
-                images = None
+            if image_dir is None:
+                image_paths = None
+            elif "images" in item and len(item['images']) > 0:
+                image_paths = item['images']
+            elif "image" in item and isinstance(item['image'], str):
+                image_paths = [item['image']]
             else:
-                image_paths = item['images'] 
+                image_paths = None
+                
+            if image_paths is not None:
                 image_paths = [Path(path) for path in image_paths]
                 image_paths = [dataset_file.parent / path for path in image_paths]
                 all_split_image_paths.extend(image_paths)
@@ -180,6 +186,8 @@ def main(
                     images = [str(path.relative_to(image_dir)) for path in image_paths]
                 else:
                     raise ValueError(f"image_upload_mode must be zip or parquet, but got {image_upload_mode}")
+            else:
+                images = None
                 
             new_convs = []
             
@@ -242,6 +250,8 @@ def main(
     image_part_zip_names = []
     cur_part_size = 0
     print("Splitting images into parts...")
+    print(f"Total image size: {sum(image_sizes)} bytes")
+    print(f"Total image count: {len(all_split_image_paths)}")
     for image_path, image_size in zip(all_split_image_paths, image_sizes):
         if cur_part_size + image_size > max_zip_size:
             print(f"Part {len(image_parts)} size: {cur_part_size} bytes")

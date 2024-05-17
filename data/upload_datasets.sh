@@ -21,7 +21,7 @@ test_mode="parquet"
 
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name synthetic --dataset_file synthetic/data/train.json --image_dir synthetic/data/images_sdturbo-1
 
-# python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name llava_665k_multi --dataset_file llava-instruct/data/train.json --image_dir llava-instruct/data --num_parts 4
+# python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name llava_665k_multi --dataset_file llava-instruct/data/train.json --image_dir llava-instruct/data
 
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name lrv --dataset_file lrv/data/train_conv.json --image_dir lrv/data/images
 
@@ -54,7 +54,7 @@ test_mode="parquet"
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name dreamsim --dataset_file dream_sim/data/train.json --image_dir dream_sim/data/ --upload_zip_images False
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split val --dataset_name dreamsim --dataset_file dream_sim/data/val.json --image_dir dream_sim/data --upload_zip_images False
 
-# python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name llava_665k_multi --dataset_file llava-instruct/data/train.json --image_dir llava-instruct/data --num_parts 4
+# python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name llava_665k_multi --dataset_file llava-instruct/data/train.json --image_dir llava-instruct/data
 
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name lrv --dataset_file lrv/data/train_conv.json --image_dir lrv/data/images --upload_zip_images False
 
@@ -81,3 +81,7 @@ test_mode="parquet"
 # python upload_conv_dataset_to_hf.py --repo_id $train_repo_id --image_upload_mode $train_mode --split train --dataset_name imagecode --dataset_file imagecode/data/train.json --image_dir imagecode/data
 
 # python upload_conv_dataset_to_hf.py --repo_id "TIGER-Lab/OBELICS-min" --image_upload_mode $train_mode --split train --dataset_name obelics_100k_multi --dataset_file obelics/data/train.jsonl --image_dir obelics/data/images --max_zip_size "10G"
+
+# python upload_conv_dataset_to_hf.py --repo_id "TIGER-Lab/llava-data" --image_upload_mode $train_mode --split train --dataset_name llava_pretrain --dataset_file llava-pretrain/data/train.json --image_dir llava-pretrain/data
+
+# python upload_conv_dataset_to_hf.py --repo_id "TIGER-Lab/llava-data" --image_upload_mode $train_mode --split train --dataset_name llava_instruct --dataset_file llava-instruct/data/llava_v1_5_mix665k.json --image_dir llava-instruct/data
