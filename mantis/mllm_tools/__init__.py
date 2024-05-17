@@ -76,6 +76,11 @@ def MLLM_Models(model_name:str):
     elif model_name.lower().startswith("mantis"):
         if "fuyu" in model_name.lower():
             return partial(get_mfuyu, model_name=model_name)
+        elif "idefics2" in model_name.lower():
+            from .idefics2_eval import Idefics2
+            return partial(Idefics2, model_path=model_name)
+        elif "openflamingo" in model_name.lower():
+            raise NotImplementedError
         else:
             return partial(get_mllava, model_name=model_name)
     else:
