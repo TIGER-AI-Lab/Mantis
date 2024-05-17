@@ -6,3 +6,10 @@ python eval.py --dataset_path "TIGER-Lab/NLVR2" --dataset_name "nlvr2" --model_n
 dataset_path="../../data/qbench2/data/q-bench2-a1-pair-dev.json"
 subset="q-bench2-a1-pair-dev"
 python eval.py --dataset_path $dataset_path --dataset_name $subset --model_name $model_name --results_dir "results" --overwrite True > ./logs/eval_${model_name}_${subset}.log 2>&1
+
+# MV bench
+resolution=224
+num_frames=8
+log_dir="results/mvbench/${num_frames}frames_${resolution}"
+mkdir -p $log_dir
+python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name ${model_name} > $log_dir/mvbench_${model_name}.txt

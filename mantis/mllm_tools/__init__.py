@@ -20,7 +20,14 @@ def get_mllava(model_name: str):
         return MLlava(model_path="TIGER-Lab/Mantis-8B-siglip-llama3")
     else:
         raise ValueError(f'Invalid model name: {model_name}')
-
+    
+def get_mantis_idefics(model_name:str):
+    from .idefics2_eval import Idefics2
+    if model_name == "mantis-8b-idefics2_8192_qlora":
+        return Idefics2(model_path="MFuyu/mantis-8b-idefics2_8192_qlora")
+    else:
+        raise ValueError(f'Invalid model name: {model_name}')
+ 
 def MLLM_Models(model_name:str):
     if model_name == "blip2":
         from .blip_flant5_eval import BLIP_FLANT5
@@ -78,7 +85,7 @@ def MLLM_Models(model_name:str):
             return partial(get_mfuyu, model_name=model_name)
         elif "idefics2" in model_name.lower():
             from .idefics2_eval import Idefics2
-            return partial(Idefics2, model_path=model_name)
+            return partial(get_mantis_idefics, model_name=model_name)
         elif "openflamingo" in model_name.lower():
             raise NotImplementedError
         else:
