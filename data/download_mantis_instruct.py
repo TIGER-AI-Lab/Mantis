@@ -8,7 +8,7 @@ from datasets import get_dataset_config_names, load_dataset
 
 def download_subset(dataset_repo_id, config_name):
     
-    dataset = load_dataset(dataset_repo_id, config_name)
+    dataset = load_dataset(dataset_repo_id, config_name, revision="script")
     print(f"Finish downloading {dataset_repo_id}:{config_name}")
     print(dataset)
 

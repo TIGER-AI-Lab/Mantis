@@ -91,13 +91,38 @@ To reproduce our evaluation results, please check [mantis/benchmark/README.md](.
 - [🤗 Mantis-Instruct](https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct) 721K text-image interleaved datasets for multi-image instruction tuning
 - [🤗 Mantis-Eval](https://huggingface.co/datasets/TIGER-Lab/Mantis-Eval) 217 high-quality examples for evaluating LMM's multi-image skills
 
+### Downloading
+you can easily preparing Mantis-Insturct's downloading with the following command (The downloading and extracting might take about an hour):
+```bash
+python data/download_mantis_instruct.py --max_workers 8
+```
 
 ## Model Zoo
+
+### Mantis Models
 We provide the following models in the 🤗 Hugging Face model hub:
 - [TIGER-Lab/Mantis-8B-clip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3)
 - [TIGER-Lab/Mantis-8B-siglip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3)
 - [TIGER-Lab/Mantis-8B-Fuyu](https://huggingface.co/TIGER-Lab/Mantis-8B-Fuyu)
 
+### Run models
+
+- Mantis-8B-siglip-llama3:
+```bash
+cd examples && python run_mantis.py
+```
+- Mantis-8B-Fuyu:
+```bash
+cd examples && python run_mantis_fuyu.py
+```
+
+### Chat CLI
+We provide a simple chat CLI for Mantis models. You can run the following command to chat with Mantis-8B-siglip-llama3:
+```bash
+python examples/chat_mantis.py
+```
+
+### Intermediate Checkpoints
 The following intermediate checkpoints after pre-training the multi-modal projectors are also available for experiments reproducibility (**Please note the follwing checkpoints still needs further fine-tuning on Mantis-Eval to be intelligent. They are not working models.**):
 - [TIGER-Lab/Mantis-8B-clip-llama3-pretraind](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3-pretraind)
 - [TIGER-Lab/Mantis-8B-siglip-llama3-pretraind](https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3-pretraind)
