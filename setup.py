@@ -44,7 +44,7 @@ setup(
             "opencv-python",
             "pyarrow",
             "dask",
-            "einops-exts"
+            "einops-exts",
             "datasets==2.18.0",
             "open_clip_torch"
         ],
