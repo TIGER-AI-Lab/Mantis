@@ -1,6 +1,7 @@
 from typing import Optional
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from transformers.utils import is_flash_attn_2_available
 import open_clip
 
 from .flamingo import Flamingo
@@ -62,8 +63,11 @@ def create_model_and_transforms(
         # modify labels for the loss.
         text_tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
+    config = AutoConfig.from_pretrained(lang_encoder_path, trust_remote_code=True)
+    config.attn_config['attn_impl'] = 'flash'
     lang_encoder = AutoModelForCausalLM.from_pretrained(
         lang_encoder_path,
+        config=config,
         local_files_only=use_local_files,
         trust_remote_code=True,
         cache_dir=cache_dir,

@@ -46,7 +46,7 @@ fi
 
 hf_hub_user_name="MFuyu" # set this will push the model to your hub after training
 max_seq_len=2048 # openflamingo use cross attention for vision processing, which does not add tokens to the input sequence
-lora_enabled=true
+lora_enabled=false
 qlora_enabled=false
 DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
