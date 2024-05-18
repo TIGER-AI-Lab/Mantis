@@ -97,3 +97,11 @@ data:
     format: chat
     split: train
     revision: script
+  - 
+    name: "visual_story_telling"
+    type: huggingface
+    path: "TIGER-Lab/Mantis-Instruct"
+    format: chat
+    split: train
+    max_num_images: 10
+    revision: script
