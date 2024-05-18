@@ -21,3 +21,4 @@ data:
     split: train
     shuffle: true
     revision: script
+    max_num_images: 8

@@ -78,7 +78,7 @@ class ChatDataset(torch.utils.data.Dataset):
         is_master_worker=True, 
         max_size=None, 
         shuffle=False, 
-        max_num_images=10, 
+        max_num_images=None, 
         vl_only=False,
         offline_sha=None,
         sample_ratio=1.0,
@@ -113,9 +113,9 @@ class ChatDataset(torch.utils.data.Dataset):
             else:
                 self.print(f"Loading dataset '{data_path}' {name} {split} from online huggingface datasets")
                 self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision)
-            avg_num_images = sum([len(x) for x in self.data['images'] if x]) / len(self.data['images'])
-            print(f"Average number of images: {avg_num_images}")
-            if avg_num_images > max_num_images:
+            _max_num_images = max([len(x) for x in self.data['images'] if x])
+            print(f"Max number of images per sample: {_max_num_images}, limit: {max_num_images}")
+            if _max_num_images and _max_num_images > max_num_images:
                 print(f"Filtering dataset to images <= {max_num_images}")
                 self.filtered_data = self.data.filter(lambda x: len(x['images']) <= max_num_images if ('images' in x and x['images']) else True) # max 5 images
                 print(f"Filtered dataset size changed from {len(self.data)} to {len(self.filtered_data)}")
@@ -260,6 +260,13 @@ class ChatDataset(torch.utils.data.Dataset):
             self.conv.messages = conv_messages
             conv_str = self.conv.get_prompt()
             encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+        # get the decoded input string, check the number of images after truncation
+        decoded_input = self.processor.tokenizer.decode(encoding["input_ids"][0], skip_special_tokens=False)
+        new_image_token_count = decoded_input.count(DEFAULT_IMAGE_TOKEN)
+        if new_image_token_count < len(sub_images):
+            print(f"Warning: {new_image_token_count} < {len(sub_images)}")
+            sub_images = sub_images[:new_image_token_count]
+            sub_images = sub_images if sub_images else None
 
         if "image_patches" in encoding:
             encoding.pop("attention_mask")
@@ -436,7 +443,7 @@ def load_data_from_config(data_args, processor):
         split = sub_dataset_config['split']
         max_size = sub_dataset_config.get('max_size', None)
         shuffle = sub_dataset_config.get('shuffle', False)
-        max_num_images = sub_dataset_config.get('max_num_images', 10)
+        max_num_images = sub_dataset_config.get('max_num_images', None)
         dataset_type = sub_dataset_config.get('type', 'huggingface')
         offline_sha = sub_dataset_config.get('offline_sha', None)
         vl_only = sub_dataset_config.get('vl_only', False)
