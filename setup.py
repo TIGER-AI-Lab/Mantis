@@ -30,7 +30,7 @@ setup(
             "tiktoken",
             "chardet",
             "deepspeed",
-            "peft",
+            "peft>=0.10",
             "bitsandbytes",
             "wandb",
             "ninja",
