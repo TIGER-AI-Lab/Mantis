@@ -7,17 +7,17 @@ data:
     split: train
     shuffle: true
     revision: script
-  - 
-    name: "obelics-min"
-    type: jsonl
-    path: "../../data/obelics/data/train.jsonl"
-    format: chat
-    split: train
   # - 
-  #   name: "obelics_100k_multi"
-  #   type: huggingface
-  #   path: "TIGER-Lab/OBELICS-min"
+  #   name: "obelics-min"
+  #   type: jsonl
+  #   path: "../../data/obelics/data/train.jsonl"
   #   format: chat
   #   split: train
-  #   shuffle: true
-  #   revision: script
+  - 
+    name: "obelics_100k_multi"
+    type: huggingface
+    path: "TIGER-Lab/OBELICS-min"
+    format: chat
+    split: train
+    shuffle: true
+    revision: script

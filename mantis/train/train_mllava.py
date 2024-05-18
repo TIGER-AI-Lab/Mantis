@@ -181,6 +181,7 @@ def load_model(model_args, training_args):
                 vocab_size=len(tokenizer),
                 attn_implementation=model_args.attn_implementation,
                 torch_dtype=torch_dtype,
+                quantization_config=bnb_config if model_args.qlora_enabled else None,
             )
             LlavaForConditionalGeneration._set_default_torch_dtype(torch_dtype)
             model = LlavaForConditionalGeneration(config, vision_backbone, llm_backbone)
