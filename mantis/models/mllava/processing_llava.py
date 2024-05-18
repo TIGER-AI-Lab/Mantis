@@ -61,6 +61,7 @@ class MLlavaProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
+        self.image_token_index = tokenizer.convert_tokens_to_ids("<image>")
         
     def preprocess_interleaved_images_and_text(
         self,
@@ -153,8 +154,7 @@ class MLlavaProcessor(ProcessorMixin):
                 t = t.replace("<IMAGE>", "<image>")
                 texts[i] = t
             
-            # flatten images
-            images = [image for images_per_text in images for image in images_per_text]
+            
         else:
             if isinstance(text, str):
                 texts = [text]
@@ -225,17 +225,28 @@ class MLlavaProcessor(ProcessorMixin):
         """
         if add_image_ids:
             text, images = self.preprocess_interleaved_images_and_text(text, images)
-        if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"] # [batch_size, num_channels, height, width], e.g. [1, 3, 336, 336]
-        else:
-            pixel_values = None
+        
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
         # text_inputs: 
         # 1. input_ids: [batch_size, sequence_length], e.g. [1, 6]
         # 2. attention_mask: [batch_size, sequence_length], e.g. [1, 6]
-
+        
+        # check the number of image token ids, and truncated the number of images if needed
+        
+        if images is not None:
+            input_ids = text_inputs["input_ids"]
+            num_image_tokens = torch.sum(input_ids == self.image_token_index, dim=-1)
+            for i, num_image_token in enumerate(num_image_tokens):
+                if num_image_token < len(images[i]):
+                    images[i] = images[i][:num_image_token]
+                    print(f"{len(images[i]) - num_image_token} ({len(images[i])} in total) image tokens in the text are truncated due to the max sequence length; removing the extra images.")
+            # flatten images
+            images = [image for images_per_text in images for image in images_per_text]
+            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"] # [batch_size, num_channels, height, width], e.g. [1, 3, 336, 336]
+        else:
+            pixel_values = None
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama

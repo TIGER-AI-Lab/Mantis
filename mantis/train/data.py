@@ -235,7 +235,13 @@ class ChatDataset(torch.utils.data.Dataset):
         conv_messages = self.conversations[idx]
         sub_images = self.all_images[idx]
         sub_images = load_images(sub_images)
-        
+        # resize sub_images to be at least 16 * 16 if image is too small, to avoid errors in clip image processor
+        if sub_images:
+            for i, image in enumerate(sub_images):
+                if image.size[0] < 16 or image.size[1] < 16:
+                    scale_factor = max(16 / image.size[0], 16 / image.size[1])
+                    sub_images[i] = image.resize((int(image.size[0] * scale_factor), int(image.size[1] * scale_factor))).convert("RGB")
+                    
         if self.conv.sep_style == SeparatorStyle.PLAIN:
             # NOTE: this is for the pretraining, where we only use the pure text or interleaved text and images
             source = conv_messages
@@ -260,13 +266,6 @@ class ChatDataset(torch.utils.data.Dataset):
             self.conv.messages = conv_messages
             conv_str = self.conv.get_prompt()
             encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
-        # get the decoded input string, check the number of images after truncation
-        decoded_input = self.processor.tokenizer.decode(encoding["input_ids"][0], skip_special_tokens=False)
-        new_image_token_count = decoded_input.count(DEFAULT_IMAGE_TOKEN)
-        if new_image_token_count < len(sub_images):
-            print(f"Warning: {new_image_token_count} < {len(sub_images)}")
-            sub_images = sub_images[:new_image_token_count]
-            sub_images = sub_images if sub_images else None
 
         if "image_patches" in encoding:
             encoding.pop("attention_mask")
