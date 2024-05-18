@@ -115,7 +115,7 @@ class ChatDataset(torch.utils.data.Dataset):
                 self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision)
             _max_num_images = max([len(x) for x in self.data['images'] if x])
             print(f"Max number of images per sample: {_max_num_images}, limit: {max_num_images}")
-            if _max_num_images and _max_num_images > max_num_images:
+            if max_num_images and _max_num_images > max_num_images:
                 print(f"Filtering dataset to images <= {max_num_images}")
                 self.filtered_data = self.data.filter(lambda x: len(x['images']) <= max_num_images if ('images' in x and x['images']) else True) # max 5 images
                 print(f"Filtered dataset size changed from {len(self.data)} to {len(self.filtered_data)}")
