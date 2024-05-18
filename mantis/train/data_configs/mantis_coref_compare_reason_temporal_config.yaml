@@ -103,5 +103,5 @@ data:
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
-    max_num_images: 8
+    max_num_images: 20
     revision: script
