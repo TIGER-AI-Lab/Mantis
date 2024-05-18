@@ -215,6 +215,8 @@ class OpenFlamingoTrainer(Trainer):
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
+            if not state_dict:
+                return
             state_dict = filter_state_dict_to_trainable(self.model_wrapped, state_dict)
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
@@ -226,12 +228,16 @@ class OpenFlamingoTrainer(Trainer):
                 version.parse(accelerate_version) > version.parse("0.24.1")
             ):
                 state_dict = self.accelerator.get_state_dict(self.model)
+                if not state_dict:
+                    return
                 state_dict = filter_state_dict_to_trainable(self.model, state_dict)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 state_dict = self.accelerator.get_state_dict(self.deepspeed)
+                if not state_dict:
+                    return
                 state_dict = filter_state_dict_to_trainable(self.model, state_dict)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
