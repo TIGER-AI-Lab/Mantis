@@ -87,7 +87,16 @@ def main(
         response = model(messages)
         
         di["outputs"] = response
-        
+        if "the answer is" in response:
+            response = response.split("the answer is")[-1].strip()
+        elif "answer:" in response:
+            response = response.split("answer:")[-1].strip()
+        elif "the option is" in response:
+            response = response.split("the option is ")[-1].strip()
+        for char in response:
+            if char.isalpha():
+                response = char
+                break
         di["correct"] = response[0] == data["answer"][0] if len(response) > 0 else False
         
         with open(results_file, "a") as wf:

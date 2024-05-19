@@ -3,15 +3,8 @@
 import os
 import sys
 from typing import List
-try:
-    from mllm_utils import merge_images
-except ImportError:
-    from .mllm_utils import merge_images
-
-try:
-    from .model_utils.otter import OtterHD as OtterHDModel
-except:
-    from model_utils.otter import OtterHD as OtterHDModel
+from mantis.mllm_tools.mllm_utils import merge_images
+from mantis.mllm_tools.model_utils.otter import OtterHD as OtterHDModel
 
 
 class OtterHD():

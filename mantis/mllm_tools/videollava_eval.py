@@ -1,51 +1,31 @@
 """
-conda create -n vila python=3.10
-conda activate vila
-
-pip install --upgrade pip  # enable PEP 660 support
-wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.4.2/flash_attn-2.4.2+cu118torch2.0cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
-pip install flash_attn-2.4.2+cu118torch2.0cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
-pip install -e .
-pip install -e ".[train]"
-
-site_pkg_path=$(python -c 'import site; print(site.getsitepackages()[0])')
-cp -rv ./llava/train/transformers_replace/* $site_pkg_path/transformers/
-
-# then install mantis for eval, in the root directory of the repo
-pip install -e ".[eval]"
+pip install transformers>=4.41.0
 """
 import os
 import torch
+import numpy as np
 from typing import List
-try:
-    from mllm_utils import load_images
-except ImportError:
-    from .mllm_utils import load_images
+from mantis.mllm_tools.mllm_utils import load_images
+from mantis.models.conversation import conv_videollava as default_conv
 import re
-    
-try:
-    from videollava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
-    from videollava.conversation import conv_templates, SeparatorStyle
-    from videollava.model.builder import load_pretrained_model
-    from videollava.utils import disable_torch_init
-    from videollava.mm_utils import tokenizer_image_token, get_model_name_from_path, KeywordsStoppingCriteria
-except:
-    raise ImportError("Please install see mllm_tools/videollava_eval.py for running requirements. Due to the videollava project's bad compatibilities, you need to install a additional environment for running this code.")
+from transformers import VideoLlavaProcessor, VideoLlavaForConditionalGeneration, AutoConfig
 
 class VideoLlava():
     support_multi_image = True
     merged_image_files = []
-    def __init__(self, model_path:str='LanguageBind/Video-LLaVA-7B', model_base:str=None) -> None:
+    def __init__(self, model_path:str='LanguageBind/Video-LLaVA-7B-hf', input_type="image") -> None:
         """Llava model wrapper
 
         Args:
             model_path (str): Video Llava model name
         """
-        device = 'cuda'
-        self.model_name = get_model_name_from_path(model_path)
-        self.tokenizer, self.model, self.processor, _ = load_pretrained_model(model_path, model_base, self.model_name, load_8bit=False, load_4bit=True, device=device)
-        self.conv_template = conv_templates["llava_v1"]
-        self.image_processor = self.processor["image"]
+        self.model = VideoLlavaForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype=torch.float16).eval()
+        self.processor = VideoLlavaProcessor.from_pretrained(model_path)
+        self.image_token = "<image>"
+        self.video_token = "<video>"
+        assert input_type in ["image", "video"], "type must be either 'image' or 'video'"
+        self.input_type = input_type
+        self.conv_template = default_conv
 
         
     def __call__(self, inputs: List[dict]) -> str:
@@ -68,41 +48,39 @@ class VideoLlava():
             Supports any form of interleaved format of image and text.
         """
         image_links = [x["content"] for x in inputs if x["type"] == "image"]
+        images = load_images(image_links)
         if self.support_multi_image:
             text_prompt = ""
-            for i, message in enumerate(inputs):
-                if message["type"] == "text":
-                    text_prompt += message["content"]
-                elif message["type"] == "image":
-                    text_prompt += f"{DEFAULT_IMAGE_TOKEN} \n"
-            images = load_images(image_links)
-            image_tensor = self.image_processor.preprocess(images, return_tensors='pt')['pixel_values']
-            if type(image_tensor) is list:
-                tensor = [image.to(self.model.device, dtype=torch.float16) for image in image_tensor]
-            else:
-                tensor = image_tensor.to(self.model.device, dtype=torch.float16)
+            if self.input_type == "image":
+                for i, message in enumerate(inputs):
+                    if message["type"] == "text":
+                        text_prompt += message["content"]
+                    elif message["type"] == "image":
+                        text_prompt += f"{self.image_token} \n"
+            elif self.input_type == "video":
+                for i, message in enumerate(inputs):
+                    if message["type"] == "text":
+                        text_prompt += message["content"]
+                text_prompt = self.video_token + "\n" + text_prompt
+                video_frames = np.stack([np.array(image.convert("RGB")) for image in images])
 
+            else:
+                raise NotImplementedError
+            
             conv = self.conv_template.copy()
-            roles = conv.roles
             conv.append_message(conv.roles[0], text_prompt)
             conv.append_message(conv.roles[1], None)
             prompt = conv.get_prompt()
-            input_ids = tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
-            stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
-            keywords = [stop_str]
-            stopping_criteria = KeywordsStoppingCriteria(keywords, self.tokenizer, input_ids)
 
-            with torch.inference_mode():
-                output_ids = self.model.generate(
-                    input_ids,
-                    images=tensor,
-                    do_sample=True,
-                    temperature=0.2,
-                    max_new_tokens=1024,
-                    use_cache=True,
-                    stopping_criteria=[stopping_criteria])
-
-            outputs = self.tokenizer.decode(output_ids[0, input_ids.shape[1]:], skip_special_tokens=True).strip()
+            if self.input_type == "image":
+                inputs = self.processor(text=prompt, images=images, return_tensors="pt")
+            else:
+                inputs = self.processor(text=prompt, videos=video_frames, return_tensors="pt")
+            
+            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+            output_ids = self.model.generate(**inputs, do_sample=True, temperature=0.2, max_new_tokens=1024, use_cache=True)
+            input_ids = inputs["input_ids"]
+            outputs = self.processor.decode(output_ids[0, input_ids.shape[1]:], skip_special_tokens=True).strip()
 
             return outputs            
                     
@@ -115,7 +93,7 @@ class VideoLlava():
                 os.remove(image_file)
     
 if __name__ == "__main__":
-    model = VideoLlava()
+    model = VideoLlava(input_type='video')
     # 0 shot
     zero_shot_exs = [
         {

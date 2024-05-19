@@ -4,15 +4,8 @@ import os
 import sys
 from typing import List
 
-try:
-    from mllm_utils import load_images
-except ImportError:
-    from .mllm_utils import load_images
-
-try:
-    from .model_utils.otter import OtterVideo as OtterVideoModel
-except:
-    from model_utils.otter import OtterVideo as OtterVideoModel
+from mantis.mllm_tools.mllm_utils import load_images
+from mantis.mllm_tools.model_utils.otter import OtterVideo as OtterVideoModel
 
 class MyOtterVideoModel(OtterVideoModel):
     def __init__(self, model_path:str="luodian/OTTER-Video-LLaMA7B-DenseCaption") -> None:

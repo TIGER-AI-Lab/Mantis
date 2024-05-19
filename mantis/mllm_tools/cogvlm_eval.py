@@ -5,10 +5,7 @@ from PIL import Image
 from transformers import AutoModelForCausalLM, LlamaTokenizer
 from io import BytesIO
 from typing import List
-try:
-    from mllm_utils import merge_images
-except ImportError:
-    from .mllm_utils import merge_images
+from mantis.mllm_tools.mllm_utils import merge_images
 
 class CogVLM():
     support_multi_image = False

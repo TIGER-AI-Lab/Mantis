@@ -56,7 +56,8 @@ setup(
             "prettytable",
             "fire",
             "datasets==2.18.0",
-            "av"
+            "av",
+            "decord",
         ]
     }
 )

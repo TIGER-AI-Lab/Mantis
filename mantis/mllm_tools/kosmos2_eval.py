@@ -4,10 +4,7 @@ import regex as re
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForVision2Seq, BatchFeature
 from typing import List
-try:
-    from mllm_utils import load_images, merge_images
-except ImportError:
-    from .mllm_utils import load_images, merge_images
+from mantis.mllm_tools.mllm_utils import load_images, merge_images
 
 class Kosmos2():
     support_multi_image = False

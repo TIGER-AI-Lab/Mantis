@@ -27,7 +27,7 @@ def main(
 ):
     model = MLLM_Models(model_name)()
 
-    eval_dataset = datasets.load_dataset("MFuyu/MIQA_eval", "mementos")
+    eval_dataset = datasets.load_dataset("Mantis-VL/MIQA_eval", "mementos")
     
     for split in eval_dataset:
         if not split.startswith("single"):

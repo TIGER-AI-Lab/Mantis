@@ -14,9 +14,14 @@ from mllm_tools import MLLM_Models
 from typing import List
 
 def parse_answer(raw_answer):
-    if "final answer:" not in raw_answer.lower():
-        return raw_answer
-    answer = raw_answer[raw_answer.lower().index("final answer:") + len("final answer:"):].strip()
+    if "final answer:" in raw_answer.lower():
+        answer = raw_answer[raw_answer.lower().index("final answer:") + len("final answer:"):].strip()
+    elif "the answer is" in raw_answer.lower():
+        answer = raw_answer[raw_answer.lower().index("the answer is") + len("the answer is"):].strip()
+    elif "answer:" in raw_answer.lower():
+        answer = raw_answer[raw_answer.lower().index("answer:") + len("answer:"):].strip()
+    else:
+        answer = raw_answer
     return answer
 
 def get_option(final_answer):

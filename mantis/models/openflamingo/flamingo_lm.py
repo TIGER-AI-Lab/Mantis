@@ -182,7 +182,9 @@ class FlamingoLMMixin(nn.Module):
                 old_embeddings, new_num_tokens, pad_to_multiple_of
             )
             # print(old_embeddings_class)
-            extend_instance(embeddings, old_embeddings_class)
+            # extend if not the same class
+            if embeddings.__class__ != old_embeddings_class:
+                extend_instance(embeddings, old_embeddings_class)
             # this is to make sure the compatibility with mpt's SharedEmbedding
             # print(embeddings.__class__) 
             return embeddings

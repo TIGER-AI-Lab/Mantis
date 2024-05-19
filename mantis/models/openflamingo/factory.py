@@ -1,3 +1,4 @@
+import torch
 from typing import Optional
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
@@ -19,6 +20,7 @@ def create_model_and_transforms(
     decoder_layers_attr_name: str = None,
     freeze_lm_embeddings: bool = False,
     cache_dir: Optional[str] = None,
+    torch_dtype: Optional[str] = "float16",
     **flamingo_kwargs,
 ):
     """
@@ -64,7 +66,8 @@ def create_model_and_transforms(
         text_tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
     config = AutoConfig.from_pretrained(lang_encoder_path, trust_remote_code=True)
-    config.attn_config['attn_impl'] = 'flash'
+    if hasattr(config, "attn_config"):
+        config.attn_config['attn_impl'] = 'flash' if is_flash_attn_2_available() else 'torch'
     lang_encoder = AutoModelForCausalLM.from_pretrained(
         lang_encoder_path,
         config=config,
@@ -104,7 +107,13 @@ def create_model_and_transforms(
         cross_attn_every_n_layers=cross_attn_every_n_layers,
         **flamingo_kwargs,
     )
-
+    if torch_dtype is not None:
+        if torch_dtype == "float16":
+            model = model.half()
+        elif torch_dtype == "bfloat16":
+            model = model.to(torch.bfloat16)
+        else:
+            raise ValueError(f"Unsupported torch_dtype: {torch_dtype}")
     # Freeze all parameters
     model.requires_grad_(False)
     assert sum(p.numel() for p in model.parameters() if p.requires_grad) == 0
@@ -119,6 +128,7 @@ def create_model_and_transforms(
     print(
         f"Flamingo model initialized with {sum(p.numel() for p in model.parameters() if p.requires_grad)} trainable parameters"
     )
+    
 
     return model, image_processor, text_tokenizer
 

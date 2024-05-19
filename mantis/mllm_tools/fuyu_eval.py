@@ -7,10 +7,7 @@ from transformers import FuyuProcessor, FuyuForCausalLM, AutoTokenizer
 from PIL import Image
 from typing import List
 from io import BytesIO
-try:
-    from mllm_utils import merge_images
-except ImportError:
-    from .mllm_utils import merge_images
+from mantis.mllm_tools.mllm_utils import merge_images
 
 class Fuyu():
     support_multi_image = False

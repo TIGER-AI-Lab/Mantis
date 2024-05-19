@@ -23,8 +23,18 @@ def get_mllava(model_name: str):
     
 def get_mantis_idefics(model_name:str):
     from .idefics2_eval import Idefics2
-    if model_name == "mantis-8b-idefics2_8192_qlora":
-        return Idefics2(model_path="MFuyu/mantis-8b-idefics2_8192_qlora")
+    if model_name == "mantis-8b-idefics2_8192":
+        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2_8192")
+    elif model_name == "mantis-8b-idefics2_8192_qlora":
+        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2_8192_qlora")
+    elif model_name == "mantis-8b-idefics2-data-ablation-1_8192_qlora":
+        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2-data-ablation-1_8192_qlora")
+    elif model_name == "mantis-8b-idefics2-data-ablation-2_8192_qlora":
+        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2-data-ablation-2_8192_qlora")
+    elif model_name == "mantis-8b-idefics2-data-ablation-3_8192_qlora":
+        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2-data-ablation-3_8192_qlora")
+    elif model_name == "mantis-8b-idefics2-data-ablation-4_8192_qlora":
+        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2-data-ablation-4_8192_qlora")
     else:
         raise ValueError(f'Invalid model name: {model_name}')
  
@@ -41,9 +51,23 @@ def MLLM_Models(model_name:str):
     elif model_name == "llavanext":
         from .llava_next_eval import LlavaNext
         return LlavaNext
-    elif model_name == "openflamingo":
+    elif "openflamingo" in model_name.lower():
+        if model_name == "openflamingo-9b":
+            model_id = "openflamingo/OpenFlamingo-9B-vitl-mpt7b"
+            input_type = "pretrained"
+        elif model_name == "openflamingo-3b":
+            model_id = "openflamingo/OpenFlamingo-4B-vitl-rpj3b-langinstruct"
+            input_type = "pretrained"
+        elif model_name == "llava-9b-openflamingo":
+            model_id = "Mantis-VL/llava-9b-openflamingo_2048"
+            input_type = "chat"
+        elif model_name == "mantis-9b-openflamingo":
+            model_id = "Mantis-VL/mantis-9b-openflamingo_2048"
+            input_type = "chat"
+        else:
+            raise ValueError(f'Invalid model name: {model_name}')
         from .openflamingo_eval import OpenFlamingo
-        return OpenFlamingo
+        return partial(OpenFlamingo, model_id=model_id, input_type=input_type)
     elif model_name == "fuyu":
         from .fuyu_eval import Fuyu
         return Fuyu
@@ -74,9 +98,20 @@ def MLLM_Models(model_name:str):
     elif model_name == "vila":
         from .vila_eval import VILA
         return VILA
-    elif model_name == "videollava":
+    elif "videollava" in model_name.lower():
+        if model_name == "videollava":
+            model_id = 'LanguageBind/Video-LLaVA-7B-hf'
+            input_type = "image"
+        elif model_name == "videollava-image":
+            model_id = 'LanguageBind/Video-LLaVA-7B-hf'
+            input_type = "image"
+        elif model_name == "videollava-video":
+            model_id = 'LanguageBind/Video-LLaVA-7B-hf'
+            input_type = "video"
+        else:
+            raise ValueError(f'Invalid model name: {model_name}')
         from .videollava_eval import VideoLlava
-        return VideoLlava
+        return partial(VideoLlava, model_path=model_id, input_type=input_type)
     elif model_name.lower().startswith("gpt4v"):
         from .gpt4v_eval import GPT4V
         return GPT4V

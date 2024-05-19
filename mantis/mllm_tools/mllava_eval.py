@@ -10,7 +10,7 @@ from transformers.utils import is_flash_attn_2_available
 class MLlava():
     support_multi_image = True
     merged_image_files = []
-    def __init__(self, model_path:str="MFuyu/mllava_nlvr2_4096") -> None:
+    def __init__(self, model_path:str="Mantis-VL/mllava_nlvr2_4096") -> None:
         """Llava model wrapper
 
         Args:

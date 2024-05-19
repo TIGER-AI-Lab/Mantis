@@ -8,7 +8,7 @@ from mantis.mllm_tools.mllm_utils import load_images
 
 class MFuyu():
     support_multi_image = True
-    def __init__(self, model_id:str="MFuyu/mfuyu_v2_8192_720p-5500") -> None:
+    def __init__(self, model_id:str="Mantis-VL/mfuyu_v2_8192_720p-5500") -> None:
         """
         Args:
             model_id (str): Fuyu model name, e.g. "adept/fuyu-8b"

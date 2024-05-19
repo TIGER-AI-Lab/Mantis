@@ -52,7 +52,7 @@ DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 
-RUN_NAME="llava-8b-openflamingo"
+RUN_NAME="llava-9b-openflamingo"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
