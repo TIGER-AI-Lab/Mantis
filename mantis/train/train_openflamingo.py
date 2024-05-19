@@ -334,7 +334,6 @@ def main(
                 torch.save(non_lora_state_dict, os.path.join(final_checkpoint_dir, 'non_lora_trainables.bin'))
         else:
             trainer.save_model(output_dir=final_checkpoint_dir)
-        processor.save_pretrained(final_checkpoint_dir)
     if training_args.do_predict:
         print("Predicting...")
         trainer.predict(test_dataset)

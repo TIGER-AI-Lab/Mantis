@@ -11,7 +11,7 @@ from transformers import VideoLlavaProcessor, VideoLlavaForConditionalGeneration
 from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
 from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3
 from conversation import conv_idefics_2 as default_conv, conv_templates
-from mantis.train.data import load_data, load_data_from_config, set_ignore_index, set_default_image_token, set_default_image_token_id
+from mantis.train.data import load_data, load_data_from_config, set_ignore_index, set_default_image_token, set_default_image_token_id, set_default_video_token, set_default_video_token_id
 from pathlib import Path
 from typing import Optional
 from pathlib import Path
@@ -127,7 +127,6 @@ class ModelArguments:
         default=True,
     )
     
-
 def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
@@ -165,9 +164,11 @@ def load_model(model_args, training_args):
         model = get_peft_model(model, lora_config)
         
     # idefics2's ignore index is not -100.
-    set_ignore_index(model.image_token_id)
-    set_default_image_token(processor.tokenizer.decode(model.image_token_id))
-    set_default_image_token_id(model.image_token_id)
+    set_ignore_index(model.config.ignore_index)
+    set_default_image_token_id(model.config.image_token_index)
+    set_default_video_token_id(model.config.video_token_index)
+    set_default_image_token(processor.tokenizer.decode(model.config.image_token_index))
+    set_default_video_token(processor.tokenizer.decode(model.config.video_token_index))
         
     return model, processor
     

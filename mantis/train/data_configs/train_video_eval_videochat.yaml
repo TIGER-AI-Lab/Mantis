@@ -3,5 +3,7 @@ data:
     name: "video_eval"
     type: json
     path: "../../data/video_eval/data/subset20k_for_mantis/train.json"
-    format: chat
+    format: chat_video
     split: train
+    max_num_frames: 8
+    video_dir: "../../data/video_eval/data/subset20k_for_mantis"

@@ -33,18 +33,22 @@ def set_ignore_index(new_ignore_index=-100):
 def set_default_image_token(new_default_image_token="<image>"):
     global DEFAULT_IMAGE_TOKEN
     DEFAULT_IMAGE_TOKEN = new_default_image_token
+    print("setting default image token to", new_default_image_token)
 
 def set_default_image_token_id(new_default_image_token_id=None):
     global DEFAULT_IMAGE_TOKEN_ID
     DEFAULT_IMAGE_TOKEN_ID = new_default_image_token_id
+    print("setting default image token id to", new_default_image_token_id)
     
 def set_default_video_token(new_default_video_token="<video>"):
     global DEFAULT_VIDEO_TOKEN
     DEFAULT_VIDEO_TOKEN = new_default_video_token
+    print("setting default video token to", new_default_video_token)
     
 def set_default_video_token_id(new_default_video_token_id=None):
     global DEFAULT_VIDEO_TOKEN_ID
     DEFAULT_VIDEO_TOKEN_ID = new_default_video_token_id
+    print("setting default video token id to", new_default_video_token_id)
 
 def read_local_cached_dataset(data_path, name, split, offline_sha):
     assert offline_sha is not None, "offline_sha must be provided when HF_DATASETS_OFFLINE is True"
@@ -449,7 +453,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
                 content = content.replace(DEFAULT_IMAGE_TOKEN, "").strip('\n ')
                 if DEFAULT_VIDEO_TOKEN in content:
                     has_video_token = True
-                conv.append_message(role, sentence.get("content", sentence.get("text", sentence.get("value", ""))))
+                conv.append_message(role, content)
             if not has_video_token:
                 if random.random() < 0.5:
                     conv.messages[0][1] = DEFAULT_VIDEO_TOKEN + " " + conv.messages[0][1]
@@ -512,6 +516,8 @@ class ChatVideoDataset(torch.utils.data.Dataset):
             if self.max_num_frames and len(video_frames) > self.max_num_frames:
                 indices = np.arange(0, len(video_frames), len(video_frames) / self.max_num_frames).astype(int)
                 video_frames = [video_frames[i] for i in indices]
+            # change video frames from PIL.Image to ndarray
+            video_frames = np.stack([np.array(x.convert('RGB')) for x in video_frames])
         else:
             video_frames = None
                 
@@ -544,10 +550,10 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         
         # for debug, print the targets to make sure the right tokens are learned
         # need to print to make sure that the masked tokens are correct.
-        _target = target.clone().detach()
-        _target[_target == IGNORE_INDEX] = 0
-        print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
-        print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        # _target = target.clone().detach()
+        # _target[_target == IGNORE_INDEX] = 0
+        # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
+        # print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
         
 
         return encoding

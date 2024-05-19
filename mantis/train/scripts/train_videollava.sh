@@ -11,13 +11,13 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
-    DATA_CONFIG_FILE="./data_configs/train_video_eval.yaml"
+    DATA_CONFIG_FILE="./data_configs/train_video_eval_videochat.yaml"  # change to this for offical training
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="HuggingFaceM4/idefics2-8b"
+    model_name_or_path="LanguageBind/Video-LLaVA-7B-hf"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -44,9 +44,9 @@ lora_enabled=false
 qlora_enabled=false
 DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=64
+global_batch_size=128
 
-RUN_NAME="mantis-8b-idefics2-video-eval-20k"
+RUN_NAME="videollava-7b-video-eval-20k"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -144,7 +144,7 @@ echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_
 accelerate launch --config_file=$config_file \
     --machine_rank $RANK --main_process_ip $MASTER_ADDR --main_process_port $MASTER_PORT \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
-    train_idefics2.py --model_name_or_path $model_name_or_path \
+    train_videollava.py --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
     --data_format $DATA_FORMAT \
     --run_name $RUN_NAME \
@@ -153,7 +153,7 @@ accelerate launch --config_file=$config_file \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
-    --num_train_epochs 3 \
+    --num_train_epochs 1 \
     --per_device_train_batch_size $per_device_train_batch_size \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
@@ -162,7 +162,7 @@ accelerate launch --config_file=$config_file \
     --save_steps 500 \
     --eval_steps 500 \
     --save_total_limit 1 \
-    --learning_rate 1e-5 \
+    --learning_rate 5e-6 \
     --weight_decay 0.01 \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
