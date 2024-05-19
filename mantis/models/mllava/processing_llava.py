@@ -61,7 +61,7 @@ class MLlavaProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
-        self.image_token_index = tokenizer.convert_tokens_to_ids("<image>")
+        self.image_token_index = None
         
     def preprocess_interleaved_images_and_text(
         self,
@@ -223,6 +223,8 @@ class MLlavaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        if not self.image_token_index:
+            self.image_token_index = self.tokenizer.convert_tokens_to_ids("<image>")
         if add_image_ids:
             text, images = self.preprocess_interleaved_images_and_text(text, images)
         
