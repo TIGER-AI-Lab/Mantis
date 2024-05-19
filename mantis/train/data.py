@@ -9,6 +9,8 @@ import time
 import os
 import math
 import random
+import av
+
 from pathlib import Path
 from tqdm import tqdm
 from datasets.config import HF_DATASETS_OFFLINE, HF_DATASETS_CACHE
@@ -21,6 +23,8 @@ from typing import List, Dict
 IGNORE_INDEX = -100
 DEFAULT_IMAGE_TOKEN = "<image>"
 DEFAULT_IMAGE_TOKEN_ID = None # should be set when loading the processor
+DEFAULT_VIDEO_TOKEN = "<video>"
+DEFAULT_VIDEO_TOKEN_ID = None # should be set when loading the processor
 
 def set_ignore_index(new_ignore_index=-100):
     global IGNORE_INDEX
@@ -33,6 +37,14 @@ def set_default_image_token(new_default_image_token="<image>"):
 def set_default_image_token_id(new_default_image_token_id=None):
     global DEFAULT_IMAGE_TOKEN_ID
     DEFAULT_IMAGE_TOKEN_ID = new_default_image_token_id
+    
+def set_default_video_token(new_default_video_token="<video>"):
+    global DEFAULT_VIDEO_TOKEN
+    DEFAULT_VIDEO_TOKEN = new_default_video_token
+    
+def set_default_video_token_id(new_default_video_token_id=None):
+    global DEFAULT_VIDEO_TOKEN_ID
+    DEFAULT_VIDEO_TOKEN_ID = new_default_video_token_id
 
 def read_local_cached_dataset(data_path, name, split, offline_sha):
     assert offline_sha is not None, "offline_sha must be provided when HF_DATASETS_OFFLINE is True"
@@ -345,6 +357,209 @@ class ChatDataset(torch.utils.data.Dataset):
 
         return collator_fn
 
+def read_video_pyav(container, indices):
+    '''
+    Decode the video with PyAV decoder.
+
+    Args:
+        container (av.container.input.InputContainer): PyAV container.
+        indices (List[int]): List of frame indices to decode.
+
+    Returns:
+        np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
+    '''
+    frames = []
+    container.seek(0)
+    start_index = indices[0]
+    end_index = indices[-1]
+    for i, frame in enumerate(container.decode(video=0)):
+        if i > end_index:
+            break
+        if i >= start_index and i in indices:
+            frames.append(frame)
+    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+class ChatVideoDataset(torch.utils.data.Dataset):
+    """
+    conv format:
+    <s> {system}\n USER: {}<0x04>ASSISTANT: {}</s> ...
+    """
+    def __init__(
+        self, processor, data_path, dataset_type, name, 
+        video_dir, split, max_seq_len, conv_format,
+        is_master_worker=True, 
+        max_size=None, 
+        shuffle=False, 
+        max_num_frames=None, 
+        sample_ratio=1.0,
+    ):
+        self.processor = processor
+        self.data_path = Path(data_path)
+        self.dataset_type = dataset_type
+        self.name = name
+        self.split = split
+        self.is_master_worker = is_master_worker
+        self.max_size = max_size
+        self.max_num_frames = max_num_frames
+        self.print(f"Loading dataset '{name}' from {data_path}")
+        self.data = load_json_data(data_path)
+        self.video_dir = Path(video_dir)
+        assert self.video_dir.exists(), f"{video_dir} does not exist"
+        if shuffle:
+            random.seed(42)
+            random.shuffle(self.data)
+        if self.max_size:
+            print(f"Truncating dataset to from {len(self.data)} to {self.max_size}")
+            self.data = self.data[:self.max_size]
+        
+        self.conv = conv_format.copy()
+        self.conversations, self.all_selected_idxs = self.preprocess()
+
+        self.max_seq_len = max_seq_len
+    
+    def print(self, *args, **kwargs):
+        if self.is_master_worker:
+            print(*args, **kwargs)
+
+    def preprocess(self):
+        
+        # process formats
+        conv = self.conv
+        video_dir = self.video_dir
+        roles = {"human": conv.roles[0], "gpt": conv.roles[1], "user": conv.roles[0], "assistant": conv.roles[1]}
+        conversations = []
+        all_selected_idxs = []
+        for i, item in tqdm(
+            enumerate(self.data), desc="Format conversations and load images", 
+            total=len(self.data), disable=not self.is_master_worker
+        ):
+            # phd
+            source_key = "conversation" if "conversation" in item else "conversations"
+            source = item[source_key]
+            if roles[source[0].get("from", source[0].get("role"))] != conv.roles[0]:
+                # Skip the first one if it is not from human
+                source = source[1:]
+
+            conv.messages = []
+            has_video_token = False
+            for j, sentence in enumerate(source):
+                role = roles[sentence.get("from", sentence.get("role"))]
+                assert role == conv.roles[j % 2], f"{i}"
+                content = sentence.get("content", sentence.get("text", sentence.get("value", "")))
+                content = content.replace(DEFAULT_IMAGE_TOKEN, "").strip('\n ')
+                if DEFAULT_VIDEO_TOKEN in content:
+                    has_video_token = True
+                conv.append_message(role, sentence.get("content", sentence.get("text", sentence.get("value", ""))))
+            if not has_video_token:
+                if random.random() < 0.5:
+                    conv.messages[0][1] = DEFAULT_VIDEO_TOKEN + " " + conv.messages[0][1]
+                else:
+                    conv.messages[0][1] = conv.messages[0][1] + " " + DEFAULT_VIDEO_TOKEN
+
+            conv_messages = conv.messages.copy()
+            
+            try:
+                if "video" in item:
+                    video_file = video_dir / item['video']
+                    assert video_file.exists(), f"{video_file} does not exist"
+                elif "images" in item and item['images'] and len(item['images']) > 0:
+                    if isinstance(item['images'][0], str):
+                        video_frames = [video_dir / image for image in item['images']]
+                        assert all([image.exists() for image in video_frames]), f"{video_frames} does not exist"
+                    elif isinstance(item['images'][0], dict):
+                        video_frames = [video_dir / image['path'] for image in item['images']]
+                        assert all([image.exists() for image in video_frames]), f"{video_frames} does not exist"
+                    elif isinstance(item['images'][0], PIL.Image.Image):
+                        video_frames = item['images']
+                conversations.append(conv_messages)
+                all_selected_idxs.append(i)
+            except Exception as e:
+                print(f"Error at {i}")
+                print(e)
+        
+        return conversations, all_selected_idxs
+        
+    def __len__(self):
+        return len(self.conversations)
+    
+    def __getitem__(self, idx):
+        conv_messages = self.conversations[idx]
+        selected_idx = self.all_selected_idxs[idx]
+        item = self.data[selected_idx]
+        video_dir = self.video_dir
+        
+        if "video" in item:
+            video_file = video_dir / item['video']
+            container = av.open(video_file)
+
+            # sample uniformly 8 frames from the video
+            total_frames = container.streams.video[0].frames
+            if self.max_num_frames and total_frames > self.max_num_frames:
+                indices = np.arange(0, total_frames, total_frames / self.max_num_frames).astype(int)
+            else:
+                indices = np.arange(total_frames)
+            video_frames = read_video_pyav(container, indices)
+        elif "images" in item and item['images'] and len(item['images']) > 0:
+            if isinstance(item['images'][0], str):
+                video_frames = [video_dir / image for image in item['images']]
+                video_frames = load_images(video_frames)
+            elif isinstance(item['images'][0], dict):
+                video_frames = [video_dir / image['path'] for image in item['images']]
+                video_frames = load_images(video_frames)
+            elif isinstance(item['images'][0], PIL.Image.Image):
+                video_frames = item['images']
+                
+            if self.max_num_frames and len(video_frames) > self.max_num_frames:
+                indices = np.arange(0, len(video_frames), len(video_frames) / self.max_num_frames).astype(int)
+                video_frames = [video_frames[i] for i in indices]
+        else:
+            video_frames = None
+                
+        # check the number of images
+        self.conv.messages = conv_messages
+        
+        
+        conv_str = self.conv.get_prompt()
+        encoding = self.processor(conv_str, videos=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+        
+        new_conv = self.conv.copy()
+        new_conv.messages = []
+        encoding["labels"] = torch.full_like(encoding["input_ids"], IGNORE_INDEX, dtype=encoding["input_ids"].dtype)
+        target = encoding["labels"][0]
+        input_ids = encoding["input_ids"][0]
+        for i in range(0, len(conv_messages), 2):
+            new_conv.append_message(conv_messages[i][0], conv_messages[i][1])
+            prompt = new_conv.get_prompt()
+            user_len = len(self.processor(prompt, return_tensors="pt", truncation=True, max_length=self.max_seq_len)["input_ids"][0])
+
+            new_conv.append_message(conv_messages[i+1][0], conv_messages[i+1][1])
+            prompt = new_conv.get_prompt()
+            user_and_assistant_len = len(self.processor(prompt, return_tensors="pt", truncation=True, max_length=self.max_seq_len)["input_ids"][0])
+            target[user_len:user_and_assistant_len] = input_ids[user_len:user_and_assistant_len]
+            
+        if torch.all(target == IGNORE_INDEX):
+            print("no labels for a sample in ", self.data_path, self.name, self.split)
+        
+        # print(self.data_path, self.name, self.split)
+        
+        # for debug, print the targets to make sure the right tokens are learned
+        # need to print to make sure that the masked tokens are correct.
+        _target = target.clone().detach()
+        _target[_target == IGNORE_INDEX] = 0
+        print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
+        print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        
+
+        return encoding
+
+    @staticmethod
+    def get_collator_fn(processor, max_length=None):
+        def collator_fn(batch):
+            batch_encoding = processor._right_pad_inputs_with_attention_mask(model_inputs=batch)
+            return batch_encoding
+
+        return collator_fn
+
 class VQADataset(torch.utils.data.Dataset):
     def __init__(self, processor, data_path, name, split, max_seq_len=1024):
         self.processor = processor
@@ -443,14 +658,19 @@ def load_data_from_config(data_args, processor):
         max_size = sub_dataset_config.get('max_size', None)
         shuffle = sub_dataset_config.get('shuffle', False)
         max_num_images = sub_dataset_config.get('max_num_images', None)
+        max_num_frames = sub_dataset_config.get('max_num_frames', None)
         dataset_type = sub_dataset_config.get('type', 'huggingface')
         offline_sha = sub_dataset_config.get('offline_sha', None)
         vl_only = sub_dataset_config.get('vl_only', False)
         revision = sub_dataset_config.get('revision', "script")
+        video_dir = sub_dataset_config.get('video_dir', None)
         assert split in ['train', 'val', 'test'], f"Unknown split {split}"
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)
+        elif sub_dataset_config['format'] == 'chat_video':
+            sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
+                data_args.is_master_worker, max_size, shuffle, max_num_frames)
         elif sub_dataset_config['format'] == 'vqa':
             sub_dataset = VQADataset(processor, data_path, name, split, max_seq_len)
         else:
