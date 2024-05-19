@@ -46,7 +46,8 @@ setup(
             "dask",
             "einops-exts",
             "datasets==2.18.0",
-            "open_clip_torch"
+            "open_clip_torch",
+            "av"
         ],
         "eval": [
             "tqdm",
@@ -54,7 +55,8 @@ setup(
             "easy-openai @ git+https://github.com/jdf-prog/easy-openai.git",
             "prettytable",
             "fire",
-            "datasets==2.18.0"
+            "datasets==2.18.0",
+            "av"
         ]
     }
 )
