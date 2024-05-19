@@ -55,7 +55,7 @@ if [ -z $HF_TOKEN ]; then
     exit 1
 fi
 
-hf_hub_user_name="MFuyu" # set this will push the model to your hub after training
+hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
 do_pretrain=True
 max_seq_len=4096
 lora_enabled=false
