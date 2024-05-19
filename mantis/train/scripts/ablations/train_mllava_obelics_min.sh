@@ -17,7 +17,7 @@ if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="Mantis-VL/llava_siglip_llama3_8b_pretrain_obelics_min_8192_lora"
+    model_name_or_path="Mantis-VL/llava_siglip_llama3_8b_pretrain_obelics_min_8192"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -48,7 +48,6 @@ global_batch_size=128
 mllava_type="llava"
 
 RUN_NAME="${mllava_type}_clip_llama3_8b_finetune_obelics_min"
-# RUN_NAME="${mllava_type}_siglip_llama3_8b_finetune"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
