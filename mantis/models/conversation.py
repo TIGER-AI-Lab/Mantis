@@ -454,6 +454,18 @@ conv_openflamingo = Conversation(
     sep="<|endofchunk|>",
 )
 
+conv_videollava = Conversation(
+    system="A chat between a curious human and an artificial intelligence assistant. "
+           "The assistant gives helpful, detailed, and polite answers to the human's questions.",
+    roles=("USER", "ASSISTANT"),
+    version="v1",
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.TWO,
+    sep=" ",
+    sep2="</s>",
+)
+
 default_conversation = conv_mfuyu_v1
 conv_templates = {
     "default": conv_vicuna_v0,
@@ -474,6 +486,7 @@ conv_templates = {
     "mllava_v1_mmtag": conv_mllava_v1_mmtag,
     "idefics_2": conv_idefics_2,
     "openflamingo": conv_openflamingo,
+    "videollava": conv_videollava,
 
     "mpt": conv_mpt,
 }
