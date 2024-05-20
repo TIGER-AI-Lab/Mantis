@@ -47,7 +47,7 @@ OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 mllava_type="llava"
 
-RUN_NAME="${mllava_type}_clip_llama3_8b_finetune_obelics_min"
+RUN_NAME="${mllava_type}_siglip_llama3_8b_finetune_obelics_min"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
