@@ -149,6 +149,7 @@ def load_model(model_args, training_args):
         model_args.model_name_or_path,
         torch_dtype=torch_dtype,
         attn_implementation=model_args.attn_implementation,
+        device_map={"": training_args.device},
         quantization_config=bnb_config if model_args.qlora_enabled else None,
     )
     if bnb_config:

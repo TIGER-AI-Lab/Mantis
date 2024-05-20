@@ -154,6 +154,7 @@ def load_model(model_args, training_args):
             bnb_4bit_compute_dtype=torch_dtype,
             bnb_4bit_quant_storage=torch_dtype,
             bnb_4bit_use_double_quant=True,
+            llm_int8_skip_modules=["vision_tower"],
         )
     else:
         bnb_config = None
@@ -202,6 +203,7 @@ def load_model(model_args, training_args):
                 model_args.model_name_or_path, torch_dtype=torch_dtype, 
                 attn_implementation = model_args.attn_implementation,
                 quantization_config=bnb_config if model_args.qlora_enabled else None,
+                device_map={"": training_args.device}
             )
 
             print("Successfully loaded model from:", model_args.model_name_or_path)

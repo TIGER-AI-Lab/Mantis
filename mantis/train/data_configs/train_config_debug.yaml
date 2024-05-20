@@ -1,6 +1,6 @@
 data:  
   - 
-    name: "nextqa"
+    name: "multi_vqa"
     type: huggingface
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
