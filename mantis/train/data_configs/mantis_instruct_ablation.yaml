@@ -53,7 +53,7 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_size: 50000
+    max_size: 15000
   - 
     name: "iconqa"
     type: huggingface
@@ -62,7 +62,7 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_size: 50000
+    max_size: 15000
   - 
     name: "contrastive_caption"
     type: huggingface
@@ -70,6 +70,7 @@ data:
     format: chat
     split: train
     revision: script
+    max_size: 15000
   - 
     name: "imagecode"
     type: huggingface
@@ -78,6 +79,7 @@ data:
     split: train
     shuffle: true
     revision: script
+    max_size: 15000
   - 
     name: "multi_vqa"
     type: huggingface
@@ -106,5 +108,5 @@ data:
     path: "TIGER-Lab/Mantis-Instruct"
     format: chat
     split: train
-    max_num_images: 20
+    max_num_images: 8
     revision: script
