@@ -17,7 +17,7 @@ if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="Mantis-VL/llava_siglip_llama3_8b_pretrain_obelics_min_8192"
+    model_name_or_path="Mantis-VL/llava_siglip_llama3_8b_pretrain_obelics_min_4096"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
