@@ -13,3 +13,8 @@ num_frames=8
 log_dir="results/mvbench/${num_frames}frames_${resolution}"
 mkdir -p $log_dir
 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name ${model_name} > $log_dir/mvbench_${model_name}.txt
+
+# BLINK
+cd ../../BLINK_Benchmark/eval
+mkdir -p logs
+python test_benchmark.py --model_name $model_name --task_name all > ./logs/eval_${model_name}.log 2>&1
