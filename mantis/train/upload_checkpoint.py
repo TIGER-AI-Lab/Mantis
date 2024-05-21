@@ -67,7 +67,7 @@ def main(
             if file.is_file():
                 print(f"Uploading {file.name} to {hub_model_id}")
                 api.upload_file(
-                    file_path=str(file),
+                    path_or_fileobj=str(file),
                     path_in_repo=file.name,
                     repo_id=hub_model_id,
                     repo_type="model"
