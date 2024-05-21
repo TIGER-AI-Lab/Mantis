@@ -18,6 +18,16 @@ def get_mllava(model_name: str):
         return MLlava(model_path="TIGER-Lab/Mantis-8B-clip-llama3")
     elif model_name == "mantis-8b-siglip-llama3":
         return MLlava(model_path="TIGER-Lab/Mantis-8B-siglip-llama3")
+    elif model_name == "mantis-8b-siglip-llama3-ablation1":
+        return MLlava(model_path="Mantis-VL/llava_siglip_llama3_8b_finetune_ablation1_8192_lora")
+    elif model_name == "mantis-8b-siglip-llama3-ablation2":
+        return MLlava(model_path="Mantis-VL/llava_siglip_llama3_8b_finetune_ablation2_8192_lora")
+    elif model_name == "mantis-8b-siglip-llama3-ablation3":
+        return MLlava(model_path="Mantis-VL/llava_siglip_llama3_8b_finetune_ablation3_8192_lora")
+    elif model_name == "mantis-8b-siglip-llama3-ablation4":
+        return MLlava(model_path="Mantis-VL/llava_siglip_llama3_8b_finetune_ablation4_8192_lora")
+    elif model_name == "mantis-8b-siglip-llama3-obelics-min":
+        return MLlava(model_path="Mantis-VL/llava_siglip_llama3_8b_finetune_obelics_min_8192_lora")
     else:
         raise ValueError(f'Invalid model name: {model_name}')
     
@@ -34,7 +44,8 @@ def get_mantis_idefics(model_name:str):
     elif model_name == "mantis-8b-idefics2-data-ablation-3_8192_qlora":
         return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2-data-ablation-3_8192_qlora")
     elif model_name == "mantis-8b-idefics2-data-ablation-4_8192_qlora":
-        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2-data-ablation-4_8192_qlora")
+        # same as mantis-8b-idefics2_8192_qlora
+        return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2_8192_qlora")
     else:
         raise ValueError(f'Invalid model name: {model_name}')
  

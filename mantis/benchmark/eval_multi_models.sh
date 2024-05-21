@@ -29,12 +29,21 @@ bash eval_single_model.sh "mantis-7b-bakllava"
 
 # ablations
 bash eval_single_model.sh "mantis-8b-idefics2_8192_qlora"
+bash eval_single_model.sh "mantis-8b-idefics2_8192"
 bash eval_single_model.sh "mantis-8b-idefics2-data-ablation-1_8192_qlora"
 bash eval_single_model.sh "mantis-8b-idefics2-data-ablation-2_8192_qlora"
 bash eval_single_model.sh "mantis-8b-idefics2-data-ablation-3_8192_qlora"
-bash eval_single_model.sh "mantis-8b-idefics2-data-ablation-4_8192_qlora"
 bash eval_single_model.sh "llava-9b-openflamingo"
 bash eval_single_model.sh "mantis-9b-openflamingo"
+
+export CUDA_VISIBLE_DEVICES=4 && bash eval_single_model.sh "mantis-8b-idefics2_8192" &
+export CUDA_VISIBLE_DEVICES=5 && bash eval_single_model.sh "mantis-8b-idefics2-data-ablation-3_8192_qlora" &
+export CUDA_VISIBLE_DEVICES=6 && bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation1" &
+export CUDA_VISIBLE_DEVICES=7 && bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation2" &
+
+bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation3"
+bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation4"
+bash eval_single_model.sh "mantis-8b-siglip-llama3-obelics-min"
 
 # export CUDA_VISIBLE_DEVICES=1 && bash eval_single_model.sh "mantis-8b-idefics2_8192_qlora" &
 # export CUDA_VISIBLE_DEVICES=4 && bash eval_single_model.sh "mantis-8b-idefics2-data-ablation-1_8192_qlora" &
