@@ -161,3 +161,8 @@ cython_debug/
 
 /test*
 /hf_space
+/.vscode
+/BLINK_Benchmark
+/checkpoints
+/data
+/mantis
