@@ -52,7 +52,7 @@ python run_mantis.py
 ## Training
 Install the requirements with the following command:
 ```bash
-pip install -e[train,eval]
+pip install -e .[train,eval]
 cd mantis/train
 ```
 
