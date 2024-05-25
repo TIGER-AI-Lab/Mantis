@@ -46,7 +46,7 @@ DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=64
 
-RUN_NAME="mantis-8b-idefics2-video-eval-20k"
+RUN_NAME="mantis-8b-idefics2-video-eval-50k"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -153,14 +153,14 @@ accelerate launch --config_file=$config_file \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
-    --num_train_epochs 3 \
+    --num_train_epochs 2 \
     --per_device_train_batch_size $per_device_train_batch_size \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
-    --save_steps 500 \
-    --eval_steps 500 \
+    --save_steps 100 \
+    --eval_steps 100 \
     --save_total_limit 1 \
     --learning_rate 1e-5 \
     --weight_decay 0.01 \

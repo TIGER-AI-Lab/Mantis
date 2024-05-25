@@ -46,7 +46,7 @@ DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 
-RUN_NAME="videollava-7b-video-eval-20k"
+RUN_NAME="videollava-7b-video-eval-50k"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
