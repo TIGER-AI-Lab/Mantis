@@ -2,6 +2,6 @@ data:
   - 
     name: "video_eval"
     type: json
-    path: "../../data/video_eval/data/all_50k/train_50k_for_mantis/train.json"
-    format: chat
+    path: "../../data/video_eval/data/subset20k_for_mantis/train.json"
+    format: classification
     split: train

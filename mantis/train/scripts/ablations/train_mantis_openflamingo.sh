@@ -48,7 +48,6 @@ hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after tr
 max_seq_len=2048 # openflamingo use cross attention for vision processing, which does not add tokens to the input sequence
 lora_enabled=false
 qlora_enabled=false
-DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 
@@ -156,7 +155,6 @@ accelerate launch --config_file=$config_file \
     --clip_vision_encoder_path $clip_vision_encoder_path \
     --clip_vision_encoder_pretrained $clip_vision_encoder_pretrained \
     --data_config_file $DATA_CONFIG_FILE \
-    --data_format $DATA_FORMAT \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \

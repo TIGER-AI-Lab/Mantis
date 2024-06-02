@@ -1,10 +1,11 @@
 
 import torch
+import logging
+import requests
+import json
 from typing import List
 from io import BytesIO
 from PIL import Image
-import requests
-import json
 from pathlib import Path
 from tqdm import tqdm
 

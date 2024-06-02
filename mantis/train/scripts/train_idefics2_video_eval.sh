@@ -40,13 +40,14 @@ fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
 max_seq_len=4096
-lora_enabled=false
-qlora_enabled=false
-DATA_FORMAT="chat"
+lora_enabled=true
+qlora_enabled=true
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=64
+problem_type="regression"
+num_labels=7
 
-RUN_NAME="mantis-8b-idefics2-video-eval-50k"
+RUN_NAME="mantis-8b-idefics2-video-eval-debug"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -60,6 +61,7 @@ else
     echo "lora is disabled"
     RUN_NAME="${RUN_NAME}_${max_seq_len}"
 fi
+RUN_NAME="${RUN_NAME}_${problem_type}"
 echo "RUN_NAME = $RUN_NAME"
 
 hub_model_id="${hf_hub_user_name}/${RUN_NAME}" # the hub model id
@@ -146,14 +148,15 @@ accelerate launch --config_file=$config_file \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
     train_idefics2.py --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
-    --data_format $DATA_FORMAT \
+    --problem_type $problem_type \
+    --num_labels $num_labels \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
-    --num_train_epochs 2 \
+    --num_train_epochs 1 \
     --per_device_train_batch_size $per_device_train_batch_size \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \

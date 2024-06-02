@@ -60,7 +60,6 @@ hf_hub_user_name="" # set this will push the model to your hub after training
 do_pretrain=True
 max_seq_len=8192
 lora_enabled=false
-DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=256
 mllava_type="llava"
@@ -163,7 +162,6 @@ accelerate launch --config_file=$config_file \
     --llm_backbone $llm_backbone \
     --vision_backbone $vision_backbone \
     --data_config_file $DATA_CONFIG_FILE \
-    --data_format $DATA_FORMAT \
     --conv_template "plain" \
     --run_name $RUN_NAME \
     --bf16 True \
