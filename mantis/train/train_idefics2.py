@@ -113,6 +113,8 @@ def load_model(model_args, training_args):
     else:
         print("Using classification model")
         MODEL_CLASS = Idefics2ForSequenceClassification
+        if model_args.lora_enabled or model_args.qlora_enabled:
+            raise ValueError("LoRA and QLoRA are not supported for Idefics2ForSequenceClassification for now")
     
     if model_args.qlora_enabled:
         bnb_config = BitsAndBytesConfig(
