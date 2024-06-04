@@ -1658,15 +1658,33 @@ class Idefics2Model(Idefics2PreTrainedModel):
             patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(
-                pixel_values=pixel_values,
-                patch_attention_mask=patch_attention_mask,
-            ).last_hidden_state
+            pixel_batch_size = 2 # avoid OOM
+            all_image_hidden_states = []
+            for i in range(0, pixel_values.size(0), pixel_batch_size):
+                batch_pixel_values = pixel_values[i : i + pixel_batch_size]
+                batch_patch_attention_mask = patch_attention_mask[i : i + pixel_batch_size]
+                
+                batch_image_hidden_states = self.vision_model(
+                    pixel_values=batch_pixel_values,
+                    patch_attention_mask=batch_patch_attention_mask,
+                ).last_hidden_state
+                
+                batch_image_hidden_states = self.connector(
+                    batch_image_hidden_states, attention_mask=batch_patch_attention_mask.view(batch_pixel_values.size(0), -1)
+                )
+                all_image_hidden_states.append(batch_image_hidden_states)
+                
+            image_hidden_states = torch.cat(all_image_hidden_states, dim=0)
+            
+            # image_hidden_states = self.vision_model(
+            #     pixel_values=pixel_values,
+            #     patch_attention_mask=patch_attention_mask,
+            # ).last_hidden_state
 
-            # Modality projection & resampling
-            image_hidden_states = self.connector(
-                image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
-            )
+            # # Modality projection & resampling
+            # image_hidden_states = self.connector(
+            #     image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
+            # )
 
         elif image_hidden_states is not None:
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=input_ids.device)
