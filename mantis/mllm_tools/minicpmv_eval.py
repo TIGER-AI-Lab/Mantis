@@ -44,7 +44,6 @@ class MiniCPMV():
             ]
             Supports any form of interleaved format of image and text.
         """
-        image_links = [x["content"] for x in inputs if x["type"] == "image"]
         if self.support_multi_image:
             content = []
             for _input in inputs:
