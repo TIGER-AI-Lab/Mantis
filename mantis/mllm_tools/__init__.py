@@ -1,4 +1,4 @@
-MLLM_LIST = ["blip2", "instructblip", "llava", "openflamingo", "fuyu", "kosmos2", "qwenVL", "cogvlm", "mfuyu", "mllava", "idefics2", "idefics1", "emu2", "otterimage", "ottervideo", "vila", "gpt4v", "mantis", "videollava"]
+MLLM_LIST = ["blip2", "instructblip", "llava", "openflamingo", "fuyu", "kosmos2", "qwenVL", "cogvlm", "mfuyu", "mllava", "idefics2", "idefics1", "emu2", "otterimage", "ottervideo", "vila", "gpt4v", "mantis", "videollava", "minicpmv"]
 from functools import partial
 
 def get_mfuyu(model_name: str):
@@ -109,6 +109,9 @@ def MLLM_Models(model_name:str):
     elif model_name == "vila":
         from .vila_eval import VILA
         return VILA
+    elif model_name == "minicpm-V-2.5":
+        from .minicpmv_eval import MiniCPMV
+        return MiniCPMV
     elif "videollava" in model_name.lower():
         if model_name == "videollava":
             model_id = 'LanguageBind/Video-LLaVA-7B-hf'

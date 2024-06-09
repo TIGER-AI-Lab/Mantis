@@ -106,13 +106,7 @@ def load_model(model_args, training_args):
     from transformers import Idefics2Processor, AutoConfig
     from mantis.models.idefics2 import Idefics2ForConditionalGeneration, Idefics2ForSequenceClassification
     processor = Idefics2Processor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False) # seems high vmem usage when image splitting is enabled
-    assert model_args.problem_type in ["regression", "single_label_classification", "multi_label_classification", "generation"]
-    if model_args.problem_type == "generation": 
-        print("Using generation model")
-        MODEL_CLASS = Idefics2ForConditionalGeneration
-    else:
-        print("Using classification model")
-        MODEL_CLASS = Idefics2ForSequenceClassification
+    
     
     if model_args.qlora_enabled:
         bnb_config = BitsAndBytesConfig(
@@ -124,13 +118,33 @@ def load_model(model_args, training_args):
         )
     else:
         bnb_config = None
+    
+    assert model_args.problem_type in ["regression", "single_label_classification", "multi_label_classification", "generation"]
+    if model_args.problem_type == "generation": 
+        print("Using generation model")
+        MODEL_CLASS = Idefics2ForConditionalGeneration
+        model_init_kwargs = {
+            "torch_dtype": torch_dtype,
+            "attn_implementation": model_args.attn_implementation,
+            "quantization_config": bnb_config,
+        }
+    else:
+        print("Using classification model")
+        MODEL_CLASS = Idefics2ForSequenceClassification
+        model_init_kwargs = {
+            "torch_dtype": torch_dtype,
+            "attn_implementation": model_args.attn_implementation,
+            "quantization_config": bnb_config,
+            "problem_type": model_args.problem_type,
+            "num_labels": model_args.num_labels,
+        }
+        if model_args.lora_enabled or model_args.qlora_enabled:
+            raise ValueError("LoRA and QLoRA are not supported for Idefics2ForSequenceClassification for now")
+    
+    
     model = MODEL_CLASS.from_pretrained(
         model_args.model_name_or_path,
-        torch_dtype=torch_dtype,
-        attn_implementation=model_args.attn_implementation,
-        quantization_config=bnb_config if model_args.qlora_enabled else None,
-        problem_type=model_args.problem_type if model_args.problem_type != "generation" else None,
-        num_labels=model_args.num_labels if model_args.problem_type != "generation" else None,
+        **model_init_kwargs
     )
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
