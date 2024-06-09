@@ -28,6 +28,7 @@
 🚀 Mantis achieves state-of-the-art performance on 5 multi-image benchmarks (NLVR2, Q-Bench, BLINK, MVBench, Mantis-Eval), and maintaining a strong single-image performance on par with CogVLM and Emu2.
 
 ## 🔥News
+- [2024-05-23] 🔥Excited to announce our current SoTA Mantis-8B-Idefics2 model! Check the [model](https://huggingface.co/TIGER-Lab/Mantis-8B-Idefics2) and [demo](https://huggingface.co/spaces/TIGER-Lab/Mantis) now!
 - [2024-05-03] We have release our [training codes](./mantis/train/README.md), [dataset](https://huggingface.co/datasets/TIGER-Lab/Mantis-Instruct), [evaluation codes](./mantis/benchmark/README.md) codes to the community! Check the following sections for more details.
 - [2024-05-02] We release the first multi-image abled LMM model Mantis-8B based on LLaMA3! Interact with Mantis-8B-SigLIP on [Hugging Face Spaces](https://huggingface.co/spaces/TIGER-Lab/Mantis) or [Colab Demo](./examples/run_mantis.py)
 - [2024-05-02] Mantis's technical report is now available on [arXiv](https://arxiv.org/abs/2405.01483). Kudos to the team!
@@ -51,7 +52,7 @@ python run_mantis.py
 ## Training
 Install the requirements with the following command:
 ```bash
-pip install -e[train,eval]
+pip install -e .[train,eval]
 cd mantis/train
 ```
 
@@ -101,11 +102,17 @@ python data/download_mantis_instruct.py --max_workers 8
 
 ### Mantis Models
 We provide the following models in the 🤗 Hugging Face model hub:
+- [TIGER-Lab/Mantis-8B-Idefics2](https://huggingface.co/TIGER-Lab/Mantis-8B-Idefics2)
 - [TIGER-Lab/Mantis-8B-clip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-clip-llama3)
 - [TIGER-Lab/Mantis-8B-siglip-llama3](https://huggingface.co/TIGER-Lab/Mantis-8B-siglip-llama3)
 - [TIGER-Lab/Mantis-8B-Fuyu](https://huggingface.co/TIGER-Lab/Mantis-8B-Fuyu)
 
 ### Run models
+
+- Run Mantis-8B-Idefics2:
+```bash
+cd examples && python run_mantis_idefics2.py
+```
 
 - Mantis-8B-siglip-llama3:
 ```bash

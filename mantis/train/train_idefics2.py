@@ -11,7 +11,12 @@ from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
 from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
 from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3
 from conversation import conv_idefics_2 as default_conv, conv_templates
-from mantis.train.data import load_data, load_data_from_config, set_ignore_index, set_default_image_token, set_default_image_token_id
+from mantis.train.data import (
+    load_data_from_config, 
+    set_ignore_index, set_default_image_token, 
+    set_default_image_token_id,
+    ClassificationDataset,
+)
 from pathlib import Path
 from typing import Optional
 from pathlib import Path
@@ -30,22 +35,6 @@ torch.backends.cuda.enable_flash_sdp(True)
 
 @dataclass
 class DataArguments:
-    train_data_file: Optional[str] = field(
-        metadata={"help": "The input training data file (a text file).", "default": None, "required": False},
-        default=None,
-    )
-    val_data_file: Optional[str] = field(
-        metadata={"help": "An optional input validation data file (a text file).", "default": None, "required": False},
-        default=None,
-    )
-    test_data_file: Optional[str] = field(
-        metadata={"help": "An optional input test data file (a text file).", "default": None, "required": False},
-        default=None,
-    )
-    data_format: Optional[str] = field(
-        metadata={"help": "The format of the data file", "default": "chat", "choices": ["chat", "vqa"]},
-        default="chat",
-    )
     max_seq_len: Optional[int] = field(
         metadata={"help": "The maximum total input sequence length after tokenization. Sequences longer "
                           "than this will be truncated.", "default": 1024, "required": False},
@@ -57,7 +46,7 @@ class DataArguments:
     )
     dataset_balancing: Optional[bool] = field(
         metadata={"help": "Whether to balance the dataset", "default": True, "required": False},
-        default=True,
+        default=False,
     )
 
 @dataclass
@@ -98,41 +87,24 @@ class ModelArguments:
         metadata={"help": "The attention implementation to use", "default": "flash_attention_2", "required": False},
         default="flash_attention_2",
     )
-    max_image_size: Optional[str] = field(
-        metadata={"help": "The maximum image size", "default": "(1080,1920)", "required": False},
-        default="(1080,1920)",
-    )
-    tune_xatten_layer_only: Optional[bool] = field(
-        metadata={"help": "Whether to tune only the x-attention layer", "default": False, "required": False},
-        default=False,
-    )
-    do_pretrain: Optional[bool] = field(
-        metadata={"help": "Whether to pretrain the projector", "default": False, "required": False},
-        default=False,
-    )
-    llm_backbone: Optional[str] = field(
-        metadata={"help": "The LLM backbone to use", "default": "meta-llama/Meta-Llama-3-8B", "required": False},
-        default="meta-llama/Meta-Llama-3-8B",
-    )
-    vision_backbone: Optional[str] = field(
-        metadata={"help": "The vision backbone to use", "default": "openai/clip-vit-large-patch14-336", "required": False},
-        default="openai/clip-vit-large-patch14-336",
-    )
     conv_template: Optional[str] = field(
         metadata={"help": "The conversation template to use", "default": None, "required": False},
         default=None,
     )
-    projector : Optional[str] = field(
-        metadata={"help": "The projector from vision to LLM", "default": "MLP", "required": False},
-        default="MLP",
+    num_labels: Optional[int] = field(
+        metadata={"help": "The number of labels", "default": None, "required": False},
+        default=None,
     )
-    
+    problem_type: Optional[str] = field(
+        metadata={"help": "The problem type", "default": "generation", "required": False, "choices": ["regression", "single_label_classification", "multi_label_classification", "generation"]},
+        default="generation",
+    )
 
 def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     from transformers import Idefics2Processor, AutoConfig
-    from mantis.models.idefics2 import Idefics2ForConditionalGeneration
+    from mantis.models.idefics2 import Idefics2ForConditionalGeneration, Idefics2ForSequenceClassification
     processor = Idefics2Processor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False) # seems high vmem usage when image splitting is enabled
     
     if model_args.qlora_enabled:
@@ -145,11 +117,33 @@ def load_model(model_args, training_args):
         )
     else:
         bnb_config = None
-    model = Idefics2ForConditionalGeneration.from_pretrained(
+    
+    assert model_args.problem_type in ["regression", "single_label_classification", "multi_label_classification", "generation"]
+    if model_args.problem_type == "generation": 
+        print("Using generation model")
+        MODEL_CLASS = Idefics2ForConditionalGeneration
+        model_init_kwargs = {
+            "torch_dtype": torch_dtype,
+            "attn_implementation": model_args.attn_implementation,
+            "quantization_config": bnb_config,
+        }
+    else:
+        print("Using classification model")
+        MODEL_CLASS = Idefics2ForSequenceClassification
+        model_init_kwargs = {
+            "torch_dtype": torch_dtype,
+            "attn_implementation": model_args.attn_implementation,
+            "quantization_config": bnb_config,
+            "problem_type": model_args.problem_type,
+            "num_labels": model_args.num_labels,
+        }
+        if model_args.lora_enabled or model_args.qlora_enabled:
+            raise ValueError("LoRA and QLoRA are not supported for Idefics2ForSequenceClassification for now")
+    
+    
+    model = MODEL_CLASS.from_pretrained(
         model_args.model_name_or_path,
-        torch_dtype=torch_dtype,
-        attn_implementation=model_args.attn_implementation,
-        quantization_config=bnb_config if model_args.qlora_enabled else None,
+        **model_init_kwargs
     )
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
@@ -178,10 +172,7 @@ def main(
     data_args: DataArguments,
     model_args: ModelArguments,
 ):
-    if model_args.do_pretrain:
-        training_args.output_dir = Path(training_args.output_dir) / model_args.llm_backbone.split("/")[-1] / training_args.run_name
-    else:
-        training_args.output_dir = Path(training_args.output_dir) / model_args.model_name_or_path.split("/")[-1] / training_args.run_name
+    training_args.output_dir = Path(training_args.output_dir) / model_args.model_name_or_path.split("/")[-1] / training_args.run_name
     
     training_args.output_dir.mkdir(parents=True, exist_ok=True)
     training_args.output_dir = str(training_args.output_dir)
@@ -213,8 +204,10 @@ def main(
     if data_args.data_config_file is not None:
         train_dataset, val_dataset, test_dataset, collate_fn = load_data_from_config(data_args, processor)
     else:
-        train_dataset, val_dataset, test_dataset, collate_fn = load_data(data_args, processor)
+        raise ValueError("Data config file is required")
     
+    if model_args.problem_type != "generation":
+        assert all([isinstance(x, ClassificationDataset) for x in train_dataset.datasets])
     
     trainer = Trainer(
         model=model,

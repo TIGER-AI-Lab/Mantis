@@ -11,13 +11,14 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
-    DATA_CONFIG_FILE="./data_configs/mllava_ablation1.yaml"  # change to this for offical training
+    # DATA_CONFIG_FILE="./data_configs/train_video_eval_videochat.yaml"  # change to this for offical training
+    DATA_CONFIG_FILE="./data_configs/train_video_eval_videochat_resample.yaml"  # change to this for offical training
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="TIGER-Lab/Mantis-8B-siglip-llama3-pretraind"
+    model_name_or_path="LanguageBind/Video-LLaVA-7B-hf"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -39,18 +40,22 @@ if [ -z $HF_TOKEN ]; then
 fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
-max_seq_len=8192
-lora_enabled=true
-qlora_enabled=true
+max_seq_len=2048
+lora_enabled=false
+qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=128
-mllava_type="llava"
+global_batch_size=64
 
-RUN_NAME="${mllava_type}_siglip_llama3_8b_finetune_ablation1"
+RUN_NAME="videollava-7b-video-eval-95k-2epoch"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
-    RUN_NAME="${RUN_NAME}_${max_seq_len}_lora"
+    if [ $qlora_enabled = true ]; then
+        echo "qlora & dora is enabled"
+        RUN_NAME="${RUN_NAME}_${max_seq_len}_qlora"
+    else
+        RUN_NAME="${RUN_NAME}_${max_seq_len}_lora"
+    fi
 else
     echo "lora is disabled"
     RUN_NAME="${RUN_NAME}_${max_seq_len}"
@@ -139,8 +144,7 @@ echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_
 accelerate launch --config_file=$config_file \
     --machine_rank $RANK --main_process_ip $MASTER_ADDR --main_process_port $MASTER_PORT \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
-    train_mllava.py \
-    --model_name_or_path $model_name_or_path \
+    train_videollava.py --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
     --run_name $RUN_NAME \
     --bf16 True \
@@ -148,19 +152,19 @@ accelerate launch --config_file=$config_file \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
-    --num_train_epochs 1 \
+    --num_train_epochs 2 \
     --per_device_train_batch_size $per_device_train_batch_size \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
     --evaluation_strategy "no" \
-    --save_strategy "steps" \
+    --save_strategy "no" \
     --save_steps 500 \
     --eval_steps 500 \
     --save_total_limit 1 \
     --learning_rate 1e-5 \
-    --weight_decay 0.0 \
+    --weight_decay 0.01 \
     --warmup_ratio 0.03 \
-    --lr_scheduler_type cosine \
+    --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
     --gradient_checkpointing True \
@@ -171,5 +175,3 @@ accelerate launch --config_file=$config_file \
     --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
     --resume_from_checkpoint "$resume_from_checkpoint" \
-    --tune_xatten_layer_only $tune_xatten_layer_only \
-    --mllava_type $mllava_type \

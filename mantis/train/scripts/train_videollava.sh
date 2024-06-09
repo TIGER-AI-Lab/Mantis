@@ -42,11 +42,10 @@ hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after tr
 max_seq_len=2048
 lora_enabled=false
 qlora_enabled=false
-DATA_FORMAT="chat"
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 
-RUN_NAME="videollava-7b-video-eval-20k"
+RUN_NAME="videollava-7b-video-eval-50k"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -146,7 +145,6 @@ accelerate launch --config_file=$config_file \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
     train_videollava.py --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
-    --data_format $DATA_FORMAT \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \

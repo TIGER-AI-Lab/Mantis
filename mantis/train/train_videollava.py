@@ -11,7 +11,7 @@ from transformers import VideoLlavaProcessor, VideoLlavaForConditionalGeneration
 from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
 from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3
 from conversation import conv_idefics_2 as default_conv, conv_templates
-from mantis.train.data import load_data, load_data_from_config, set_ignore_index, set_default_image_token, set_default_image_token_id, set_default_video_token, set_default_video_token_id
+from mantis.train.data import load_data_from_config, set_ignore_index, set_default_image_token, set_default_image_token_id, set_default_video_token, set_default_video_token_id
 from pathlib import Path
 from typing import Optional
 from pathlib import Path
@@ -30,22 +30,6 @@ torch.backends.cuda.enable_flash_sdp(True)
 
 @dataclass
 class DataArguments:
-    train_data_file: Optional[str] = field(
-        metadata={"help": "The input training data file (a text file).", "default": None, "required": False},
-        default=None,
-    )
-    val_data_file: Optional[str] = field(
-        metadata={"help": "An optional input validation data file (a text file).", "default": None, "required": False},
-        default=None,
-    )
-    test_data_file: Optional[str] = field(
-        metadata={"help": "An optional input test data file (a text file).", "default": None, "required": False},
-        default=None,
-    )
-    data_format: Optional[str] = field(
-        metadata={"help": "The format of the data file", "default": "chat", "choices": ["chat", "vqa"]},
-        default="chat",
-    )
     max_seq_len: Optional[int] = field(
         metadata={"help": "The maximum total input sequence length after tokenization. Sequences longer "
                           "than this will be truncated.", "default": 1024, "required": False},
@@ -212,7 +196,7 @@ def main(
     if data_args.data_config_file is not None:
         train_dataset, val_dataset, test_dataset, collate_fn = load_data_from_config(data_args, processor)
     else:
-        train_dataset, val_dataset, test_dataset, collate_fn = load_data(data_args, processor)
+        raise ValueError("Data config file is required")
     
     
     trainer = Trainer(

@@ -1,0 +1,11 @@
+[
+    {
+        "id": "000000033471",
+        "images": ["coco/train2017/000000033471.jpg"],
+        "prompt": "\nSuppose you are an expert in judging and evaluating the quality of AI-generated videos,\nplease watch the following frames of a given video and see the text prompt for generating the video,\nthen give scores from 7 different dimensions:\n(1) visual quality: the quality of the video in terms of clearness, resolution, brightness, and color\n(2) object consistency, the consistency of objects or humans in video\n(3) dynamic degree, the degree of dynamic changes\n(4) motion smoothness, the smoothness of motion or movements\n(5) text-to-video alignment, the alignment between the text prompt and the video content\n(6) factual consistency, the consistency of the video content with the common-sense and factual knowledge\n(7) overall score, the overall quality of the video\nfor each dimension, output a number from [1,2,3,4],\nin which '1' is 'Bad', '2' is 'Average', '3' is 'Good', '4' is 'Perfect'\nHere is an output example:\nvisual quality: 3\nobject consistency: 4\ndynamic degree: 4\nmotion smoothness: 1\ntext-to-video alignment: 1\nfactual consistency: 2\noverall score: 1\n\nFor this video, the text prompt is \"{text_prompt}\",\nall the frames of video are as follows:\n\n",
+        "labels": {
+            "visual_quality": 0.8,
+            "object_consistency": 0.9
+        }
+    }
+]
