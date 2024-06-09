@@ -11,16 +11,14 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
-    # DATA_CONFIG_FILE="./data_configs/train_video_eval.yaml"
-    # DATA_CONFIG_FILE="./data_configs/train_video_eval_resample.yaml"
-    DATA_CONFIG_FILE="./data_configs/train_video_eval_no_real.yaml"
+    DATA_CONFIG_FILE="./data_configs/train_video_eval.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="HuggingFaceM4/idefics2-8b"
-    # model_name_or_path="TIGER-Lab/Mantis-8B-Idefics2"
+    # model_name_or_path="HuggingFaceM4/idefics2-8b"
+    model_name_or_path="TIGER-Lab/Mantis-8B-Idefics2"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -43,17 +41,14 @@ fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
 max_seq_len=4096
-lora_enabled=false
-qlora_enabled=false
+lora_enabled=true
+qlora_enabled=true
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=128
+global_batch_size=64
+problem_type="generation"
+num_labels=7
 
-# RUN_NAME="mantis-8b-idefics2-video-eval-95k-mantis"
-# RUN_NAME="mantis-8b-idefics2-video-eval-95k-mantis-2epoch"
-# RUN_NAME="mantis-8b-idefics2-video-eval-95k"
-# RUN_NAME="mantis-8b-idefics2-video-eval-95k-2epoch"
-# RUN_NAME="mantis-8b-idefics2-video-eval-50k-2epoch"
-RUN_NAME="mantis-8b-idefics2-video-eval-32k"
+RUN_NAME="mantis-8b-idefics2-video-eval-refined-40k"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -67,6 +62,7 @@ else
     echo "lora is disabled"
     RUN_NAME="${RUN_NAME}_${max_seq_len}"
 fi
+RUN_NAME="${RUN_NAME}_${problem_type}"
 echo "RUN_NAME = $RUN_NAME"
 
 hub_model_id="${hf_hub_user_name}/${RUN_NAME}" # the hub model id
@@ -153,20 +149,22 @@ accelerate launch --config_file=$config_file \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
     train_idefics2.py --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
+    --problem_type $problem_type \
+    --num_labels $num_labels \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
-    --num_train_epochs 2 \
+    --num_train_epochs 1 \
     --per_device_train_batch_size $per_device_train_batch_size \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
     --evaluation_strategy "no" \
     --save_strategy "no" \
-    --save_steps 500 \
-    --eval_steps 500 \
+    --save_steps 300 \
+    --eval_steps 300 \
     --save_total_limit 1 \
     --learning_rate 5e-6 \
     --weight_decay 0.01 \

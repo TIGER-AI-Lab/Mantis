@@ -107,7 +107,6 @@ def load_model(model_args, training_args):
     from mantis.models.idefics2 import Idefics2ForConditionalGeneration, Idefics2ForSequenceClassification
     processor = Idefics2Processor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False) # seems high vmem usage when image splitting is enabled
     
-    
     if model_args.qlora_enabled:
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
