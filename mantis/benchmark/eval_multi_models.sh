@@ -40,6 +40,7 @@ export CUDA_VISIBLE_DEVICES=4 && bash eval_single_model.sh "mantis-8b-idefics2_8
 export CUDA_VISIBLE_DEVICES=5 && bash eval_single_model.sh "mantis-8b-idefics2-data-ablation-3_8192_qlora" &
 export CUDA_VISIBLE_DEVICES=6 && bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation1" &
 export CUDA_VISIBLE_DEVICES=7 && bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation2" &
+export CUDA_VISIBLE_DEVICES=7 && bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation3" &
 
 bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation3"
 bash eval_single_model.sh "mantis-8b-siglip-llama3-ablation4"
