@@ -2,7 +2,7 @@ import os
 import pickle
 import pandas as pd
 import numpy as np
-from easy_openai import openai_completions
+from mantis.easy_openai import openai_completions
 from pathlib import Path
 
 class ActionGraph:

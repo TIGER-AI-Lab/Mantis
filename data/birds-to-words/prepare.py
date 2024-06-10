@@ -10,7 +10,7 @@ from PIL import Image
 from tqdm import tqdm
 from pathlib import Path
 from typing import List
-from easy_openai import openai_completions, _chatml_to_prompt
+from mantis.easy_openai import openai_completions, _chatml_to_prompt
 from string import Template
 
 CONV_TEMPLATE = """

@@ -21,7 +21,6 @@ setup(
     extras_require={
         "train": [
             "fire",
-            "easy-openai @ git+https://github.com/jdf-prog/easy-openai.git",
             "tqdm",
             "numpy",
             "requests",
@@ -47,15 +46,17 @@ setup(
             "einops-exts",
             "datasets==2.18.0",
             "open_clip_torch",
+            "openai",
             "av"
         ],
         "eval": [
             "tqdm",
             "numpy",
-            "easy-openai @ git+https://github.com/jdf-prog/easy-openai.git",
             "prettytable",
             "fire",
             "datasets==2.18.0",
+            "openai",
+            "tiktoken",
             "av",
             "decord",
         ]

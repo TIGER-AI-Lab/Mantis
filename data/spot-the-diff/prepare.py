@@ -5,7 +5,7 @@ import regex as re
 import numpy as np
 from string import Template
 from pathlib import Path
-from easy_openai import openai_completions, _chatml_to_prompt
+from mantis.easy_openai import openai_completions, _chatml_to_prompt
 
 
 PROMPT_TEMPLATE = """\

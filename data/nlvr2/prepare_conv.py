@@ -2,7 +2,7 @@ import json
 import random
 import fire
 import regex as re
-from easy_openai import openai_completions, _chatml_to_prompt
+from mantis.easy_openai import openai_completions, _chatml_to_prompt
 from string import Template
 from pathlib import Path
 from typing import List

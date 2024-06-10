@@ -2,7 +2,7 @@ import fire
 import json5
 import json
 import random
-from easy_openai import openai_completions
+from mantis.easy_openai import openai_completions
 from string import Template
 from typing import List
 from pathlib import Path

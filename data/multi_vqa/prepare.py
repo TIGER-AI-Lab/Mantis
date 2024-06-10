@@ -5,7 +5,7 @@ import regex as re
 from datasets import load_dataset
 from tqdm import tqdm
 from pathlib import Path
-from easy_openai import openai_completions
+from mantis.easy_openai import openai_completions
 
 template = """Here are {num_of_images} captions:
 {captions}

@@ -1,6 +1,6 @@
 import json
 import os
-from easy_openai import openai_completions, _chatml_to_prompt
+from mantis.easy_openai import openai_completions, _chatml_to_prompt
 from string import Template
 import fire
 
