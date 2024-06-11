@@ -9,12 +9,13 @@ for file_name in file_list:
     with open(file_name, "r") as f:
         data = json.load(f)
         for item in tqdm(data, desc=file_name):
-            item['images'] = ["images/" + "/" + image for i, image in enumerate(item['images'])]
+            item['images'] = ["images/" + item['images'][0].split("_")[0] + "/" + image for i, image in enumerate(item['images'])]
+            # item['images'] = ["images/" + "/" + image for i, image in enumerate(item['images'])]
             assert all([Path(image).exists() for image in item['images']]), item['images']
             all_data.append({
                 "id": item['id'],
                 "images": item['images'],
                 "conversations": item['conversations'],
             })
-with open("train.json", "w") as f:
+with open("train_conv.json", "w") as f:
     json.dump(all_data, f, indent=4)

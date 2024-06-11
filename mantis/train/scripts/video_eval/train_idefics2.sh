@@ -26,29 +26,29 @@ if [ "$HF_HUB_OFFLINE" = 1 ]; then
 else
     push_to_hub=True
 fi
-if [ -z $HF_HOME ]; then
-    echo "HF_HOME is empty, set to default '~/.cache/huggingface/'"
-    export HF_HOME="~/.cache/huggingface/"
-fi
-if [ -z $HF_TOKEN ]; then
-    echo "HF token is empty, try loading from '$HF_HOME/token'"
-    export HF_TOKEN=$(eval "cat ${HF_HOME}/token")
-fi
-if [ -z $HF_TOKEN ]; then
-    echo "HF token cannot be found, please set your HF token"
-    exit 1
-fi
+# if [ -z $HF_HOME ]; then
+#     echo "HF_HOME is empty, set to default '~/.cache/huggingface/'"
+#     export HF_HOME="~/.cache/huggingface/"
+# fi
+# if [ -z $HF_TOKEN ]; then
+#     echo "HF token is empty, try loading from '$HF_HOME/token'"
+#     export HF_TOKEN=$(eval "cat ${HF_HOME}/token")
+# fi
+# if [ -z $HF_TOKEN ]; then
+#     echo "HF token cannot be found, please set your HF token"
+#     exit 1
+# fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
 max_seq_len=4096
-lora_enabled=true
-qlora_enabled=true
+lora_enabled=false
+qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=64
-problem_type="generation"
-num_labels=7
+problem_type="regression"
+num_labels=5
 
-RUN_NAME="mantis-8b-idefics2-video-eval-refined-40k"
+RUN_NAME="mantis-8b-idefics2-video-eval-refined-40k-sora"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -162,9 +162,9 @@ accelerate launch --config_file=$config_file \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
     --evaluation_strategy "no" \
-    --save_strategy "no" \
-    --save_steps 300 \
-    --eval_steps 300 \
+    --save_strategy "steps" \
+    --save_steps 200 \
+    --eval_steps 200 \
     --save_total_limit 1 \
     --learning_rate 5e-6 \
     --weight_decay 0.01 \

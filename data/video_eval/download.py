@@ -66,6 +66,9 @@ from huggingface_hub import hf_hub_download
 hf_hub_download(repo_id="TIGER-Lab/Video_Eval", filename="refined_40k/train_40k/data_all.json", repo_type="dataset", local_dir="./data")
 hf_hub_download(repo_id="TIGER-Lab/Video_Eval", filename="refined_40k/train_40k/frames.zip", repo_type="dataset", local_dir="./data")
 
+hf_hub_download(repo_id="TIGER-Lab/Video_Eval", filename="refined_40k/train_40k/data_sora.json", repo_type="dataset", local_dir="./data")
+hf_hub_download(repo_id="TIGER-Lab/Video_Eval", filename="refined_40k/train_40k/frames_sora.zip", repo_type="dataset", local_dir="./data")
+
 
 
 """

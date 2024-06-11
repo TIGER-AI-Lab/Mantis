@@ -433,40 +433,41 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 # for siglip, need to transform the pixel_values to the right data type
                 if pixel_values.dtype != self.vision_tower.dtype:
                     pixel_values = pixel_values.type(self.vision_tower.dtype)
-                    
-                pixel_batch_size = 2 # to avoid OOM
-                all_image_features = []
-                for i in range(0, pixel_values.shape[0], pixel_batch_size):
-                    batch_pixel_values = pixel_values[i:i+pixel_batch_size]
-                    batch_image_outputs = self.vision_tower(batch_pixel_values, output_hidden_states=True)
-                    batch_selected_image_features = batch_image_outputs.hidden_states[vision_feature_layer]
+                
+                if not self.training:
+                    pixel_batch_size = 2 # to avoid OOM
+                    all_image_features = []
+                    for i in range(0, pixel_values.shape[0], pixel_batch_size):
+                        batch_pixel_values = pixel_values[i:i+pixel_batch_size]
+                        batch_image_outputs = self.vision_tower(batch_pixel_values, output_hidden_states=True)
+                        batch_selected_image_features = batch_image_outputs.hidden_states[vision_feature_layer]
+                        if vision_feature_select_strategy == "default":
+                            batch_selected_image_features = batch_selected_image_features[:, 1:]
+                        elif vision_feature_select_strategy == "full":
+                            batch_selected_image_features = batch_selected_image_features
+                        else:
+                            raise ValueError(
+                                f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
+                            )
+                        batch_image_features = self.multi_modal_projector(batch_selected_image_features)
+                        all_image_features.append(batch_image_features)
+                    image_features = torch.cat(all_image_features, dim=0)
+                else:
+                    image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+                    # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
+                    selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+
                     if vision_feature_select_strategy == "default":
-                        batch_selected_image_features = batch_selected_image_features[:, 1:]
+                        selected_image_feature = selected_image_feature[:, 1:]
                     elif vision_feature_select_strategy == "full":
-                        batch_selected_image_features = batch_selected_image_features
+                        selected_image_feature = selected_image_feature
                     else:
                         raise ValueError(
                             f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
                         )
-                    batch_image_features = self.multi_modal_projector(batch_selected_image_features)
-                    all_image_features.append(batch_image_features)
-                image_features = torch.cat(all_image_features, dim=0)
 
-                # image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-                # # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                # selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-
-                # if vision_feature_select_strategy == "default":
-                #     selected_image_feature = selected_image_feature[:, 1:]
-                # elif vision_feature_select_strategy == "full":
-                #     selected_image_feature = selected_image_feature
-                # else:
-                #     raise ValueError(
-                #         f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                #     )
-
-                # image_features = self.multi_modal_projector(selected_image_feature)
-                
+                    image_features = self.multi_modal_projector(selected_image_feature)
+                    
                 
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, labels
