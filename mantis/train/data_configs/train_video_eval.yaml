@@ -5,4 +5,3 @@ data:
     path: "../../data/video_eval/data/refined_40k/train_40k/train_regression.json"
     format: classification
     split: train
-    max_size: 1000
