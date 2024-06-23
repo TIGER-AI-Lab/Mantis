@@ -7,7 +7,7 @@ setup(
     author='Dongfu Jiang',
     author_email='dongfu.jiang@uwaterloo.ca',
     packages=find_packages(),
-    url='https://github.com/jdf-prog/many-image-qa',
+    url='https://github.com/TIGER-AI-Lab/Mantis',
     install_requires=[
         "transformers",
         "sentencepiece",
