@@ -1,9 +1,11 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='mantis',
+    name='mantis-vl',
     version='0.0.1',
-    description='',
+    description='Official Codes for of "MANTIS: Interleaved Multi-Image Instruction Tuning"',
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
     author='Dongfu Jiang',
     author_email='dongfu.jiang@uwaterloo.ca',
     packages=find_packages(),
