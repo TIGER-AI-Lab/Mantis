@@ -47,7 +47,6 @@ global_batch_size=128
 mllava_type="llava"
 
 RUN_NAME="${mllava_type}_siglip_llama3_8b_finetune_chat_example"
-# RUN_NAME="${mllava_type}_siglip_llama3_8b_finetune"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -149,7 +148,7 @@ accelerate launch --config_file=$config_file \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
-    --num_train_epochs 1 \
+    --num_train_epochs 10 \
     --per_device_train_batch_size $per_device_train_batch_size \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \

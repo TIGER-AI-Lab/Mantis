@@ -2,7 +2,7 @@ data:
   - 
     name: "local_video_example"
     type: json
-    path: "../../data/examples/chatvideo/train.json"
-    format: chat
+    path: "../../data/examples/chat_video/train.json"
+    format: chat_video
     split: train
     max_num_frames: 32

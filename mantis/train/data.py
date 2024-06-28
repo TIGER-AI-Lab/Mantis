@@ -340,7 +340,7 @@ class ChatDataset(torch.utils.data.Dataset):
             raise ValueError(f"Unknown separator style {self.conv.sep_style}")
         # replace IGNORE_INDEX in target_ids with 0 and decode it, then print for debug
         if torch.all(target == IGNORE_INDEX):
-            print("no labels for a sample in ", self.data_path, self.name, self.split)
+            print("no labels for a sample in ", self.data_path, self.name, self.split, idx)
         
         # print(self.data_path, self.name, self.split)
         
@@ -400,7 +400,10 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         self.max_num_frames = max_num_frames
         self.print(f"Loading dataset '{name}' from {data_path}")
         self.data = load_json_data(data_path)
-        self.video_dir = Path(video_dir)
+        if not video_dir:
+            self.video_dir = self.data_path.parent
+        else:
+            self.video_dir = Path(video_dir)
         assert self.video_dir.exists(), f"{video_dir} does not exist"
         if shuffle:
             random.seed(42)
@@ -413,6 +416,11 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         self.conversations, self.all_selected_idxs = self.preprocess()
 
         self.max_seq_len = max_seq_len
+        
+        if "video-llava" in self.processor.tokenizer.name_or_path:
+            self.use_video_encoder = True
+        else:
+            self.use_video_encoder = False # use image encoder, mllms
     
     def print(self, *args, **kwargs):
         if self.is_master_worker:
@@ -495,7 +503,12 @@ class ChatVideoDataset(torch.utils.data.Dataset):
                 indices = np.arange(0, total_frames, total_frames / self.max_num_frames).astype(int)
             else:
                 indices = np.arange(total_frames)
-            video_frames = read_video_pyav(container, indices)
+            if self.use_video_encoder:
+                video_frames = read_video_pyav(container, indices)
+            else:
+                # use frames as images instead
+                video_frames = [frame.to_image() for frame in container.decode(video=0)]
+                video_frames = [video_frames[i] for i in indices]
         elif "images" in item and item['images'] and len(item['images']) > 0:
             if isinstance(item['images'][0], str):
                 video_frames = [video_dir / image for image in item['images']]
@@ -510,16 +523,31 @@ class ChatVideoDataset(torch.utils.data.Dataset):
                 indices = np.arange(0, len(video_frames), len(video_frames) / self.max_num_frames).astype(int)
                 video_frames = [video_frames[i] for i in indices]
             # change video frames from PIL.Image to ndarray
-            video_frames = np.stack([np.array(x.convert('RGB')) for x in video_frames])
+            if self.use_video_encoder:
+                video_frames = np.stack([np.array(x.convert('RGB')) for x in video_frames])
+            else:
+                video_frames = [x.convert('RGB') for x in video_frames]
         else:
             video_frames = None
-                
+            
         # check the number of images
         self.conv.messages = conv_messages
         
-        
-        conv_str = self.conv.get_prompt()
-        encoding = self.processor(conv_str, videos=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+        if self.use_video_encoder:
+            self.conv.messages = conv_messages
+            conv_str = self.conv.get_prompt()
+            encoding = self.processor(conv_str, videos=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+        else:
+            # add <image> tokens according to the number of images
+            image_token_count = sum([message[1].count(DEFAULT_IMAGE_TOKEN) for message in conv_messages])
+            if image_token_count < len(video_frames):
+                conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(video_frames) - image_token_count) + conv_messages[0][1]
+            self.conv.messages = conv_messages
+            conv_str = self.conv.get_prompt()
+            if image_token_count > len(video_frames):
+                # replace image token from back to front for the extra image tokens
+                conv_str = conv_str[::-1].replace(DEFAULT_IMAGE_TOKEN[::-1], "", len(video_frames) - image_token_count)[::-1]
+            encoding = self.processor(conv_str, images=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
         
         new_conv = self.conv.copy()
         new_conv.messages = []
@@ -537,7 +565,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
             target[user_len:user_and_assistant_len] = input_ids[user_len:user_and_assistant_len]
             
         if torch.all(target == IGNORE_INDEX):
-            print("no labels for a sample in ", self.data_path, self.name, self.split)
+            print("no labels for a sample in ", self.data_path, self.name, self.split, selected_idx)
         
         # print(self.data_path, self.name, self.split)
         

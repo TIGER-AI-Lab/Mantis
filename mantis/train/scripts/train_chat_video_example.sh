@@ -18,6 +18,7 @@ if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     model_name_or_path="{local_model_path}"
 else
     model_name_or_path="HuggingFaceM4/idefics2-8b"
+    # model_name_or_path="LanguageBind/Video-LLaVA-7B-hf"
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -110,7 +111,7 @@ fi
 
 NGPU_PER_NODE=$(nvidia-smi --query-gpu=index --format=csv,noheader | grep -c "$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n')")
 GPU=$((${COUNT_NODE} * ${NGPU_PER_NODE}))
-WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 4))
+WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 1))
 
 if [ $WORKERS -gt 112 ]; then
     WORKERS=112
@@ -151,7 +152,7 @@ accelerate launch --config_file=$config_file \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \
     --push_to_hub $push_to_hub \
-    --num_train_epochs 1 \
+    --num_train_epochs 2 \
     --per_device_train_batch_size $per_device_train_batch_size \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps $gradient_accumulation_steps \
