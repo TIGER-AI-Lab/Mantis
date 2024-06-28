@@ -1,0 +1,7 @@
+data:
+  - 
+    name: "local_chat_example"
+    type: json
+    path: "../../data/examples/chat/train.json"
+    format: chat
+    split: train

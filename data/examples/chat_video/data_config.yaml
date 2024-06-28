@@ -1,0 +1,8 @@
+data:
+  - 
+    name: "local_video_example"
+    type: json
+    path: "../../data/examples/chatvideo/train.json"
+    format: chat
+    split: train
+    max_num_frames: 32

@@ -1,0 +1,7 @@
+data:
+  - 
+    name: "local_classification_example"
+    type: json
+    path: "../../data/examples/classification/train.json"
+    format: classification
+    split: train
