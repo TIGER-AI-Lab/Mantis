@@ -41,7 +41,7 @@ pip install -e .
 # install flash-attention
 pip install flash-attn --no-build-isolation
 ```
-## Inference
+## Inferencet
 
 You can run inference with the following command:
 ```bash
@@ -58,6 +58,26 @@ cd mantis/train
 
 **Our training scripts follows the coding format and model structure of Hugging face. Different from LLaVA Github repo, you can directly load our models from Hugging Face model hub.**
 
+### Training examples with different data formats
+(These example data are all pre-prepared in the `data/examples/` folder, so you can check the format of the data and the debug the training script directly. set `CUDA_VISIBLE_DEVICES` to the GPU you want to use.)
+- training with text-image interleaved data (see [example data](./data/examples/chat/train.json))
+```bash
+cd mantis/train
+bash scripts/train_example_chat.sh # Q-lora, 1 GPU required
+```
+- training with video-text interleaved data (see [example data](./data/examples/chat_video/train.json))
+```bash
+cd mantis/train
+bash scripts/train_example_video.sh # Q-lora, 1 GPU required
+```
+
+- training with classification data (see [example data](./data/examples/classification/train.json))
+```bash
+cd mantis/train
+bash scripts/train_example_classification.sh # full-finetune, might need 8 GPUs or more
+```
+
+### Training examples with different models
 We support training of Mantis based on the Fuyu architecture and the LLaVA architecture. You can train the model with the following command:
 
 **Training Mantis based on LLaMA3 with CLIP/SigLIP encoder:**
