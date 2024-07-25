@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='mantis-vl',
-    version='0.0.1',
+    version='0.0.2',
     description='Official Codes for of "MANTIS: Interleaved Multi-Image Instruction Tuning"',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -69,3 +69,5 @@ setup(
 
 # change it to pyproject.toml
 # [build-system]
+# python setup.py sdist bdist_wheel
+# twine upload dist/*
