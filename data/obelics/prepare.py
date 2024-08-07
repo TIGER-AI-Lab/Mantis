@@ -80,7 +80,7 @@ def process_example(example, to_save_image_dir, output_file, index):
 
 def main(
     seed=42,
-    down_sampling_size=100_000,
+    down_sampling_size=None,
     output_file="./data/train.jsonl",
     to_save_image_dir="./data/images/",
     max_workers=16,
@@ -102,7 +102,7 @@ def main(
     total_size = 0
     iter_dataset = iter(shuffled_dataset)
     num_processed_chunks = 0
-    while total_size < down_sampling_size:
+    while (not down_sampling_size) or total_size < down_sampling_size:
         chunk_examples = []
         for i in range(chunk_size):
             try:
