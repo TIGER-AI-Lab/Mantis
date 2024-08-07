@@ -461,7 +461,7 @@ def local_image_to_data_url(image:Union[str, Image.Image, Path]) -> str:
         # Guess the MIME type of the image based on the file extension
         mime_type, _ = guess_type(image_path)
         if mime_type is None:
-            mime_type = 'application/octet-stream'  # Default MIME type if none is found
+            mime_type = 'image/jpeg'  # Default MIME type if none is found
 
         # Read and encode the image file
         with open(image_path, "rb") as image_file:
@@ -472,10 +472,13 @@ def local_image_to_data_url(image:Union[str, Image.Image, Path]) -> str:
         dummy_path = f"temp.{image.format}"
         mime_type, _ = guess_type(dummy_path)
         if mime_type is None:
-            mime_type = 'application/octet-stream'
+            mime_type = 'image/jpeg'
+            image_format = "JPEG"
+        else:
+            image_format = mime_type.split("/")[-1].upper()
         # encode the image
         with BytesIO() as output:
-            image.save(output, format=image.format)
+            image.save(output, format=image_format)
             base64_encoded_data = base64.b64encode(output.getvalue()).decode('utf-8')
         return f"data:{mime_type};base64,{base64_encoded_data}"
     elif isinstance(image, str) and (image.startswith("http") or image.startswith("data:")):
