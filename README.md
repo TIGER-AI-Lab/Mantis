@@ -28,6 +28,8 @@
 🚀 Mantis achieves state-of-the-art performance on 5 multi-image benchmarks (NLVR2, Q-Bench, BLINK, MVBench, Mantis-Eval), and maintaining a strong single-image performance on par with CogVLM and Emu2.
 
 ## 🔥News
+- [2024-08-22] We add support for training [🤗 Idefics-3](https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3); script here: [train_idefics3.sh](./mantis/train/scripts/train_idefics3.sh)
+- [2024-08-05] [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) now supports the evaluation of Mantis model. Thanks to the efforts of [BrenchCC](https://github.com/BrenchCC)
 - [2024-08-05] We release the Wandb training curves of [Mantis-8B-CLIP-LLaMA-3](https://wandb.ai/dongfu/MLlava/reports/Mantis-8B-CLIP-LLaMA-3--Vmlldzo4OTM0MDk5), [Mantis-8B-SigLIP-LLaMA-3](https://wandb.ai/dongfu/MLlava/reports/Mantis-8B-SigLIP-LLaMA-3--Vmlldzo4OTM0MTQ2), and [Mantis-8B-Idefics2](https://wandb.ai/dongfu/Mantis/reports/Mantis-8B-Idefics2--Vmlldzo4OTM0MTcw) for training reproduction.
 - [2024-07-23] [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) now supports the evaluation of Mantis model. Thanks to the efforts of [EvolvingLMMs-Lab](https://github.com/EvolvingLMMs-Lab) Team.
 - [2024-05-23] 🔥Excited to announce our current SoTA Mantis-8B-Idefics2 model! Check the [model](https://huggingface.co/TIGER-Lab/Mantis-8B-Idefics2) and [demo](https://huggingface.co/spaces/TIGER-Lab/Mantis) now!

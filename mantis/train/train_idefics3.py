@@ -7,7 +7,8 @@ import wandb
 import regex as re
 from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
 from transformers.hf_argparser import HfArgumentParser
-from transformers import AutoProcessor, AutoModelForVision2Seq, AutoConfig
+# from transformers import AutoProcessor, AutoModelForVision2Seq, AutoConfig
+from mantis.models.idefics3 import Idefics3ForConditionalGeneration, Idefics3Processor
 from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
 from train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3
 from conversation import conv_idefics_3 as default_conv, conv_templates
@@ -99,11 +100,15 @@ class ModelArguments:
         metadata={"help": "The problem type", "default": "generation", "required": False, "choices": ["regression", "single_label_classification", "multi_label_classification", "generation"]},
         default="generation",
     )
+    idefics3_N: Optional[int] = field(
+        metadata={"help": "longest edge of the image by N * 364 (memory intensive)", "default": 1, "required": False},
+        default=4,
+    )
 
 def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
-    processor = AutoProcessor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False) # seems high vmem usage when image splitting is enabled
+    processor = Idefics3Processor.from_pretrained(model_args.model_name_or_path, size= {"longest_edge": model_args.idefics3_N * 364})
     
     if model_args.qlora_enabled:
         bnb_config = BitsAndBytesConfig(
@@ -119,7 +124,7 @@ def load_model(model_args, training_args):
     assert model_args.problem_type in ["regression", "single_label_classification", "multi_label_classification", "generation"]
     if model_args.problem_type == "generation": 
         print("Using generation model")
-        MODEL_CLASS = AutoModelForVision2Seq
+        MODEL_CLASS = Idefics3ForConditionalGeneration
         model_init_kwargs = {
             "torch_dtype": torch_dtype,
             "attn_implementation": model_args.attn_implementation,

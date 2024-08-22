@@ -41,9 +41,10 @@ fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
 max_seq_len=32768
-lora_enabled=false
+lora_enabled=true
 qlora_enabled=true
 OUTPUT_DIR="../../checkpoints"
+idefics3_N=1 # the longest edge of the image: N * 364; by default, N=4
 global_batch_size=128
 
 RUN_NAME="mantis-8b-idefics3"
@@ -148,6 +149,7 @@ accelerate launch --config_file=$config_file \
     --data_config_file $DATA_CONFIG_FILE \
     --run_name $RUN_NAME \
     --bf16 True \
+    --idefics3_N $idefics3_N \
     --output_dir $OUTPUT_DIR \
     --hub_model_id $hub_model_id \
     --hub_token "$hub_token" \

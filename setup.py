@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='mantis-vl',
-    version='0.0.2',
+    version='0.0.3',
     description='Official Codes for of "MANTIS: Interleaved Multi-Image Instruction Tuning"',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
