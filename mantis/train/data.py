@@ -98,8 +98,10 @@ class ChatDataset(torch.utils.data.Dataset):
         vl_only=False,
         offline_sha=None,
         sample_ratio=1.0,
-        revision="script"
+        revision="script",
+        num_proc=8
     ):
+        self.num_proc = num_proc
         self.processor = processor
         self.data_path = Path(data_path)
         self.dataset_type = dataset_type
@@ -131,6 +133,7 @@ class ChatDataset(torch.utils.data.Dataset):
                     self.data = self.filtered_data
             else:
                 print("Data structure is not as expected.")
+            self.data = datasets.Dataset.from_list(self.data)
         else:
             # load from huggingface datasets
             if HF_DATASETS_OFFLINE:
@@ -139,7 +142,7 @@ class ChatDataset(torch.utils.data.Dataset):
                 self.data = read_local_cached_dataset(data_path, name, split, offline_sha)
             else:
                 self.print(f"Loading dataset '{data_path}' {name} {split} from online huggingface datasets")
-                self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision)
+                self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision, num_proc=num_proc)
             _max_num_images = max([len(x) for x in self.data['images'] if x])
             print(f"Max number of images per sample: {_max_num_images}, limit: {max_num_images}")
             if max_num_images and _max_num_images > max_num_images:
@@ -203,10 +206,8 @@ class ChatDataset(torch.utils.data.Dataset):
         roles = {"human": conv.roles[0], "gpt": conv.roles[1], "user": conv.roles[0], "assistant": conv.roles[1]}
         conversations = []
         all_images = []
-        for i, item in tqdm(
-            enumerate(self.data), desc="Format conversations and load images", 
-            total=len(self.data), disable=not self.is_master_worker
-        ):
+        
+        def preprocess_func(item, i):
             # phd
             source_key = "conversation" if "conversation" in item else "conversations"
             source = item[source_key]
@@ -244,15 +245,24 @@ class ChatDataset(torch.utils.data.Dataset):
                 if image_file:
                     if isinstance(image_file, list) and all([isinstance(image, Path) for image in image_file]):
                         assert all([image.exists() for image in image_file]), f"{image_file} does not exist"
+                        image_file = [str(image) for image in image_file]
                     elif isinstance(image_file, Path):
                         assert image_file.exists(), f"{image_file} does not exist"
+                        image_file = str(image_file)
                 else:
                     image_file = None
-                conversations.append(conv_messages)
-                all_images.append(image_file)
+                return {"conv_messages": conv_messages, "image_file": image_file}
             except Exception as e:
                 print(f"Error at {i}")
-                print(e)
+                return {"conv_messages": None, "image_file": None}
+        
+        def filter_none(item):
+            return item["conv_messages"] is not None
+        
+        new_dataset = self.data.map(preprocess_func, with_indices=True, desc="Format conversations and load images", remove_columns=self.data.column_names, num_proc=self.num_proc)
+        new_dataset = new_dataset.filter(filter_none, num_proc=self.num_proc)
+        conversations = new_dataset["conv_messages"]
+        all_images = new_dataset["image_file"]
         
         return conversations, all_images
         
@@ -326,7 +336,7 @@ class ChatDataset(torch.utils.data.Dataset):
                     target[sep_idxs[i]+1:] = input_ids[sep_idxs[i]+1:]
                 else:
                     target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
-        elif self.conv.sep_style == SeparatorStyle.IDEFICS_2:
+        elif self.conv.sep_style in [SeparatorStyle.IDEFICS_2, SeparatorStyle.IDEFICS_3]:
             if self.conv.system:
                 skip_offset = 0
             else:

@@ -26,7 +26,6 @@ import torch.utils.checkpoint
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from flash_attn import flash_attn_func, flash_attn_with_kvcache
 # from transformers.models.persimmon.modeling_persimmon import *
 
 

@@ -12,6 +12,7 @@ class SeparatorStyle(Enum):
     LLAMA_2 = auto()
     LLAMA_3 = auto()
     IDEFICS_2 = auto()
+    IDEFICS_3 = auto()
     MFUYU = auto()
 
 
@@ -125,6 +126,19 @@ class Conversation:
                 ret = self.system + self.sep
             else:
                 ret = ""
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, _, _ = message
+                    ret += role + ":" + message + self.sep + "\n"
+                else:
+                    ret += role + ":"
+        elif self.sep_style == SeparatorStyle.IDEFICS_3:
+            ret = "<|begin_of_text|>"
+            if self.system:
+                ret += self.system + self.sep
+            else:
+                ret += ""
             for role, message in messages:
                 if message:
                     if type(message) is tuple:
@@ -445,6 +459,15 @@ conv_idefics_2 = Conversation(
     sep="<end_of_utterance>",
 )
 
+conv_idefics_3 = Conversation(
+    system="",
+    roles=("User", "Assistant"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.IDEFICS_3,
+    sep="<end_of_utterance>",
+)
+
 conv_openflamingo = Conversation(
     system="",
     roles=("User", "Assistant"),
@@ -485,6 +508,7 @@ conv_templates = {
     "mllava_v1": conv_mllava_v1,
     "mllava_v1_mmtag": conv_mllava_v1_mmtag,
     "idefics_2": conv_idefics_2,
+    "idefics_3": conv_idefics_3,
     "openflamingo": conv_openflamingo,
     "videollava": conv_videollava,
 

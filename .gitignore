@@ -182,3 +182,4 @@ cython_debug/
 /checkpoints
 /hf_space
 /sailctl_scripts
+/data/*.ipynb
