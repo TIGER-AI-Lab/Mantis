@@ -122,17 +122,6 @@ class ChatDataset(torch.utils.data.Dataset):
             if self.max_size:
                 print(f"Truncating dataset to from {len(self.data)} to {self.max_size}")
                 self.data = self.data[:self.max_size]
-            if isinstance(self.data, list) and len(self.data) > 0 and isinstance(self.data[0], dict):
-                _max_num_images = max([len(sample.get('images', [])) for sample in self.data if 'images' in sample])
-                print(f"Max number of images per sample: {_max_num_images}, limit: {max_num_images}")
-
-                if max_num_images and _max_num_images > max_num_images:
-                    print(f"Filtering dataset to images <= {max_num_images}")
-                    self.filtered_data = [sample for sample in self.data if len(sample.get('images', [])) <= max_num_images]
-                    print(f"Filtered dataset size changed from {len(self.data)} to {len(self.filtered_data)}")
-                    self.data = self.filtered_data
-            else:
-                print("Data structure is not as expected.")
             self.data = datasets.Dataset.from_list(self.data)
         else:
             # load from huggingface datasets
@@ -160,6 +149,12 @@ class ChatDataset(torch.utils.data.Dataset):
             if self.max_size:
                 print(f"Truncating dataset to from {len(self.data)} to {self.max_size}")
                 self.data = self.data.select(range(self.max_size))
+                    
+        # filtering examples with image more than max_num_images
+        if isinstance(max_num_images, int) and max_num_images > 0:
+            self.data = self.data.filter(
+                lambda x: len(x['images']) <= max_num_images if 'images' in x else True, 
+                num_proc=num_proc, desc="Filtering examples with more than max_num_images")
 
         # for debugging    
         # new_data = []
