@@ -11,7 +11,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
-    # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
+    # DATA_CONFIG_FILE="./data_configs/mantis_instruct_idefics3.yaml"  # change to this for offical training
     DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"  # change to this for offical training
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
@@ -44,7 +44,7 @@ max_seq_len=32768
 lora_enabled=true
 qlora_enabled=true
 OUTPUT_DIR="../../checkpoints"
-idefics3_N=1 # the longest edge of the image: N * 364; by default, N=4
+idefics3_N=2 # the longest edge of the image: N * 364; by default, N=4
 global_batch_size=128
 
 RUN_NAME="mantis-8b-idefics3"

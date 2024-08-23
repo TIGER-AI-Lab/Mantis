@@ -141,7 +141,7 @@ def load_model(model_args, training_args):
     for name, param in model.named_parameters():
         if any([x in name for x in ["vision_model"]]):
             param.requires_grad = False
-            print("Freezing", name)
+            # print("Freezing", name)
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
     print("Successfully loaded model from:", model_args.model_name_or_path)

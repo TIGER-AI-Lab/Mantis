@@ -99,7 +99,8 @@ class ChatDataset(torch.utils.data.Dataset):
         offline_sha=None,
         sample_ratio=1.0,
         revision="script",
-        num_proc=8
+        num_proc=8,
+        max_image_size=None,
     ):
         self.num_proc = num_proc
         self.processor = processor
@@ -110,6 +111,7 @@ class ChatDataset(torch.utils.data.Dataset):
         self.is_master_worker = is_master_worker
         self.max_size = max_size
         self.max_num_images = max_num_images
+        self.max_image_size = max_image_size
         print("Sleeping for", int(os.environ.get("LOCAL_RANK", 0)) * 5, "seconds")
         time.sleep(int(os.environ.get("LOCAL_RANK", 0)) * 5) # avoid error when multiple processes try to access the same file
         if self.data_path.exists() and self.dataset_type != "huggingface":
@@ -267,7 +269,7 @@ class ChatDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         conv_messages = self.conversations[idx]
         sub_images = self.all_images[idx]
-        sub_images = load_images(sub_images)
+        sub_images = load_images(sub_images, max_image_size=self.max_image_size)
         # resize sub_images to be at least 16 * 16 if image is too small, to avoid errors in clip image processor
         if sub_images:
             for i, image in enumerate(sub_images):
@@ -835,10 +837,12 @@ def load_data_from_config(data_args, processor):
         vl_only = sub_dataset_config.get('vl_only', False)
         revision = sub_dataset_config.get('revision', "script")
         video_dir = sub_dataset_config.get('video_dir', None)
+        max_image_size = sub_dataset_config.get('max_image_size', None)
         assert split in ['train', 'val', 'test'], f"Unknown split {split}"
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,
-                data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)
+                data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, 
+                offline_sha=offline_sha, revision=revision, max_image_size=max_image_size)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_frames)

@@ -6,6 +6,7 @@ data:
     format: chat
     split: train
     revision: script
+    max_image_size: 768
   # - 
   #   name: "star"
   #   type: huggingface
