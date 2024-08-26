@@ -10,6 +10,7 @@ import os
 import math
 import random
 import av
+import json
 
 from pathlib import Path
 from tqdm import tqdm
@@ -138,7 +139,8 @@ class ChatDataset(torch.utils.data.Dataset):
                 while retried < max_retry:
                     try:
                         self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision, num_proc=num_proc)
-                    except json.decoder.JSONDecodeError as e
+                        break
+                    except json.decoder.JSONDecodeError as e:
                         retried += 1
                         time.sleep(5)
                         if retried > max_retry:
