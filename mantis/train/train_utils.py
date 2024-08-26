@@ -66,6 +66,8 @@ def load_json_data(data_file):
         with open(data_file, "r") as f:
             lines = f.readlines()
         data = [json.loads(line.strip()) for line in lines]
+    else:
+        raise ValueError("Unknown json file type")
     return data
 
 

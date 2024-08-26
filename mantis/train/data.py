@@ -824,6 +824,7 @@ def load_data_from_config(data_args, processor):
     print("Max Context Length:", data_args.max_seq_len)
     all_datasets = {}
     for sub_dataset_config in data_config['data']:
+        num_proc = sub_dataset_config.get('max_seq_len', 8)
         max_seq_len = sub_dataset_config.get('max_seq_len', data_args.max_seq_len)
         data_path = sub_dataset_config['path']
         name = sub_dataset_config['name']
@@ -842,7 +843,7 @@ def load_data_from_config(data_args, processor):
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, 
-                offline_sha=offline_sha, revision=revision, max_image_size=max_image_size)
+                offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_frames)
