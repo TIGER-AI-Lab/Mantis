@@ -133,7 +133,17 @@ class ChatDataset(torch.utils.data.Dataset):
                 self.data = read_local_cached_dataset(data_path, name, split, offline_sha)
             else:
                 self.print(f"Loading dataset '{data_path}' {name} {split} from online huggingface datasets")
-                self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision, num_proc=num_proc)
+                max_retry = 5
+                retried = 0
+                while retried < max_retry:
+                    try:
+                        self.data = datasets.load_dataset(data_path, name, split=split, trust_remote_code=True, revision=revision, num_proc=num_proc)
+                    except json.decoder.JSONDecodeError as e
+                        retried += 1
+                        time.sleep(5)
+                        if retried > max_retry:
+                            raise e
+                    
             _max_num_images = max([len(x) for x in self.data['images'] if x])
             print(f"Max number of images per sample: {_max_num_images}, limit: {max_num_images}")
             if max_num_images and _max_num_images > max_num_images:
