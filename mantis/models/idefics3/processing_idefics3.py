@@ -23,6 +23,9 @@ from transformers.image_utils import ImageInput, is_valid_image, load_image
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import AddedToken, BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from transformers.utils import TensorType, logging
+from .image_processing_idefics3 import Idefics3ImageProcessor
+import transformers
+transformers.Idefics3ImageProcessor = Idefics3ImageProcessor
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils_base import PreTokenizedInput
@@ -106,6 +109,7 @@ class Idefics3Processor(ProcessorMixin):
             "additional_special_tokens": [self.fake_image_token, self.image_token, self.end_of_utterance_token]
         }
         tokenizer.add_special_tokens(tokens_to_add)
+        
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
