@@ -155,3 +155,11 @@ data:
     split: train
     shuffle: true
     revision: script
+  - 
+    name: "cauldron"
+    type: json
+    path: ../../data/cauldron/data/train.jsonl
+    format: chat
+    split: train
+    shuffle: true
+    revision: script
