@@ -154,10 +154,12 @@ def get_resize_output_image_size(
     else:
         height, width = get_image_size(image, channel_dim=input_data_format)
 
-    # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
-    height, width = _resize_output_size_rescale_to_max_len(
-        height, width, max_len=resolution_max_side
-    )
+    # Dongfu: I add this if statement to handle the case when the image is already below the max_image_size, I don't want to rescale it to be larger
+    if max(height, width) > resolution_max_side:
+        # Find the output size, when rescaling the longest edge to max_len and preserving the aspect ratio
+        height, width = _resize_output_size_rescale_to_max_len(
+            height, width, max_len=resolution_max_side
+        )
     # Find the output size when scaling the image to be below the max_image_size
     height, width = _resize_output_size_scale_below_upper_bound(
         height, width, max_len=max_image_size
