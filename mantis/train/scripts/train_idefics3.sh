@@ -40,7 +40,7 @@ if [ -z $HF_TOKEN ]; then
 fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
-max_seq_len=32768
+max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
