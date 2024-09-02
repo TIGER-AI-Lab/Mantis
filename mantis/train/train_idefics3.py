@@ -161,6 +161,7 @@ def load_model(model_args, training_args):
     set_ignore_index(model.image_token_id)
     set_default_image_token(processor.tokenizer.decode(model.image_token_id))
     set_default_image_token_id(model.image_token_id)
+    processor.tokenizer.truncation_side = "right" # this is specific to idefics3, which was originally "left", which can cause bugs (truncated <image> tokens) during the training
         
     return model, processor
     
