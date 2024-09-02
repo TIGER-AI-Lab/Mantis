@@ -113,8 +113,8 @@ class ChatDataset(torch.utils.data.Dataset):
         self.max_size = max_size
         self.max_num_images = max_num_images
         self.max_image_size = max_image_size
-        print("Sleeping for", int(os.environ.get("LOCAL_RANK", 0)) * 5, "seconds")
-        time.sleep(int(os.environ.get("LOCAL_RANK", 0)) * 5) # avoid error when multiple processes try to access the same file
+        # print("Sleeping for", int(os.environ.get("LOCAL_RANK", 0)) * 5, "seconds")
+        # time.sleep(int(os.environ.get("LOCAL_RANK", 0)) * 5) # avoid error when multiple processes try to access the same file
         if self.data_path.exists() and self.dataset_type != "huggingface":
             self.print(f"Loading dataset '{name}' from {data_path}")
             self.data = load_json_data(data_path)
@@ -372,6 +372,7 @@ class ChatDataset(torch.utils.data.Dataset):
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split, idx)
         
+        # print(self.data_path, self.name, len(sub_images), input_ids.shape, [x.size for x in sub_images])
         # print(self.data_path, self.name, self.split)
         
         # for debug, print the targets to make sure the right tokens are learned
