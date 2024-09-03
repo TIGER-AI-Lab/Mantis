@@ -31,7 +31,7 @@ def get_mllava(model_name: str):
     else:
         raise ValueError(f'Invalid model name: {model_name}')
     
-def get_mantis_idefics(model_name:str):
+def get_mantis_idefics2(model_name:str):
     from .idefics2_eval import Idefics2
     if model_name == "mantis-8b-idefics2_8192":
         return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2_8192")
@@ -46,6 +46,13 @@ def get_mantis_idefics(model_name:str):
     elif model_name == "mantis-8b-idefics2-data-ablation-4_8192_qlora":
         # same as mantis-8b-idefics2_8192_qlora
         return Idefics2(model_path="Mantis-VL/mantis-8b-idefics2_8192_qlora")
+    else:
+        raise ValueError(f'Invalid model name: {model_name}')
+
+def get_mantis_idefics3(model_name:str):
+    from .idefics3_eval import MantisIdefics3
+    if model_name == "mantis-8b-idefics3_16384":
+        return MantisIdefics3(model_path="Mantis-VL/mantis-8b-idefics3_16384")
     else:
         raise ValueError(f'Invalid model name: {model_name}')
  
@@ -97,6 +104,9 @@ def MLLM_Models(model_name:str):
     elif model_name == "idefics1":
         from .idefics1_eval import Idefics1
         return Idefics1
+    elif model_name == "idefics3":
+        from .idefics3_eval import Idefics3
+        return Idefics3
     elif model_name == "emu2":
         from .emu2_eval import Emu2
         return Emu2
@@ -133,8 +143,9 @@ def MLLM_Models(model_name:str):
         if "fuyu" in model_name.lower():
             return partial(get_mfuyu, model_name=model_name)
         elif "idefics2" in model_name.lower():
-            from .idefics2_eval import Idefics2
-            return partial(get_mantis_idefics, model_name=model_name)
+            return partial(get_mantis_idefics2, model_name=model_name)
+        elif "idefics3" in model_name.lower():
+            return partial(get_mantis_idefics3, model_name=model_name)
         elif "openflamingo" in model_name.lower():
             raise NotImplementedError
         else:
