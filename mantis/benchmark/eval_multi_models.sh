@@ -46,7 +46,8 @@ export CUDA_VISIBLE_DEVICES=2 && bash eval_single_model.sh "mantis-8b-siglip-lla
 
 
 
-export CUDA_VISIBLE_DEVICES=0 && bash eval_single_model.sh "mantis-8b-siglip-llama3-obelics-min" &
+export CUDA_VISIBLE_DEVICES=0 && bash eval_single_model.sh "mantis-8b-idefics3_16384" &
+export CUDA_VISIBLE_DEVICES=1 && bash eval_single_model.sh "idefics3" &
 
 
 
