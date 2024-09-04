@@ -93,6 +93,8 @@ def main(
             response = response.split("answer:")[-1].strip()
         elif "the option is" in response:
             response = response.split("the option is ")[-1].strip()
+        elif "Answer:" in response:
+            response = response.split("Answer:")[-1].strip()
         for char in response:
             if char.isalpha():
                 response = char
