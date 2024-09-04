@@ -162,6 +162,9 @@ def load_model(model_args, training_args):
     set_default_image_token(processor.tokenizer.decode(model.image_token_id))
     set_default_image_token_id(model.image_token_id)
     processor.tokenizer.truncation_side = "right" # this is specific to idefics3, which was originally "left", which can cause bugs (truncated <image> tokens) during the training
+    # in our training, we apply the chat template and use <end_of_utterance> as the eos token for each turn
+    eos_token_id = processor.tokenizer.encode("<end_of_utterance>", add_special_tokens=False)[0]
+    model.generation_config.eos_token_id.append(eos_token_id)
         
     return model, processor
     
