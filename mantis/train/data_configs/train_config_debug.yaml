@@ -1,12 +1,12 @@
-data:  
-  - 
-    name: "multi_vqa"
-    type: huggingface
-    path: "TIGER-Lab/Mantis-Instruct"
+data: 
+ - 
+    name: "datikz"
+    type: json
+    path: ../../data/cauldron/data/datikz.jsonl
     format: chat
     split: train
-    revision: script
-    max_image_size: 728
+    shuffle: true
+    revision: script 
   # - 
   #   name: "star"
   #   type: huggingface

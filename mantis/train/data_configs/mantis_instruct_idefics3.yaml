@@ -147,19 +147,19 @@ data:
     shuffle: true
     revision: script
     max_image_size: 364
-  - 
-    name: "visual_web_instruct"
-    type: json
-    path: ../../data/visual_web_instruct/data/train.jsonl
-    format: chat
-    split: train
-    shuffle: true
-    revision: script
-  - 
-    name: "cauldron"
-    type: json
-    path: ../../data/cauldron/data/train.jsonl
-    format: chat
-    split: train
-    shuffle: true
-    revision: script
+  # - 
+  #   name: "visual_web_instruct"
+  #   type: json
+  #   path: ../../data/visual_web_instruct/data/train.jsonl
+  #   format: chat
+  #   split: train
+  #   shuffle: true
+  #   revision: script
+  # - 
+  #   name: "cauldron"
+  #   type: json
+  #   path: ../../data/cauldron/data/train.jsonl
+  #   format: chat
+  #   split: train
+  #   shuffle: true
+  #   revision: script

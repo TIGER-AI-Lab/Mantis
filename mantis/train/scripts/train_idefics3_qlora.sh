@@ -41,13 +41,13 @@ fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
 max_seq_len=16384
-lora_enabled=false
-qlora_enabled=false
+lora_enabled=true
+qlora_enabled=true
 OUTPUT_DIR="../../checkpoints"
 idefics3_N=4 # the longest edge of the image: N * 364; by default, N=4
 global_batch_size=128
 
-RUN_NAME="mantis-8b-idefics3-pure"
+RUN_NAME="mantis-8b-idefics3"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"

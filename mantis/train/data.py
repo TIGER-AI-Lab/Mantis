@@ -372,7 +372,7 @@ class ChatDataset(torch.utils.data.Dataset):
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split, idx)
         
-        # print(self.data_path, self.name, len(sub_images), input_ids.shape, [x.size for x in sub_images])
+        print(self.data_path, self.name, len(sub_images), input_ids.shape, [x.size for x in sub_images], conv_messages[0])
         # print(self.data_path, self.name, self.split)
         
         # for debug, print the targets to make sure the right tokens are learned
