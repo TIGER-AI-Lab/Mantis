@@ -25,7 +25,7 @@ from transformers.tokenization_utils_base import AddedToken, BatchEncoding, Padd
 from transformers.utils import TensorType, logging
 from .image_processing_idefics3 import Idefics3ImageProcessor
 import transformers
-# transformers.Idefics3ImageProcessor = Idefics3ImageProcessor
+transformers.Idefics3ImageProcessor = Idefics3ImageProcessor
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils_base import PreTokenizedInput
