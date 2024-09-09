@@ -53,6 +53,8 @@ def get_mantis_idefics3(model_name:str):
     from .idefics3_eval import MantisIdefics3
     if model_name == "mantis-8b-idefics3_16384":
         return MantisIdefics3(model_path="Mantis-VL/mantis-8b-idefics3_16384")
+    elif model_name == "mantis-8b-idefics3_pure_16384":
+        return MantisIdefics3(model_path="Mantis-VL/mantis-8b-idefics3-pure_16384")
     else:
         raise ValueError(f'Invalid model name: {model_name}')
  

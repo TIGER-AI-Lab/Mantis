@@ -7,7 +7,7 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_image_size: 728
+    # max_image_size: 728
   - 
     name: "dreamsim"
     type: huggingface
@@ -15,7 +15,7 @@ data:
     format: chat
     split: train
     revision: script
-    max_image_size: 728
+    # max_image_size: 728
   - 
     name: "contrastive_caption"
     type: huggingface
@@ -23,7 +23,8 @@ data:
     format: chat
     split: train
     revision: script
-    max_image_size: 364
+    max_num_images: 6
+    # max_image_size: 364
   - 
     name: "birds-to-words"    
     type: huggingface
@@ -31,16 +32,15 @@ data:
     format: chat
     split: train
     revision: script
-    max_image_size: 728
-  - 
-    name: "visual_story_telling"
-    type: huggingface
-    path: "TIGER-Lab/Mantis-Instruct"
-    format: chat
-    split: train
-    max_num_images: 20
-    revision: script
-    max_image_size: 364
+    # max_image_size: 728
+  # - 
+  #   name: "visual_story_telling"
+  #   type: huggingface
+  #   path: "TIGER-Lab/Mantis-Instruct"
+  #   format: chat
+  #   split: train
+  #   revision: script
+  #   # max_image_size: 364
   -
     name: "spot-the-diff"
     type: huggingface
@@ -48,7 +48,7 @@ data:
     format: chat
     split: train
     revision: script
-    max_image_size: 728
+    # max_image_size: 728
   - 
     name: "lrv_multi"
     type: huggingface
@@ -56,7 +56,8 @@ data:
     format: chat
     split: train
     revision: script
-    max_image_size: 728
+    max_num_images: 6
+    # max_image_size: 728
   - 
     name: "nextqa"
     type: huggingface
@@ -64,7 +65,7 @@ data:
     format: chat
     split: train
     revision: script
-    max_image_size: 364
+    # max_image_size: 364
   - 
     name: "star"
     type: huggingface
@@ -72,7 +73,7 @@ data:
     format: chat
     split: train
     revision: script
-    max_image_size: 364
+    # max_image_size: 364
   - 
     name: "llava_665k_multi"
     type: huggingface
@@ -81,7 +82,7 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_image_size: 728
+    # max_image_size: 728
   - 
     name: "coinstruct"
     type: huggingface
@@ -91,7 +92,7 @@ data:
     max_size: 100000 # 150K original
     shuffle: true
     revision: script
-    max_image_size: 1092
+    # max_image_size: 1092
   - 
     name: "dvqa"
     type: huggingface
@@ -101,7 +102,7 @@ data:
     max_size: 30000 # 200k original
     shuffle: true
     revision: script
-    max_image_size: 1456
+    # max_image_size: 1456
   - 
     name: "chartqa"
     type: huggingface
@@ -110,7 +111,7 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_image_size: 1456
+    # max_image_size: 1456
   - 
     name: "docvqa"
     type: huggingface
@@ -119,7 +120,7 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_image_size: 1456
+    # max_image_size: 1456
   - 
     name: "multi_vqa"
     type: huggingface
@@ -128,7 +129,7 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_image_size: 728
+    # max_image_size: 728
   - 
     name: "iconqa"
     type: huggingface
@@ -137,29 +138,29 @@ data:
     split: train
     shuffle: true
     revision: script
-    max_image_size: 728
+    # max_image_size: 728
+  # - 
+  #   name: "imagecode"
+  #   type: huggingface
+  #   path: "TIGER-Lab/Mantis-Instruct"
+  #   format: chat
+  #   split: train
+  #   shuffle: true
+  #   revision: script
+  #   # max_image_size: 364
   - 
-    name: "imagecode"
-    type: huggingface
-    path: "TIGER-Lab/Mantis-Instruct"
+    name: "visual_web_instruct"
+    type: json
+    path: ../../data/visual_web_instruct/data/train.jsonl
     format: chat
     split: train
     shuffle: true
     revision: script
-    max_image_size: 364
-  # - 
-  #   name: "visual_web_instruct"
-  #   type: json
-  #   path: ../../data/visual_web_instruct/data/train.jsonl
-  #   format: chat
-  #   split: train
-  #   shuffle: true
-  #   revision: script
-  # - 
-  #   name: "cauldron"
-  #   type: json
-  #   path: ../../data/cauldron/data/train.jsonl
-  #   format: chat
-  #   split: train
-  #   shuffle: true
-  #   revision: script
+  - 
+    name: "cauldron"
+    type: json
+    path: ../../data/cauldron/data/train.jsonl
+    format: chat
+    split: train
+    shuffle: true
+    revision: script
