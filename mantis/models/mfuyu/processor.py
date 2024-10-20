@@ -5,13 +5,11 @@ from transformers.models.fuyu.processing_fuyu import (
     BEGINNING_OF_ANSWER_STRING,
     _transform_coordinates_and_tokenize,
     full_unpacked_stream_to_tensor,
-    PaddingStrategy,
-    TruncationStrategy,
     logger,
     requires_backends,
     FuyuBatchFeature,
-    TensorType,
 )
+from transformers import TensorType
 from transformers.models.fuyu.image_processing_fuyu import (
     PILImageResampling,
     ChannelDimension,
@@ -431,8 +429,8 @@ class MFuyuProcessor(FuyuProcessor):
         images: Optional[Union[Image.Image, List[Image.Image], List[List[Image.Image]]]] = None,
         add_special_tokens: bool = False,
         return_attention_mask: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
+        padding: Union[bool, str] = False,
+        truncation: Union[bool, str] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
