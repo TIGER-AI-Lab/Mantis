@@ -45,7 +45,7 @@ pip install -e .
 # install flash-attention
 pip install flash-attn --no-build-isolation
 ```
-## Inferencet
+## Inference
 
 You can run inference with the following command:
 ```bash
