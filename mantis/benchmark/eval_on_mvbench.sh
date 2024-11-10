@@ -25,3 +25,26 @@ CUDA_VISIBLE_DEVICES=6 python eval_on_mvbench.py --num_frames $num_frames --reso
 # CUDA_VISIBLE_DEVICES=2 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name "mantis-7b-bakllava" > $log_dir/mvbench_mantis_7b_bakllava.txt &
 # CUDA_VISIBLE_DEVICES=3 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name "mantis-8b-clip-llama3" > $log_dir/mvbench_mantis_8b_clip_llama3.txt &
 # CUDA_VISIBLE_DEVICES=4 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name "mantis-8b-siglip-llama3" > $log_dir/mvbench_mantis_8b_siglip_llama3.txt &
+
+
+
+resolution=224
+num_frames=2
+log_dir="results/mvbench/${num_frames}frames_${resolution}"
+mkdir -p $log_dir
+CUDA_VISIBLE_DEVICES=0 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name "mantis-8b-idefics2_8192" > $log_dir/mvbench_mantis_8b_idefics2_8192.txt 2>&1 & 
+resolution=224
+num_frames=4
+log_dir="results/mvbench/${num_frames}frames_${resolution}"
+mkdir -p $log_dir
+CUDA_VISIBLE_DEVICES=1 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name "mantis-8b-idefics2_8192" > $log_dir/mvbench_mantis_8b_idefics2_8192.txt 2>&1 & 
+resolution=224
+num_frames=8
+log_dir="results/mvbench/${num_frames}frames_${resolution}"
+mkdir -p $log_dir
+CUDA_VISIBLE_DEVICES=2 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name "mantis-8b-idefics2_8192" > $log_dir/mvbench_mantis_8b_idefics2_8192.txt 2>&1 & 
+resolution=224
+num_frames=16
+log_dir="results/mvbench/${num_frames}frames_${resolution}"
+mkdir -p $log_dir
+CUDA_VISIBLE_DEVICES=3 python eval_on_mvbench.py --num_frames $num_frames --resolution $resolution --model_name "mantis-8b-idefics2_8192" > $log_dir/mvbench_mantis_8b_idefics2_8192.txt 2>&1 & 
