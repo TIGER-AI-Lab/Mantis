@@ -1,5 +1,7 @@
 # Mantis: Multi-Image Instruction Tuning
 
+This repository contain the code for our TMLR24 paper Mantis (https://arxiv.org/abs/2405.01483).
+
 ![Mantis](./docs/assets/images/radar_chart.png)
 <a target="_blank" href="https://arxiv.org/abs/2405.01483">
 <img style="height:22pt" src="https://img.shields.io/badge/-Paper-black?style=flat&logo=arxiv"></a>
