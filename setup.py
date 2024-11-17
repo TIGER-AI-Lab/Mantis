@@ -49,7 +49,8 @@ setup(
             "datasets==2.18.0",
             "open_clip_torch",
             "openai",
-            "av"
+            "av",
+            "qwen_vl_utils",
         ],
         "eval": [
             "tqdm",
