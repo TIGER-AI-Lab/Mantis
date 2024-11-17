@@ -312,7 +312,13 @@ class ChatDataset(torch.utils.data.Dataset):
                     conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(sub_images) - image_token_count) + conv_messages[0][1]
             self.conv.messages = conv_messages
             conv_str = self.conv.get_prompt()
-            encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+            
+            if self.conv.sep_style == SeparatorStyle.QWEN2VL:
+                from qwen_vl_utils.vision_process import fetch_image
+                sub_images = [fetch_image({"type": "image", "image": image}) for image in sub_images]
+                encoding = self.processor(text=conv_str, images=sub_images, videos=None, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+            else:
+                encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
 
         if "image_patches" in encoding:
             encoding.pop("attention_mask")
@@ -345,7 +351,7 @@ class ChatDataset(torch.utils.data.Dataset):
                     target[sep_idxs[i]+1:] = input_ids[sep_idxs[i]+1:]
                 else:
                     target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
-        elif self.conv.sep_style in [SeparatorStyle.IDEFICS_2, SeparatorStyle.IDEFICS_3]:
+        elif self.conv.sep_style in [SeparatorStyle.IDEFICS_2, SeparatorStyle.IDEFICS_3, SeparatorStyle.QWEN2VL]:
             if self.conv.system:
                 skip_offset = 0
             else:
@@ -602,10 +608,10 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         
         # for debug, print the targets to make sure the right tokens are learned
         # need to print to make sure that the masked tokens are correct.
-        # _target = target.clone().detach()
-        # _target[_target == IGNORE_INDEX] = 0
-        # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
-        # print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        _target = target.clone().detach()
+        _target[_target == IGNORE_INDEX] = 0
+        print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
+        print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
         
 
         return encoding
@@ -766,6 +772,52 @@ class ClassificationDataset(torch.utils.data.Dataset):
 
         return encoding
     
+    
+class Qwen2VideoClassificationDataset(ClassificationDataset):
+    def __init__(
+        self, *args, fps=1, **kwargs, 
+    ):
+        super().__init__(*args, **kwargs)
+        self.fps = fps
+        
+    
+    def __getitem__(self, idx):
+        from qwen_vl_utils import process_vision_info
+        prompt = self.prompts[idx]
+        sub_images = self.all_images[idx]
+        sub_images = load_images(sub_images)
+        labels = self.labels[idx]
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "video": sub_images,
+                        "fps": self.fps,
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+        
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        image_inputs, video_inputs = process_vision_info(messages)
+        encoding = self.processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+            max_length=self.max_seq_len,
+        )
+
+        encoding["labels"] = torch.tensor(labels, dtype=torch.float32).unsqueeze(0)
+        return encoding
 class DatasetCollection(torch.utils.data.Dataset):
     def __init__(self, datasets: List[torch.utils.data.Dataset], balancing=False):
         self.datasets = datasets
@@ -863,6 +915,9 @@ def load_data_from_config(data_args, processor):
         elif sub_dataset_config['format'] == 'classification':
             sub_dataset = ClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)
+        elif sub_dataset_config['format'] == 'qwen2_video_classification':
+            sub_dataset = Qwen2VideoClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
+                data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision, fps=data_args.fps)
         else:
             raise ValueError(f"Unknown data format {sub_dataset_config['format']}")
         if split not in all_datasets:

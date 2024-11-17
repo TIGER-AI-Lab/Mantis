@@ -14,6 +14,7 @@ class SeparatorStyle(Enum):
     IDEFICS_2 = auto()
     IDEFICS_3 = auto()
     MFUYU = auto()
+    QWEN2VL = auto()
 
 
 @dataclasses.dataclass
@@ -146,6 +147,21 @@ class Conversation:
                     ret += role + ":" + message + self.sep + "\n"
                 else:
                     ret += role + ":"
+        elif self.sep_style == SeparatorStyle.QWEN2VL:
+            if self.system:
+                ret = "<|im_start|>system\n" + self.system + "<|im_end|>\n"
+            else:
+                ret = ""
+            for role, message in messages:
+                if message:
+                    if type(message) is tuple:
+                        message, _, _ = message
+                    message = message.replace("<image>", "<|vision_start|><|image_pad|><|vision_end|>")
+                    message = message.replace("<video>", "<|vision_start|><|video_pad|><|vision_end|>")
+                    
+                    ret += f"<|im_start|>{role}\n" + message + "<|im_end|>\n"
+                else:
+                    ret += f"<|im_start|>{role}\n"
         else:
             raise ValueError(f"Invalid style: {self.sep_style}")
 
@@ -468,6 +484,16 @@ conv_idefics_3 = Conversation(
     sep="<end_of_utterance>",
 )
 
+conv_qwen2_vl = Conversation(
+    system="You are a helpful assistant.",
+    roles=("user", "assistant"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.QWEN2VL,
+    sep="<|im_end|>"
+)
+
+
 conv_openflamingo = Conversation(
     system="",
     roles=("User", "Assistant"),
@@ -496,6 +522,7 @@ conv_templates = {
     "v1": conv_vicuna_v1,
     "vicuna_v1": conv_vicuna_v1,
     "llama_2": conv_llama_2,
+    "qwen2_vl": conv_qwen2_vl,
 
     "plain": conv_llava_plain,
     "v0_plain": conv_llava_plain,

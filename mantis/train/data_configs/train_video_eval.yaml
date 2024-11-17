@@ -2,6 +2,6 @@ data:
   - 
     name: "video_eval"
     type: json
-    path: "../../data/video_eval/data/refined_40k/train_40k/train_regression.json"
-    format: classification
+    path: "../../data/video_eval/train_regression.json"
+    format: qwen2_video_classification
     split: train
