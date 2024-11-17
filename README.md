@@ -1,4 +1,6 @@
-# Mantis: Multi-Image Instruction Tuning
+# Mantis: Interleaved Multi-Image Instruction Tuning (TMLR 2024)
+
+This repository contain the code for our TMLR24 paper Mantis (https://arxiv.org/abs/2405.01483).
 
 ![Mantis](./docs/assets/images/radar_chart.png)
 <a target="_blank" href="https://arxiv.org/abs/2405.01483">
@@ -28,6 +30,7 @@
 🚀 Mantis achieves state-of-the-art performance on 5 multi-image benchmarks (NLVR2, Q-Bench, BLINK, MVBench, Mantis-Eval), and maintaining a strong single-image performance on par with CogVLM and Emu2.
 
 ## 🔥News
+- [2024-11-15] 🎉 Mantis is accepted to [TMLR 2024](https://openreview.net/forum?id=skLtdUVaJa) 
 - [2024-08-22] We add support for training [🤗 Idefics-3](https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3); script here: [train_idefics3.sh](./mantis/train/scripts/train_idefics3.sh)
 - [2024-08-05] [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) now supports the evaluation of Mantis model. Thanks to the efforts of [BrenchCC](https://github.com/BrenchCC)
 - [2024-08-05] We release the Wandb training curves of [Mantis-8B-CLIP-LLaMA-3](https://wandb.ai/dongfu/MLlava/reports/Mantis-8B-CLIP-LLaMA-3--Vmlldzo4OTM0MDk5), [Mantis-8B-SigLIP-LLaMA-3](https://wandb.ai/dongfu/MLlava/reports/Mantis-8B-SigLIP-LLaMA-3--Vmlldzo4OTM0MTQ2), and [Mantis-8B-Idefics2](https://wandb.ai/dongfu/Mantis/reports/Mantis-8B-Idefics2--Vmlldzo4OTM0MTcw) for training reproduction.
@@ -171,10 +174,12 @@ The following intermediate checkpoints after pre-training the multi-modal projec
 
 ## Citation
 ```bibtex
-@article{jiang2024mantis,
+@article{Jiang2024MANTISIM,
   title={MANTIS: Interleaved Multi-Image Instruction Tuning},
-  author={Jiang, Dongfu and He, Xuan and Zeng, Huaye and Wei, Con and Ku, Max and Liu, Qian and Chen, Wenhu},
-  journal={arXiv preprint arXiv:2405.01483},
-  year={2024}
+  author={Dongfu Jiang and Xuan He and Huaye Zeng and Cong Wei and Max W.F. Ku and Qian Liu and Wenhu Chen},
+  journal={Transactions on Machine Learning Research},
+  year={2024},
+  volume={2024},
+  url={https://openreview.net/forum?id=skLtdUVaJa}
 }
 ```
