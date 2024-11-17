@@ -45,7 +45,7 @@ qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=64
 problem_type="regression"
-num_labels=7
+num_labels=5
 
 RUN_NAME="mantis-8b-idefics2-video-eval-debug"
 export WANDB_PROJECT="Mantis"
