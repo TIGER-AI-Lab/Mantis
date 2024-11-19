@@ -30,6 +30,7 @@ This repository contain the code for our TMLR24 paper Mantis (https://arxiv.org/
 🚀 Mantis achieves state-of-the-art performance on 5 multi-image benchmarks (NLVR2, Q-Bench, BLINK, MVBench, Mantis-Eval), and maintaining a strong single-image performance on par with CogVLM and Emu2.
 
 ## 🔥News
+- [2024-11-18] We add support for training [🤗 Qwen2-VL](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct); script here: [train_qwen2_vl.sh](./mantis/train/scripts/train_qwen2_vl.sh); Supports [liger-kernel](https://github.com/linkedin/Liger-Kernel).
 - [2024-11-15] 🎉 Mantis is accepted to [TMLR 2024](https://openreview.net/forum?id=skLtdUVaJa) 
 - [2024-08-22] We add support for training [🤗 Idefics-3](https://huggingface.co/HuggingFaceM4/Idefics3-8B-Llama3); script here: [train_idefics3.sh](./mantis/train/scripts/train_idefics3.sh)
 - [2024-08-05] [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) now supports the evaluation of Mantis model. Thanks to the efforts of [BrenchCC](https://github.com/BrenchCC)

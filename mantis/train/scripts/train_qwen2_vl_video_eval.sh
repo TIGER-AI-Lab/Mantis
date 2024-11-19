@@ -11,7 +11,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of datasets"
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
-    DATA_CONFIG_FILE="./data_configs/train_video_eval.yaml"
+    DATA_CONFIG_FILE="./data_configs/train_video_eval_qwen2_vl.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
@@ -39,15 +39,18 @@ if [ -z $HF_TOKEN ]; then
 fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
-max_seq_len=16384
+max_seq_len=12288
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=64
 problem_type="regression"
 num_labels=5
+min_pixels=256
+max_pixels=640
+use_liger_kernel=False
 
-RUN_NAME="qwen2-vl-video-eval-debug"
+RUN_NAME="qwen2-vl-video-eval"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -179,3 +182,6 @@ accelerate launch --config_file=$config_file \
     --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
     --resume_from_checkpoint "$resume_from_checkpoint" \
+    --use_liger_kernel $use_liger_kernel \
+    --min_pixels $min_pixels \
+    --max_pixels $max_pixels \

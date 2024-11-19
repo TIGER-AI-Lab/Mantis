@@ -45,6 +45,9 @@ lora_enabled=true
 qlora_enabled=true
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
+min_pixels=256
+max_pixels=640
+use_liger_kernel=False
 
 RUN_NAME="mantis-8b-qwen2-vl"
 export WANDB_PROJECT="Mantis"
@@ -175,3 +178,6 @@ accelerate launch --config_file=$config_file \
     --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
     --resume_from_checkpoint "$resume_from_checkpoint" \
+    --min_pixels $min_pixels \
+    --max_pixels $max_pixels \
+    --use_liger_kernel $use_liger_kernel \

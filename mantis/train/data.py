@@ -904,6 +904,7 @@ def load_data_from_config(data_args, processor):
         revision = sub_dataset_config.get('revision', "script")
         video_dir = sub_dataset_config.get('video_dir', None)
         max_image_size = sub_dataset_config.get('max_image_size', None)
+        fps = sub_dataset_config.get('fps', 1)
         assert split in ['train', 'val', 'test'], f"Unknown split {split}"
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,
@@ -917,7 +918,7 @@ def load_data_from_config(data_args, processor):
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)
         elif sub_dataset_config['format'] == 'qwen2_video_classification':
             sub_dataset = Qwen2VideoClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
-                data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision, fps=data_args.fps)
+                data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision, fps=fps)
         else:
             raise ValueError(f"Unknown data format {sub_dataset_config['format']}")
         if split not in all_datasets:

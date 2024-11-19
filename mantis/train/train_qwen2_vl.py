@@ -49,10 +49,6 @@ class DataArguments:
         metadata={"help": "Whether to balance the dataset", "default": True, "required": False},
         default=False,
     )
-    fps: Optional[int] = field(
-        metadata={"help": "The frames per second for video data", "default": 1, "required": False},
-        default=1,
-    )
 
 @dataclass
 class ModelArguments:
@@ -104,13 +100,24 @@ class ModelArguments:
         metadata={"help": "The problem type", "default": "generation", "required": False, "choices": ["regression", "single_label_classification", "multi_label_classification", "generation"]},
         default="generation",
     )
+    min_pixels: Optional[int] = field(
+        metadata={"help": "The minimum number of pixels", "default": 16, "required": False},
+        default=256,
+    )
+    max_pixels: Optional[int] = field(
+        metadata={"help": "The maximum number of pixels", "default": 256, "required": False},
+        default=1280,
+    )
+    
 
 def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     from transformers import Qwen2VLProcessor, AutoConfig
     from mantis.models.qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLForSequenceClassification
-    processor = Qwen2VLProcessor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False) # seems high vmem usage when image splitting is enabled
+    processor = Qwen2VLProcessor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False,
+        min_pixels=model_args.min_pixels * 28 * 28, max_pixels=model_args.max_pixels * 28 * 28
+    ) # seems high vmem usage when image splitting is enabled
     
     if model_args.qlora_enabled:
         bnb_config = BitsAndBytesConfig(
@@ -164,6 +171,11 @@ def load_model(model_args, training_args):
             init_lora_weights="gaussian"
         )
         model = get_peft_model(model, lora_config)
+    
+    # keep the vision backbone frozen all the time
+    for name, param in model.named_parameters():
+        if "visual" in name:
+            param.requires_grad = False
         
     set_ignore_index(-100)
     set_default_image_token_id(model.config.image_token_id)
