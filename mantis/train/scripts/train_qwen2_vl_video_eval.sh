@@ -50,7 +50,7 @@ min_pixels=256
 max_pixels=640
 use_liger_kernel=False
 
-RUN_NAME="qwen2-vl-video-eval-debug"
+RUN_NAME="qwen2-vl-video-eval"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
