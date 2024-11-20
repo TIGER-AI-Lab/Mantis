@@ -39,7 +39,8 @@ if [ -z $HF_TOKEN ]; then
 fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
-max_seq_len=12288
+# max_seq_len=12288
+max_seq_len=32768
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
@@ -48,7 +49,7 @@ problem_type="regression"
 num_labels=5
 min_pixels=256
 max_pixels=640
-use_liger_kernel=False
+use_liger_kernel=True
 
 RUN_NAME="qwen2-vl-video-eval"
 export WANDB_PROJECT="Mantis"
