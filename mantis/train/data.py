@@ -700,6 +700,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
         prompts = []
         all_images = []
         label_names = list(self.data[0]['labels'].keys())
+        self.label_names = label_names
         all_labels = []
         for i, item in tqdm(
             enumerate(self.data), desc="Format prompts and load images", 
@@ -775,10 +776,15 @@ class ClassificationDataset(torch.utils.data.Dataset):
     
 class Qwen2VideoClassificationDataset(ClassificationDataset):
     def __init__(
-        self, *args, fps=1, **kwargs, 
+        self, *args, fps=1, score_type=None, **kwargs, 
     ):
         super().__init__(*args, **kwargs)
         self.fps = fps
+        if hasattr(self.processor.tokenizer, "score_type"):
+            self.score_type = self.processor.tokenizer.score_type
+            if self.score_type == "special_token":
+                self.label_special_tokens = self.processor.tokenizer.label_special_tokens
+                self.processor.tokenizer.label_names = self.label_names
         
     
     def __getitem__(self, idx):
@@ -787,7 +793,6 @@ class Qwen2VideoClassificationDataset(ClassificationDataset):
         sub_images = self.all_images[idx]
         sub_images = load_images(sub_images)
         labels = self.labels[idx]
-        
         messages = [
             {
                 "role": "user",
@@ -801,6 +806,11 @@ class Qwen2VideoClassificationDataset(ClassificationDataset):
                 ],
             }
         ]
+        if self.score_type == "special_token":
+            response = ""
+            for i in range(len(labels)):
+                response += f"The score for {self.label_names[i]} is {self.label_special_tokens[i]}. "
+            messages.append({"role": "assistant", "content": [{"type": "text", "text": response}]})
         
         text = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=False

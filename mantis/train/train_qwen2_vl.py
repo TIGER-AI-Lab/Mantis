@@ -108,6 +108,10 @@ class ModelArguments:
         metadata={"help": "The maximum number of pixels", "default": 256, "required": False},
         default=1280,
     )
+    score_type: Optional[str] = field(
+        metadata={"help": "The label prefix", "default": "end_token_mlp", "required": False},
+        default="end_token_mlp",
+    )
     
 
 def load_model(model_args, training_args):
@@ -142,13 +146,39 @@ def load_model(model_args, training_args):
     else:
         print("Using classification model")
         MODEL_CLASS =  Qwen2VLForSequenceClassification
+        config = AutoConfig.from_pretrained(model_args.model_name_or_path, problem_type=model_args.problem_type, num_labels=model_args.num_labels)
         model_init_kwargs = {
             "torch_dtype": torch_dtype,
             "attn_implementation": model_args.attn_implementation,
             "quantization_config": bnb_config,
-            "problem_type": model_args.problem_type,
-            "num_labels": model_args.num_labels,
+            # "problem_type": model_args.problem_type,
+            # "num_labels": model_args.num_labels,
         }
+        if model_args.score_type:
+            if model_args.score_type == "end_token_mlp":
+                # default
+                pass 
+            elif model_args.score_type == "special_token":
+                print("Using special token score type")
+                print("Previous tokenizer size:", len(processor.tokenizer))
+                label_special_tokens = [f"<|LABEL_{i}|>" for i in range(1, model_args.num_labels + 1)]
+                processor.tokenizer.add_tokens(label_special_tokens, special_tokens=True)
+                label_special_token_ids = processor.tokenizer.convert_tokens_to_ids(label_special_tokens)
+                # model_init_kwargs["score_type"] = "special_token" 
+                # model_init_kwargs["label_special_tokens"] = label_special_tokens
+                # model_init_kwargs["label_special_token_ids"] = label_special_token_ids
+                config.score_type = "special_token"
+                config.label_special_tokens = label_special_tokens
+                config.label_special_token_ids = label_special_token_ids
+                print(config)
+                model_init_kwargs["config"] = config
+                print("Added special tokens for labels:", label_special_tokens)
+                print("Special tokens ids:", label_special_token_ids)
+                print("New tokenizer size:", len(processor.tokenizer))
+                processor.tokenizer.label_special_tokens = label_special_tokens
+                processor.tokenizer.score_type = "special_token"
+            else:
+                raise ValueError("Invalid score type")
         if model_args.lora_enabled or model_args.qlora_enabled:
             raise ValueError("LoRA and QLoRA are not supported for Qwen2VLForSequenceClassification for now")
     
@@ -182,7 +212,13 @@ def load_model(model_args, training_args):
     set_default_video_token_id(model.config.video_token_id)
     set_default_image_token("<image>") # this will be transformed to <|vision_start|><|image_pad|><|vision_end|> in the conversation template of qwen2_vl
     set_default_video_token("<video>") # this will be transformed to <|vision_start|><|video_pad|><|vision_end|> in the conversation template of qwen2_vl
-        
+    
+    # resize token embeddings
+    if len(processor.tokenizer) > model.config.vocab_size:
+        print("Tokenizer size:", len(processor.tokenizer))
+        print("Model vocab size:", model.config.vocab_size)
+        print("Resizing token embeddings to match tokenizer size")
+        model.resize_token_embeddings(len(processor.tokenizer))
     return model, processor
     
 def main(

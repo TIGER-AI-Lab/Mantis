@@ -50,6 +50,7 @@ num_labels=5
 min_pixels=256
 max_pixels=640
 use_liger_kernel=True
+score_type="special_token"
 
 RUN_NAME="qwen2-vl-video-eval"
 export WANDB_PROJECT="Mantis"
@@ -186,3 +187,4 @@ accelerate launch --config_file=$config_file \
     --use_liger_kernel $use_liger_kernel \
     --min_pixels $min_pixels \
     --max_pixels $max_pixels \
+    --score_type $score_type \

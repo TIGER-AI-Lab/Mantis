@@ -60,7 +60,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
 
 class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = ["score.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -69,6 +69,16 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
         )
         self.model = Qwen2VLModel(config)
         self.num_labels = config.num_labels
+        if hasattr(config, "score_type"):
+            if config.score_type == "special_token":
+                self.score = nn.ModuleList([nn.Linear(config.hidden_size, 1) for _ in range(self.num_labels)])
+                self.label_special_token_ids = config.label_special_token_ids
+            else:
+                self.score = nn.Linear(config.hidden_size, self.num_labels)
+            self.score_type = config.score_type
+        else:
+            self.score_type = None
+            self.score = nn.Linear(config.hidden_size, self.num_labels)
         self.score = nn.Linear(config.hidden_size, self.num_labels)
         self.padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
 
@@ -82,10 +92,10 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.score
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.score = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -366,18 +376,31 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
 
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            sequence_lengths = -1
+        if hasattr(self.config, "score_type") and self.config.score_type == "special_token":
+            assert input_ids is not None, "input_ids must be provided when using special token score type."
+            label_special_token_ids = self.label_special_token_ids
+            # find the idx of the special token in the input_ids
+            label_special_token_idxs = torch.nonzero(
+                torch.any(input_ids.unsqueeze(-1) == label_special_token_ids, dim=-1), as_tuple=True
+            )[1]
+            print(label_special_token_idxs)
+            # assert that each special token is found exactly once
+            assert len(label_special_token_idxs) == len(label_special_token_ids) * batch_size
+            # get the logits for the special tokens
+            pooled_logits = logits[torch.arange(batch_size, device=logits.device), label_special_token_idxs]
         else:
-            if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(logits.device)
-            else:
+            if self.config.pad_token_id is None:
                 sequence_lengths = -1
-                
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+            else:
+                if input_ids is not None:
+                    # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                    sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                    sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                    sequence_lengths = sequence_lengths.to(logits.device)
+                else:
+                    sequence_lengths = -1
+                    
+            pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
                 
         loss = None
         if labels is not None:
@@ -473,7 +496,7 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
                 batch_size, sequence_length = input_ids.shape
                 device = input_ids.device
 
-            dtype = self.lm_head.weight.dtype
+            dtype = self.score.weight.dtype
             min_dtype = torch.finfo(dtype).min
 
             attention_mask = _prepare_4d_causal_attention_mask_with_cache_position(
