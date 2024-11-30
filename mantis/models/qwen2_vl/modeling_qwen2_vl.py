@@ -79,7 +79,6 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
         else:
             self.score_type = None
             self.score = nn.Linear(config.hidden_size, self.num_labels)
-        self.score = nn.Linear(config.hidden_size, self.num_labels)
         self.padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
 
         # Initialize weights and apply final processing
@@ -366,7 +365,6 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.score(hidden_states)
         
         
         if input_ids is not None:
@@ -380,15 +378,20 @@ class Qwen2VLForSequenceClassification(Qwen2VLPreTrainedModel):
             assert input_ids is not None, "input_ids must be provided when using special token score type."
             label_special_token_ids = self.label_special_token_ids
             # find the idx of the special token in the input_ids
-            label_special_token_idxs = torch.nonzero(
-                torch.any(input_ids.unsqueeze(-1) == label_special_token_ids, dim=-1), as_tuple=True
-            )[1]
-            print(label_special_token_idxs)
-            # assert that each special token is found exactly once
-            assert len(label_special_token_idxs) == len(label_special_token_ids) * batch_size
-            # get the logits for the special tokens
-            pooled_logits = logits[torch.arange(batch_size, device=logits.device), label_special_token_idxs]
+            label_special_token_idxs = []
+            for label_special_token_id in label_special_token_ids:
+                label_batch_idxs, label_idxs = torch.nonzero(input_ids == label_special_token_id, as_tuple=True)
+                assert label_batch_idxs == torch.arange(batch_size, device=label_batch_idxs.device), "Special token must be found exactly once in each input."
+                label_special_token_idxs.append(torch.nonzero(input_ids == label_special_token_id, as_tuple=True)[1])
+            label_special_token_idxs = torch.stack(label_special_token_idxs, dim=1).to(hidden_states.device)
+            
+            label_hidden_states = hidden_states[torch.arange(batch_size, device=hidden_states.device).unsqueeze(1), label_special_token_idxs]
+            
+            logits = [score_i(label_hidden_states[:, i, :]) for i, score_i in enumerate(self.score)]
+            logits = torch.cat(logits, dim=1)
+            pooled_logits = logits
         else:
+            logits = self.score(hidden_states)
             if self.config.pad_token_id is None:
                 sequence_lengths = -1
             else:
