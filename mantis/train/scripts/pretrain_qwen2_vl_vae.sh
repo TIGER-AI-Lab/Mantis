@@ -144,7 +144,8 @@ if [ $lora_enabled = true ]; then
     echo $config_file
 else
     echo "lora is disabled"
-    config_file="./accelerate_configs/accelerate_config_zero3.yaml"
+    # config_file="./accelerate_configs/accelerate_config_zero3.yaml"
+    config_file="./accelerate_configs/accelerate_config_fsdp.yaml"
     echo $config_file
 fi
 

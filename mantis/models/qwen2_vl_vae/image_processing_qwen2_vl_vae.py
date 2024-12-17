@@ -123,11 +123,11 @@ def smart_resize(
     return h_bar, w_bar
 
 def smart_estimate_vae_tokens(num_frames, height, width, temporal_compression_rate=6, height_compression_rate=8, width_compression_rate=8, patch_size=2):
-    compressed_T = (num_frames - 1) // temporal_compression_rate + 1
-    compressed_H = (height - 1) // height_compression_rate + 1
-    compressed_W = (width - 1) // width_compression_rate + 1
-    compressed_H_patch = (compressed_H - 1) // patch_size + 1
-    compressed_W_patch = (compressed_W - 1) // patch_size + 1
+    compressed_T = max(num_frames // temporal_compression_rate, 1)
+    compressed_H = max(height // height_compression_rate, 1)
+    compressed_W = max(width // width_compression_rate, 1)
+    compressed_H_patch = compressed_H // patch_size
+    compressed_W_patch = compressed_W // patch_size
     return compressed_T * compressed_H_patch * compressed_W_patch
 
 class Qwen2VLVAEImageProcessor(BaseImageProcessor):
@@ -276,7 +276,8 @@ class Qwen2VLVAEImageProcessor(BaseImageProcessor):
                 resized_height, resized_width = smart_resize(
                     height,
                     width,
-                    factor=self.patch_size * self.merge_size,
+                    # factor=self.patch_size * self.merge_size,
+                    factor=self.width_compression_rate * self.patch_size,
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
                 )

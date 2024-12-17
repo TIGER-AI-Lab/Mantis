@@ -101,7 +101,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 from diffusers import AutoencoderKLMochi
 class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
     config_class = Qwen2VLVisionVAEConfig
-    _no_split_modules = ["Qwen2VLVisionBlock"]
+    # _no_split_modules = ["Qwen2VLVisionBlock"]
 
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -116,6 +116,7 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
         if not config.vae_config:
             raise ValueError("No VAE config provided. This is not expected if you are loading a pretrained VAE Vision model. Make sure you are initializing the model with the correct config.")
         else:
+            from diffusers import AutoencoderKLMochi
             self.vae_class = getattr(diffusers, self.vae_class_name)
             self.vae_model = self.vae_class.from_config(config.vae_config)
             self.vae_model._set_gradient_checkpointing(self.vae_model.encoder)
@@ -521,7 +522,6 @@ class Qwen2VLVAEForConditionalGeneration(Qwen2VLVAEPreTrainedModel, GenerationMi
             if pixel_values is not None:
                 all_image_vae_embeds = []
                 for i in range(len(pixel_values)):
-                    print(pixel_values[i].shape)
                     pixel_values_image = pixel_values[i]
                     pixel_values_image = pixel_values_image.type(self.vae_visual.get_dtype())
                     image_embeds = self.vae_visual(pixel_values_image.unsqueeze(0))
@@ -529,8 +529,6 @@ class Qwen2VLVAEForConditionalGeneration(Qwen2VLVAEPreTrainedModel, GenerationMi
                 image_embeds = torch.cat(all_image_vae_embeds, dim=1)
                 image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                print(image_embeds.shape, inputs_embeds.shape, image_mask.shape)
-                print((image_mask.sum(-1) != 0).sum())
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
             if pixel_values_videos is not None:
