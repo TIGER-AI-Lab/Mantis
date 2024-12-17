@@ -38,7 +38,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.models.auto import AutoModel
-from .configuration_idefics2 import Idefics2Config, Idefics2VisionConfig
+from .configuration_idefics2 import Idefics2Config, Idefics2VisionConfig, Idefics2DeltaConfig
 
 
 if is_flash_attn_2_available():
@@ -1208,13 +1208,38 @@ IDEFICS2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+from ..NeuFlow import load_neuflow, get_flow_image, compute_residual
+
+class DeltaFlowModel(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.neuflow = load_neuflow(config.flow_model_name_or_path)
+        self.image_size = config.flow_image_size
+
+    def forward(self, pixel_values):
+        batch_size, num_images, num_channels, height, width = pixel_values.shape
+        
+        pixel_values = pixel_values.permute(0, 1, 4, 3, 2).reshape(batch_size, num_images, width, height, num_channels)
+        
+        all_flow_images = []
+        for bz in range(batch_size):
+            all_flow_images.append([])
+            for i in range(1, num_images):
+                all_flow_images[bz].append(get_flow_image(self.neuflow, pixel_values[bz, i-1], pixel_values[bz, i]))
+                
+        flows = torch.cat([torch.stack(flow_images) for flow_images in all_flow_images], dim=0)
+        flow_image = flows.view(batch_size, num_images-1, width, height, 2)
+        flow_image = flow_image.permute(0, 1, 4, 3, 2) # (batch_size, num_images-1, 2, height, width) # 2 is the n
+        return flow_image    
 
 @add_start_docstrings(
     """Idefics2 model consisting of a SIGLIP vision encoder and Mistral language decoder""",
     IDEFICS2_START_DOCSTRING,
 )
-class Idefics2Model(Idefics2PreTrainedModel):
-    def __init__(self, config: Idefics2Config):
+class Idefics2DeltaModel(Idefics2PreTrainedModel):
+    config_class = Idefics2DeltaConfig
+    def __init__(self, config: Idefics2DeltaConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
@@ -1222,6 +1247,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.vision_model = Idefics2VisionTransformer(config.vision_config)
         self.connector = Idefics2Connector(config)
         self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.deltaflow_model = DeltaFlowModel(config)
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
@@ -1438,12 +1464,13 @@ class Idefics2Model(Idefics2PreTrainedModel):
     """The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
     IDEFICS2_START_DOCSTRING,
 )
-class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel):
+class Idefics2DeltaForConditionalGeneration(Idefics2PreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
+    config_class = Idefics2DeltaConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = Idefics2Model(config)
+        self.model = Idefics2DeltaModel(config)
         self.image_token_id = self.config.image_token_id
 
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

@@ -260,3 +260,15 @@ class Idefics2Config(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+
+
+class Idefics2DeltaConfig(Idefics2Config):
+    model_type = "idefics2_delta"
+    def __init__(self, 
+        flow_model_name_or_path: str = "Study-is-happy/neuflow-v2",
+        **kwargs):
+        super().__init__(**kwargs)
+        self.flow_model_name_or_path = flow_model_name_or_path
+        self.flow_image_size = (768, 432)
+        
+        

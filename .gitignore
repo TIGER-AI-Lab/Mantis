@@ -183,3 +183,8 @@ cython_debug/
 /hf_space
 /sailctl_scripts
 /data/*.ipynb
+/examples/*
+/*.png
+/*.mp4
+/mantis/models/NeuFlow
+/mantis/models/perceiver
