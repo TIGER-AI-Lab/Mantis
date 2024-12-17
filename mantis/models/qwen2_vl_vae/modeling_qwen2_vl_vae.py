@@ -98,7 +98,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
     return causal_mask
 
-
+from diffusers import AutoencoderKLMochi
 class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
     config_class = Qwen2VLVisionVAEConfig
     _no_split_modules = ["Qwen2VLVisionBlock"]
@@ -114,23 +114,22 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
         )
         self.vae_class_name = config.vae_class_name
         if not config.vae_config:
-            logger.warning("No VAE config provided. This is not expected if you are loading a pretrained VAE Vision model. Make sure you are initializing the model with the correct config.")
-            self.vae_model = None
+            raise ValueError("No VAE config provided. This is not expected if you are loading a pretrained VAE Vision model. Make sure you are initializing the model with the correct config.")
         else:
             self.vae_class = getattr(diffusers, self.vae_class_name)
             self.vae_model = self.vae_class.from_config(config.vae_config)
             self.vae_model._set_gradient_checkpointing(self.vae_model.encoder)
             self.vae_model._set_gradient_checkpointing(self.vae_model.decoder)
-            
-    def set_vae(self, vae):
-        self.vae_model = vae
-        self.vae_class_name = vae.__class__.__name__
 
     def get_dtype(self) -> torch.dtype:
-        return self.patch_embed.proj.weight.dtype
+        if self.vae_model is None:
+            return torch.float32
+        return self.vae_model.encoder.proj_in.weight.dtype
 
     def get_device(self) -> torch.device:
-        return self.patch_embed.proj.weight.device
+        if self.vae_model is None:
+            return torch.device("cpu")
+        return self.vae_model.encoder.proj_in.weight.device
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -516,19 +515,27 @@ class Qwen2VLVAEForConditionalGeneration(Qwen2VLVAEPreTrainedModel, GenerationMi
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.vae_visual.get_dtype())
-                image_embeds = self.vae_visual(pixel_values)
+                all_image_vae_embeds = []
+                for i in range(len(pixel_values)):
+                    print(pixel_values[i].shape)
+                    pixel_values_image = pixel_values[i]
+                    pixel_values_image = pixel_values_image.type(self.vae_visual.get_dtype())
+                    image_embeds = self.vae_visual(pixel_values_image.unsqueeze(0))
+                    all_image_vae_embeds.append(image_embeds)
+                image_embeds = torch.cat(all_image_vae_embeds, dim=1)
                 image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                print(image_embeds.shape, inputs_embeds.shape, image_mask.shape)
+                print((image_mask.sum(-1) != 0).sum())
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
             if pixel_values_videos is not None:
                 all_video_vae_embeds = []
-                for i in range(pixel_values_videos.shape[0]):
+                for i in range(len(pixel_values_videos)):
                     pixel_values_video = pixel_values_videos[i]
                     pixel_values_video = pixel_values_video.type(self.vae_visual.get_dtype())
                     video_embeds = self.vae_visual(pixel_values_video.unsqueeze(0))

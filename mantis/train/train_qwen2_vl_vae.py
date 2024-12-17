@@ -154,7 +154,8 @@ def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     # from mantis.models.qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLForSequenceClassification
-    from mantis.models.qwen2_vl_vae import Qwen2VLVAEForConditionalGeneration, Qwen2VLVAEProcessor
+    from mantis.models.qwen2_vl_vae import Qwen2VLVAEForConditionalGeneration, Qwen2VLVAEProcessor, Qwen2VLVAEConfig
+    print("Loading processor...")
     processor = Qwen2VLVAEProcessor.from_pretrained(model_args.model_name_or_path, do_image_splitting=False,
         min_pixels=model_args.min_pixels * 28 * 28, max_pixels=model_args.max_pixels * 28 * 28,
         temporal_compression_rate=model_args.vae_temporal_compress_rate,
@@ -162,7 +163,7 @@ def load_model(model_args, training_args):
         height_compression_rate=model_args.vae_height_compress_rate,
         patch_size=model_args.post_vae_patch_size,
     ) # seems high vmem usage when image splitting is enabled
-    
+    print("Successfully loaded processor from:", model_args.model_name_or_path)
     if model_args.qlora_enabled:
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -174,15 +175,31 @@ def load_model(model_args, training_args):
     else:
         bnb_config = None
     
-    assert model_args.problem_type in ["regression", "single_label_classification", "multi_label_classification", "generation"]
+    assert model_args.problem_type in ["generation"]
     if model_args.problem_type == "generation": 
-        print("Using generation model")
         MODEL_CLASS = Qwen2VLVAEForConditionalGeneration
         model_init_kwargs = {
             "torch_dtype": torch_dtype,
             "attn_implementation": model_args.attn_implementation,
             "quantization_config": bnb_config,
         }
+        print("Using generation model")
+        if model_args.do_pretrain:
+            vae_class = getattr(__import__("diffusers"), model_args.vae_class_name)
+            vae_config = vae_class.load_config(model_args.vae_model_name_or_path, subfolder=model_args.vae_subfolder)
+            config = Qwen2VLVAEConfig.from_pretrained(
+                model_args.model_name_or_path,
+                vision_config={
+                    "patch_size": model_args.post_vae_patch_size,
+                    "in_channels": model_args.vae_latent_channel_size,
+                    "vae_path": model_args.vae_model_name_or_path,
+                    "vae_subfolder": model_args.vae_subfolder,
+                    "vae_class_name": model_args.vae_class_name,
+                    "vae_config": vae_config,
+                }
+            )
+            model_init_kwargs["config"] = config
+        
     else:
         raise NotImplementedError("Only generation is supported for now")
     
@@ -191,11 +208,13 @@ def load_model(model_args, training_args):
         model_args.model_name_or_path,
         **model_init_kwargs
     )
-    if model.vae_visual.vae_model is None:
+    if model_args.do_pretrain:
+        print("Model does not have a VAE backbone, loading from", model_args.vae_model_name_or_path)
         # load the vae model
         vae_class = getattr(__import__("diffusers"), model_args.vae_class_name)
         vae = vae_class.from_pretrained(model_args.vae_model_name_or_path, subfolder=model_args.vae_subfolder)
-        model.vae_visual.set_vae(vae)
+        model.vae_visual.vae_model.load_state_dict(vae.state_dict())
+        print("Successfully loaded VAE model from:", model_args.vae_model_name_or_path)
         
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
@@ -215,15 +234,20 @@ def load_model(model_args, training_args):
     if model_args.do_pretrain:
         # pre-train the adapter only
         for name, param in model.named_parameters():
-            if "vae_visual.patch_embed" in name:
+            if "vae_visual" in name:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
-    else:
-        # keep the vae backbone frozen all the time
-        for name, param in model.named_parameters():
-            if "vae_model" in name:
-                param.requires_grad = False
+        
+    # keep the vae backbone frozen all the time
+    for name, param in model.named_parameters():
+        if "vae_model" in name:
+            param.requires_grad = False
+    
+    # print the trainable parameters
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(f"Trainable: {name}")
             
     set_ignore_index(-100)
     set_default_image_token_id(model.config.image_token_id)

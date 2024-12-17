@@ -57,7 +57,7 @@ min_pixels=256
 max_pixels=640
 use_liger_kernel=False
 
-RUN_NAME="mantis-8b-qwen2-vl"
+RUN_NAME="mantis-8b-qwen2-vl-vae"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -196,4 +196,5 @@ accelerate launch --config_file=$config_file \
     --vae_temporal_compress_rate $vae_temporal_compress_rate \
     --vae_width_compress_rate $vae_width_compress_rate \
     --vae_height_compress_rate $vae_height_compress_rate \
-    --post_vae_patch_size $post_vae_patch_size
+    --post_vae_patch_size $post_vae_patch_size \
+    --do_pretrain $do_pretrain

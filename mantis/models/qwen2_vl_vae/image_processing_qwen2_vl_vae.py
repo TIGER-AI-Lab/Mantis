@@ -21,7 +21,7 @@
 
 import math
 from typing import Dict, List, Optional, Union
-
+import torch
 import numpy as np
 
 
@@ -453,10 +453,10 @@ class Qwen2VLVAEImageProcessor(BaseImageProcessor):
             
         if images is not None:
             # treat all images as a single-frame video
-            videos = [[image] for image in images]
+            dummy_videos = [[image] for image in images]
             pixel_values = []
             num_vae_tokens = []
-            for images in videos:
+            for images in dummy_videos:
                 frames, num_tokens = self._preprocess(
                     images,
                     do_resize=do_resize,
@@ -470,11 +470,8 @@ class Qwen2VLVAEImageProcessor(BaseImageProcessor):
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
                 )
-                pixel_values.append(frames)
+                pixel_values.append(frames.transpose(1, 0, 2, 3))
                 num_vae_tokens.append(num_tokens)
-            pixel_values = np.array(pixel_values)
-            # B, N, C, H, W -> B, C, N, H, W
-            pixel_values = np.transpose(pixel_values, (0, 2, 1, 3, 4))
             data = {"pixel_values": pixel_values, "num_vae_tokens": num_vae_tokens}
 
         if videos is not None:
@@ -496,7 +493,13 @@ class Qwen2VLVAEImageProcessor(BaseImageProcessor):
                 )
                 pixel_values.append(frames.transpose(1, 0, 2, 3))
                 num_vae_tokens.append(num_tokens)
-            # pixel_values = np.array(pixel_values)
             data = {"pixel_values_videos": pixel_values, "num_vae_tokens": num_vae_tokens}
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        
+        batch_feature = BatchFeature()
+        is_tensor, as_tensor = batch_feature._get_is_as_tensor_fns(return_tensors)
+        for key, value in data.items():
+            if isinstance(value, list):
+                data[key] = [as_tensor(v) if not is_tensor(v) else v for v in value]
+            else:
+                data[key] = as_tensor(value) if not is_tensor(value) else value
+        return data

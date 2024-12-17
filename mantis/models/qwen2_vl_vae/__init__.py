@@ -1,5 +1,5 @@
 from .modeling_qwen2_vl_vae import Qwen2VLVAEForConditionalGeneration
-from .configuration_qwen2_vl_vae import Qwen2VLVAEConfig
+from .configuration_qwen2_vl_vae import Qwen2VLVAEConfig, Qwen2VLVisionVAEConfig
 from .processing_qwen2_vl_vae import Qwen2VLVAEProcessor
 from .image_processing_qwen2_vl_vae import Qwen2VLVAEImageProcessor
 
@@ -29,7 +29,7 @@ transformers.Qwen2VLVAEProcessor = Qwen2VLVAEProcessor
 
 
 _import_structure = {
-    "configuration_qwen2_vl_vae": ["Qwen2VLVAEConfig"],
+    "configuration_qwen2_vl_vae": ["Qwen2VLVAEConfig", "Qwen2VLVisionVAEConfig"],
     "processing_qwen2_vl_vae": ["Qwen2VLVAEProcessor"],
 }
 

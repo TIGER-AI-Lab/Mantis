@@ -20,8 +20,8 @@
 """
 Processor class for Qwen2-VL.
 """
-
-from typing import List, Union
+import torch
+from typing import List, Union, Dict
 
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput, VideoInput
@@ -149,6 +149,12 @@ class Qwen2VLVAEProcessor(ProcessorMixin):
         _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
+        # print(image_inputs.keys())
+        # print(len(image_inputs['pixel_values']), type(image_inputs['pixel_values']), [type(x) for x in image_inputs['pixel_values']])
+        # print([x.shape for x in image_inputs['pixel_values']])
+        # # print(len(videos_inputs['pixel_values_videos']), type(videos_inputs['pixel_values_videos']), [type(x) for x in videos_inputs['pixel_values_videos']])
+        # # print([x.shape for x in videos_inputs['pixel_values_videos']])
+        # exit(1)
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
 
     def batch_decode(self, *args, **kwargs):
@@ -170,3 +176,15 @@ class Qwen2VLVAEProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    def _right_pad_inputs_with_attention_mask(self, model_inputs: List[Dict]):
+        results = {}
+        assert len(model_inputs) == 1, "This method only supports a single input, but get {} inputs".format(len(model_inputs))
+        for k in model_inputs[0].keys():
+            if "pixel_values" in k and isinstance(model_inputs[0][k], list):
+                results[k] = sum([inputs[k] if inputs[k] is not None else [] for inputs in model_inputs], [])
+            elif model_inputs[0][k] is not None:
+                results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
+            else:
+                results[k] = None
+        return results

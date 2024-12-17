@@ -18,7 +18,9 @@ setup(
         "torch",
         "accelerate",
         "torchvision",
-        "datasets==2.18.0"
+        "datasets==2.18.0",
+        "diffusers",
+        "decord",
     ],
     extras_require={
         "train": [
