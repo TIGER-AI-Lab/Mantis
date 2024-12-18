@@ -55,7 +55,7 @@ qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=256
 min_pixels=256
-max_pixels=1280
+max_pixels=640
 use_liger_kernel=False
 
 RUN_NAME="mantis-8b-qwen2-vl-vae-pretrain"

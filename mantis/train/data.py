@@ -10,6 +10,7 @@ import os
 import math
 import random
 import av
+import decord
 import json
 
 from pathlib import Path
@@ -407,6 +408,10 @@ def read_video_pyav(container, indices):
     '''
     frames = []
     container.seek(0)
+    if len(indices) == 0:
+        # to debug
+        indices = [0]
+        print("No indices to decode, might be an empty video please check")
     start_index = indices[0]
     end_index = indices[-1]
     for i, frame in enumerate(container.decode(video=0)):
