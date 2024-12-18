@@ -828,6 +828,7 @@ class Qwen2VideoClassificationDataset(ClassificationDataset):
 
         encoding["labels"] = torch.tensor(labels, dtype=torch.float32).unsqueeze(0)
         return encoding
+    
 class DatasetCollection(torch.utils.data.Dataset):
     def __init__(self, datasets: List[torch.utils.data.Dataset], balancing=False):
         self.datasets = datasets

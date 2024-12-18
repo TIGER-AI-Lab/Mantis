@@ -32,6 +32,8 @@ class Qwen2VLVisionVAEConfig(PretrainedConfig):
         patch_size=2,
         in_channels=12,
         hidden_size=3584,
+        embed_dim=1280,
+        hidden_act="silu",
         vae_class_name: Optional[str] = "AutoencoderKLMochi",
         vae_path: Optional[str] = "genmo/mochi-1-preview",
         vae_subfolder: Optional[str] = "vae",
@@ -43,6 +45,8 @@ class Qwen2VLVisionVAEConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.in_channels = in_channels
+        self.embed_dim = embed_dim
+        self.hidden_act = hidden_act
         self.patch_size = patch_size
         self.out_channels = out_channels
         self.vae_class_name = vae_class_name

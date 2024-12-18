@@ -152,7 +152,8 @@ class ModelArguments:
 
 def load_model(model_args, training_args):
     print("Loading model...")
-    torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
+    # torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
+    torch_dtype = torch.float32
     # from mantis.models.qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLForSequenceClassification
     from mantis.models.qwen2_vl_vae import Qwen2VLVAEForConditionalGeneration, Qwen2VLVAEProcessor, Qwen2VLVAEConfig
     print("Loading processor...")

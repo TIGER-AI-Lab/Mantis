@@ -14,7 +14,9 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     StaticCache,
     VisionRotaryEmbedding,
     PatchMerger,
-    Qwen2VLVisionBlock
+    Qwen2VLVisionBlock,
+    VisionMlp,
+    ACT2FN
 )
 from transformers.utils import logging
 from diffusers.models.embeddings import PatchEmbed
@@ -98,6 +100,17 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
 
     return causal_mask
 
+class VAEVisionMlp(nn.Module):
+    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.act = ACT2FN[hidden_act]
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, x) -> torch.Tensor:
+        return self.fc2(self.act(self.fc1(x)))
+
+
 from diffusers import AutoencoderKLMochi
 class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
     config_class = Qwen2VLVisionVAEConfig
@@ -109,7 +122,7 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
         self.patch_embed = PatchEmbed(
             patch_size=config.patch_size,
             in_channels=config.in_channels,
-            embed_dim=config.hidden_size,
+            embed_dim=config.embed_dim,
             pos_embed_type=None,
         )
         self.vae_class_name = config.vae_class_name
@@ -121,6 +134,14 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
             self.vae_model = self.vae_class.from_config(config.vae_config)
             self.vae_model._set_gradient_checkpointing(self.vae_model.encoder)
             self.vae_model._set_gradient_checkpointing(self.vae_model.decoder)
+        
+        self.mlp = VAEVisionMlp(
+            dim=config.embed_dim,
+            hidden_dim=config.hidden_size,
+            hidden_act=config.hidden_act
+        )
+        
+        self.post_init()
 
     def get_dtype(self) -> torch.dtype:
         if self.vae_model is None:
@@ -164,6 +185,7 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         
         batch_size, num_channels, num_frames, height, width = hidden_states.shape
+        assert num_channels == 3, f"Input hidden states should have 3 channels, got {num_channels}"
         latents = self.vae_model.encode(hidden_states).latent_dist
         latents = latents.mean
         # latents = latents.sample()
@@ -171,6 +193,7 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
         latents = latents.permute(0, 2, 1, 3, 4).flatten(0, 1)
         hidden_states = self.patch_embed(latents)
         hidden_states = hidden_states.unflatten(0, (batch_size, -1)).flatten(1, 2)
+        hidden_states = self.mlp(hidden_states)
         return hidden_states
 
 

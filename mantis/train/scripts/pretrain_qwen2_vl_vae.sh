@@ -10,7 +10,8 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
     # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
-    DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
+    # DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
+    DATA_CONFIG_FILE="./data_configs/llava_pretrain.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
@@ -25,7 +26,6 @@ else
     vae_width_compress_rate=8
     vae_height_compress_rate=8
     post_vae_patch_size=2
-
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"
@@ -52,12 +52,12 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=128
+global_batch_size=32
 min_pixels=256
 max_pixels=640
 use_liger_kernel=False
 
-RUN_NAME="mantis-8b-qwen2-vl-vae"
+RUN_NAME="mantis-8b-qwen2-vl-vae-pretrain"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -144,8 +144,7 @@ if [ $lora_enabled = true ]; then
     echo $config_file
 else
     echo "lora is disabled"
-    # config_file="./accelerate_configs/accelerate_config_zero3.yaml"
-    config_file="./accelerate_configs/accelerate_config_fsdp.yaml"
+    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
     echo $config_file
 fi
 
@@ -158,6 +157,7 @@ accelerate launch --config_file=$config_file \
     --num_machines=${COUNT_NODE} --num_processes=${GPU} \
     train_qwen2_vl_vae.py --model_name_or_path $model_name_or_path \
     --data_config_file $DATA_CONFIG_FILE \
+    --conv_template "plain" \
     --run_name $RUN_NAME \
     --bf16 True \
     --output_dir $OUTPUT_DIR \
@@ -173,7 +173,7 @@ accelerate launch --config_file=$config_file \
     --save_steps 500 \
     --eval_steps 500 \
     --save_total_limit 1 \
-    --learning_rate 5e-6 \
+    --learning_rate 1e-3 \
     --weight_decay 0.01 \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \

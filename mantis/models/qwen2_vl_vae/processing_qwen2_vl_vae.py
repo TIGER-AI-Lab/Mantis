@@ -179,12 +179,90 @@ class Qwen2VLVAEProcessor(ProcessorMixin):
 
     def _right_pad_inputs_with_attention_mask(self, model_inputs: List[Dict]):
         results = {}
-        assert len(model_inputs) == 1, "This method only supports a single input, but get {} inputs".format(len(model_inputs))
+        # print(type(model_inputs), len(model_inputs))
+        # if type(model_inputs) is dict:
+        #     print(model_inputs.keys())
+        # print([x.keys() for x in model_inputs])
+        # print([x['input_ids'].shape for x in model_inputs])
+        # assert len(model_inputs) == 1, "This method only supports a single input, but get {} inputs".format(len(model_inputs))
         for k in model_inputs[0].keys():
             if "pixel_values" in k and isinstance(model_inputs[0][k], list):
                 results[k] = sum([inputs[k] if inputs[k] is not None else [] for inputs in model_inputs], [])
             elif model_inputs[0][k] is not None:
-                results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
+                if k == 'input_ids':
+                    # add padding
+                    max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                    pad_token_id = self.tokenizer.pad_token_id
+                    # pad all inputs to the same length
+                    results[k] = torch.cat(
+                        [
+                            torch.cat(
+                                [
+                                    inputs[k],
+                                    torch.tensor(
+                                        [pad_token_id] * (max_length - inputs[k].shape[1]),
+                                        dtype=inputs[k].dtype,
+                                        device=inputs[k].device,
+                                    ).unsqueeze(0),
+                                ],
+                                dim=1,
+                            )
+                            if inputs[k].shape[1] < max_length
+                            else inputs[k]
+                            for inputs in model_inputs
+                        ],
+                        dim=0,
+                    )
+                elif k == 'attention_mask':
+                    # add attention mask
+                    max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                    results[k] = torch.cat(
+                        [
+                            torch.cat(
+                                [
+                                    inputs[k],
+                                    torch.tensor(
+                                        [0] * (max_length - inputs[k].shape[1]),
+                                        dtype=inputs[k].dtype,
+                                        device=inputs[k].device,
+                                    ).unsqueeze(0),
+                                ],
+                                dim=1,
+                            )
+                            if inputs[k].shape[1] < max_length
+                            else inputs[k]
+                            for inputs in model_inputs
+                        ],
+                        dim=0,
+                    )
+                elif k == 'labels':
+                    # pad with -100
+                    max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                    results[k] = torch.cat(
+                        [
+                            torch.cat(
+                                [
+                                    inputs[k],
+                                    torch.tensor(
+                                        [-100] * (max_length - inputs[k].shape[1]),
+                                        dtype=inputs[k].dtype,
+                                        device=inputs[k].device,
+                                    ).unsqueeze(0),
+                                ],
+                                dim=1,
+                            )
+                            if inputs[k].shape[1] < max_length
+                            else inputs[k]
+                            for inputs in model_inputs
+                        ],
+                        dim=0,
+                    )
+                else:
+                    results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
             else:
                 results[k] = None
+        for k in model_inputs[0].keys():
+            if "pixel_values" in k:
+                # print([x.shape for x in results[k]])
+                assert all(x.shape[0] == 3 for x in results[k]), f"Expect 3D image, but get {[x.shape for x in results[k]]}"
         return results
