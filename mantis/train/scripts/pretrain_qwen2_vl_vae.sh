@@ -10,9 +10,9 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
     # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
-    # DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
+    DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
     # DATA_CONFIG_FILE="./data_configs/llava_pretrain.yaml"
-    DATA_CONFIG_FILE="/h/dongfu/WorkSpace/Mantis/data/examples/chat_video/data_config.yaml"
+    # DATA_CONFIG_FILE="/h/dongfu/WorkSpace/Mantis/data/examples/chat_video/data_config.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"

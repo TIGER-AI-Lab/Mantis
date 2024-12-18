@@ -578,8 +578,8 @@ class ChatVideoDataset(torch.utils.data.Dataset):
             text = source[1][1]
             if self.use_video_encoder:
                 video_token_count = text.count(DEFAULT_VIDEO_TOKEN)
-                if video_token_count < len(video_frames):
-                    text = f"{DEFAULT_VIDEO_TOKEN} " * (len(video_frames) - video_token_count) + text
+                if video_token_count < 1:
+                    text = f"{DEFAULT_VIDEO_TOKEN} " + text
                 conv_str = text + self.conv.sep
                 encoding = self.processor(text=conv_str, videos=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
             else:
@@ -608,11 +608,15 @@ class ChatVideoDataset(torch.utils.data.Dataset):
                     conv_str = conv_str[::-1].replace(DEFAULT_IMAGE_TOKEN[::-1], "", len(video_frames) - image_token_count)[::-1]
                 encoding = self.processor(conv_str, images=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
         
-        
         encoding["labels"] = torch.full_like(encoding["input_ids"], IGNORE_INDEX, dtype=encoding["input_ids"].dtype)
         target = encoding["labels"][0]
         input_ids = encoding["input_ids"][0]
-        if self.conv.sep_style != SeparatorStyle.PLAIN:
+        if self.conv.sep_style == SeparatorStyle.PLAIN:
+            if self.use_video_encoder:
+                target[input_ids != DEFAULT_VIDEO_TOKEN_ID] = input_ids[input_ids != DEFAULT_VIDEO_TOKEN_ID]
+            else:
+                target[input_ids != DEFAULT_IMAGE_TOKEN_ID] = input_ids[input_ids != DEFAULT_IMAGE_TOKEN_ID]
+        else:
             new_conv = self.conv.copy()
             new_conv.messages = []
             for i in range(0, len(conv_messages), 2):
@@ -632,10 +636,10 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         
         # for debug, print the targets to make sure the right tokens are learned
         # need to print to make sure that the masked tokens are correct.
-        _target = target.clone().detach()
-        _target[_target == IGNORE_INDEX] = 0
-        print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
-        print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        # _target = target.clone().detach()
+        # _target[_target == IGNORE_INDEX] = 0
+        # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
+        # print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
         
 
         return encoding
@@ -947,7 +951,7 @@ def load_data_from_config(data_args, processor):
                 offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
-                data_args.is_master_worker, max_size, shuffle, max_num_frames, data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False)
+                data_args.is_master_worker, max_size, shuffle, max_num_frames, use_video_encoder=data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False)
         elif sub_dataset_config['format'] == 'classification':
             sub_dataset = ClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)
