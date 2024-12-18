@@ -302,7 +302,7 @@ class ChatDataset(torch.utils.data.Dataset):
             if image_token_count < len(sub_images):
                 text = f"{DEFAULT_IMAGE_TOKEN} " * (len(sub_images) - image_token_count) + text
             conv_str = text + self.conv.sep
-            encoding = self.processor(conv_str, sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+            encoding = self.processor(text=conv_str, images=sub_images, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
         else:
             # NOTE: this is for the conversation style finetuning
             # check the number of images

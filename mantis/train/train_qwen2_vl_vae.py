@@ -54,7 +54,7 @@ class DataArguments:
 class ModelArguments:
     model_name_or_path: Optional[str] = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models", "default": "Qwen/Qwen2-VL-7B-Instruct", "required": False},
-        default="DongfuJiang/Qwen2-VL-VAE-7B-Instruct",
+        default="Qwen/Qwen2-VL-7B-Instruct",
     )
     vae_class_name: Optional[str] = field(
         metadata={"help": "The class name of the VAE model", "default": "AutoencoderKLMochi", "required": False},
@@ -152,8 +152,8 @@ class ModelArguments:
 
 def load_model(model_args, training_args):
     print("Loading model...")
-    # torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
-    torch_dtype = torch.float32
+    torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
+    from transformers import Qwen2VLForConditionalGeneration
     # from mantis.models.qwen2_vl import Qwen2VLForConditionalGeneration, Qwen2VLForSequenceClassification
     from mantis.models.qwen2_vl_vae import Qwen2VLVAEForConditionalGeneration, Qwen2VLVAEProcessor, Qwen2VLVAEConfig
     print("Loading processor...")
@@ -179,13 +179,13 @@ def load_model(model_args, training_args):
     assert model_args.problem_type in ["generation"]
     if model_args.problem_type == "generation": 
         MODEL_CLASS = Qwen2VLVAEForConditionalGeneration
-        model_init_kwargs = {
-            "torch_dtype": torch_dtype,
-            "attn_implementation": model_args.attn_implementation,
-            "quantization_config": bnb_config,
-        }
+        
         print("Using generation model")
         if model_args.do_pretrain:
+            model_init_kwargs = {
+                "torch_dtype": torch_dtype,
+                "attn_implementation": model_args.attn_implementation,
+            }
             vae_class = getattr(__import__("diffusers"), model_args.vae_class_name)
             vae_config = vae_class.load_config(model_args.vae_model_name_or_path, subfolder=model_args.vae_subfolder)
             config = Qwen2VLVAEConfig.from_pretrained(
@@ -199,24 +199,36 @@ def load_model(model_args, training_args):
                     "vae_config": vae_config,
                 }
             )
-            model_init_kwargs["config"] = config
+            model = MODEL_CLASS._from_config(config, **model_init_kwargs).to(training_args.device)
+            # load the weights from the pretrained model
+            print("Loading pretrained model...")
+            qwen2_vl_pretrained = Qwen2VLForConditionalGeneration.from_pretrained(model_args.model_name_or_path)
+            qwen2_vl_pretrained_state_dict = qwen2_vl_pretrained.state_dict()
+            model.load_state_dict(qwen2_vl_pretrained_state_dict, strict=False)
+            print("Successfully loaded Qwen2VL model from:", model_args.model_name_or_path)
+            del qwen2_vl_pretrained
+            # load the VAE model
+            print("Loading VAE model...")
+            vae = vae_class.from_pretrained(model_args.vae_model_name_or_path, subfolder=model_args.vae_subfolder)
+            model.vae_visual.vae_model.load_state_dict(vae.state_dict())
+            print("Successfully loaded VAE model from:", model_args.vae_model_name_or_path)
+            del vae
+            
+        else:
+            model_init_kwargs = {
+                "torch_dtype": torch_dtype,
+                "attn_implementation": model_args.attn_implementation,
+                "quantization_config": bnb_config,
+            }
+            model = MODEL_CLASS.from_pretrained(
+                model_args.model_name_or_path,
+                **model_init_kwargs
+            )
+            
         
     else:
         raise NotImplementedError("Only generation is supported for now")
     
-    
-    model = MODEL_CLASS.from_pretrained(
-        model_args.model_name_or_path,
-        **model_init_kwargs
-    )
-    if model_args.do_pretrain:
-        print("Model does not have a VAE backbone, loading from", model_args.vae_model_name_or_path)
-        # load the vae model
-        vae_class = getattr(__import__("diffusers"), model_args.vae_class_name)
-        vae = vae_class.from_pretrained(model_args.vae_model_name_or_path, subfolder=model_args.vae_subfolder)
-        model.vae_visual.vae_model.load_state_dict(vae.state_dict())
-        print("Successfully loaded VAE model from:", model_args.vae_model_name_or_path)
-        
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
     print("Successfully loaded model from:", model_args.model_name_or_path)
@@ -253,8 +265,8 @@ def load_model(model_args, training_args):
     set_ignore_index(-100)
     set_default_image_token_id(model.config.image_token_id)
     set_default_video_token_id(model.config.video_token_id)
-    set_default_image_token("<image>") # this will be transformed to <|vision_start|><|image_pad|><|vision_end|> in the conversation template of qwen2_vl
-    set_default_video_token("<video>") # this will be transformed to <|vision_start|><|video_pad|><|vision_end|> in the conversation template of qwen2_vl
+    set_default_image_token("<|image_pad|>") # this will be transformed to <|vision_start|><|image_pad|><|vision_end|> in the conversation template of qwen2_vl
+    set_default_video_token("<|video_pad|>") # this will be transformed to <|vision_start|><|video_pad|><|vision_end|> in the conversation template of qwen2_vl
     
     # resize token embeddings
     if len(processor.tokenizer) > model.config.vocab_size:

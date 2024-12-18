@@ -156,8 +156,8 @@ class Conversation:
                 if message:
                     if type(message) is tuple:
                         message, _, _ = message
-                    message = message.replace("<image>", "<|vision_start|><|image_pad|><|vision_end|>")
-                    message = message.replace("<video>", "<|vision_start|><|video_pad|><|vision_end|>")
+                    message = message.replace("<|image_pad|>", "<|vision_start|><|image_pad|><|vision_end|>")
+                    message = message.replace("<|video_pad|>", "<|vision_start|><|video_pad|><|vision_end|>")
                     
                     ret += f"<|im_start|>{role}\n" + message + "<|im_end|>\n"
                 else:

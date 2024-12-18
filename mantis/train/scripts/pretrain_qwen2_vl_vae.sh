@@ -17,7 +17,7 @@ if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
     model_name_or_path="{local_model_path}"
 else
-    model_name_or_path="DongfuJiang/Qwen2-VL-VAE-7B-Instruct"
+    model_name_or_path="Qwen/Qwen2-VL-7B-Instruct"
     vae_class_name=AutoencoderKLMochi
     vae_model_name_or_path="genmo/mochi-1-preview"
     vae_subfolder="vae"
@@ -52,9 +52,9 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=32
+global_batch_size=256
 min_pixels=256
-max_pixels=640
+max_pixels=1280
 use_liger_kernel=False
 
 RUN_NAME="mantis-8b-qwen2-vl-vae-pretrain"

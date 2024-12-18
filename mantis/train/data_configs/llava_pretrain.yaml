@@ -1,8 +1,8 @@
 data:
   - 
     name: "llava_pretrain"
-    type: huggingface
-    path: "TIGER-Lab/llava-data"
+    type: json
+    path: "/h/dongfu/WorkSpace/Mantis/data/llava-pretrain/data/train.json"
     format: chat
     split: train
     shuffle: true

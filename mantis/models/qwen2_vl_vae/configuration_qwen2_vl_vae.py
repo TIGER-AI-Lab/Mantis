@@ -33,6 +33,7 @@ class Qwen2VLVisionVAEConfig(PretrainedConfig):
         in_channels=12,
         hidden_size=3584,
         embed_dim=1280,
+        initializer_range=0.02,
         hidden_act="silu",
         vae_class_name: Optional[str] = "AutoencoderKLMochi",
         vae_path: Optional[str] = "genmo/mochi-1-preview",
@@ -53,6 +54,7 @@ class Qwen2VLVisionVAEConfig(PretrainedConfig):
         self.vae_config = vae_config
         self.vae_path = vae_path
         self.vae_subfolder = vae_subfolder
+        self.initializer_range = initializer_range
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
