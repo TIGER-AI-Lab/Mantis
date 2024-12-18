@@ -49,6 +49,10 @@ class DataArguments:
         metadata={"help": "Whether to balance the dataset", "default": True, "required": False},
         default=False,
     )
+    use_video_encoder: Optional[bool] = field(
+        metadata={"help": "Whether to use video encoder", "default": True, "required": False},
+        default=True,
+    )
 
 @dataclass
 class ModelArguments:
@@ -210,8 +214,8 @@ def load_model(model_args, training_args):
     set_ignore_index(-100)
     set_default_image_token_id(model.config.image_token_id)
     set_default_video_token_id(model.config.video_token_id)
-    set_default_image_token("<|image_pad|>") # this will be transformed to <|vision_start|><|image_pad|><|vision_end|> in the conversation template of qwen2_vl
-    set_default_video_token("<|video_pad|>") # this will be transformed to <|vision_start|><|video_pad|><|vision_end|> in the conversation template of qwen2_vl
+    set_default_image_token("<image>") # this will be transformed to <|vision_start|><|image_pad|><|vision_end|> in the conversation template of qwen2_vl
+    set_default_video_token("<video>") # this will be transformed to <|vision_start|><|video_pad|><|vision_end|> in the conversation template of qwen2_vl
     
     # resize token embeddings
     if len(processor.tokenizer) > model.config.vocab_size:

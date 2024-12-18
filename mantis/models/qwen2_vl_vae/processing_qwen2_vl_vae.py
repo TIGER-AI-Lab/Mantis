@@ -125,7 +125,11 @@ class Qwen2VLVAEProcessor(ProcessorMixin):
 
         if not isinstance(text, list):
             text = [text]
-            
+        # replace <image> and <video> 
+        for i in range(len(text)):
+            # this is for the training compatible with our codes
+            text[i] = text[i].replace("<image>", "<|vision_start|><|image_pad|><|vision_end|>")
+            text[i] = text[i].replace("<video>", "<|vision_start|><|video_pad|><|vision_end|>")
         if image_inputs:
             index = 0
             for i in range(len(text)):

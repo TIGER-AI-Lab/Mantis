@@ -43,6 +43,10 @@ class DataArguments:
         metadata={"help": "Whether to balance the dataset", "default": True, "required": False},
         default=True,
     )
+    use_video_encoder: Optional[bool] = field(
+        metadata={"help": "Whether to use video encoder", "default": True, "required": False},
+        default=True,
+    )
 
 @dataclass
 class ModelArguments:

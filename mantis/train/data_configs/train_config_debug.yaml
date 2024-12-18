@@ -1,12 +1,11 @@
 data: 
   - 
-    name: "multi_vqa"
-    type: huggingface
+    name: "youtube_v1"
+    type: json
     path: "TIGER-Lab/Mantis-Instruct"
-    format: chat
+    format: "/h/dongfu/WorkSpace/Mantis/data/llava-video/data/0_30_s_youtube_v0_1/0_30_s_youtube_v0_1_cap_processed_train.json"
     split: train
-    shuffle: true
-    revision: script
+    max_num_frames: 64
 #  - 
 #     name: "datikz"
 #     type: json

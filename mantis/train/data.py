@@ -27,6 +27,9 @@ DEFAULT_IMAGE_TOKEN_ID = None # should be set when loading the processor
 DEFAULT_VIDEO_TOKEN = "<video>"
 DEFAULT_VIDEO_TOKEN_ID = None # should be set when loading the processor
 
+DATASET_IMAGE_TOKENS = "<image>"
+DATASET_VIDEO_TOKENS = "<video>"
+
 def set_ignore_index(new_ignore_index=-100):
     global IGNORE_INDEX
     IGNORE_INDEX = new_ignore_index
@@ -292,7 +295,7 @@ class ChatDataset(torch.utils.data.Dataset):
         if self.conv.sep_style == SeparatorStyle.PLAIN:
             # NOTE: this is for the pretraining, where we only use the pure text or interleaved text and images
             source = conv_messages
-            assert len(source) == 2, "we only use the text in the second message for pretraining."
+            assert len(source) >= 2, "we only use the text in the second message for pretraining."
             # assert DEFAULT_IMAGE_TOKEN in source[0][1]
             # assert len(sub_images) == 1 if isinstance(sub_images, list) else isinstance(sub_images, PIL.Image.Image)
             if isinstance(sub_images, PIL.Image.Image):
@@ -426,6 +429,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         shuffle=False, 
         max_num_frames=None, 
         sample_ratio=1.0,
+        use_video_encoder=False,
     ):
         self.processor = processor
         self.data_path = Path(data_path)
@@ -453,11 +457,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         self.conversations, self.all_selected_idxs = self.preprocess()
 
         self.max_seq_len = max_seq_len
-        
-        if "video-llava" in self.processor.tokenizer.name_or_path:
-            self.use_video_encoder = True
-        else:
-            self.use_video_encoder = False # use image encoder, mllms
+        self.use_video_encoder = use_video_encoder
     
     def print(self, *args, **kwargs):
         if self.is_master_worker:
@@ -570,36 +570,60 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         # check the number of images
         self.conv.messages = conv_messages
         
-        if self.use_video_encoder:
-            self.conv.messages = conv_messages
-            conv_str = self.conv.get_prompt()
-            encoding = self.processor(conv_str, videos=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+        if self.conv.sep_style == SeparatorStyle.PLAIN:
+            assert video_frames is not None, "video frames should not be None"
+            # NOTE: this is for the pretraining, where we only use the pure text or interleaved text and images
+            source = conv_messages
+            assert len(source) >= 2, "we only use the text in the second message for pretraining."
+            text = source[1][1]
+            if self.use_video_encoder:
+                video_token_count = text.count(DEFAULT_VIDEO_TOKEN)
+                if video_token_count < len(video_frames):
+                    text = f"{DEFAULT_VIDEO_TOKEN} " * (len(video_frames) - video_token_count) + text
+                conv_str = text + self.conv.sep
+                encoding = self.processor(text=conv_str, videos=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+            else:
+                image_token_count = source[1][1].count(DEFAULT_IMAGE_TOKEN)
+                if image_token_count < len(video_frames):
+                    text = f"{DEFAULT_IMAGE_TOKEN} " * (len(video_frames) - image_token_count) + text
+                conv_str = text + self.conv.sep
+                if image_token_count > len(video_frames):
+                    # replace image token from back to front for the extra image tokens
+                    conv_str = conv_str[::-1].replace(DEFAULT_IMAGE_TOKEN[::-1], "", len(video_frames) - image_token_count)[::-1]
+                encoding = self.processor(text=conv_str, images=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
         else:
-            # add <image> tokens according to the number of images
-            image_token_count = sum([message[1].count(DEFAULT_IMAGE_TOKEN) for message in conv_messages])
-            if image_token_count < len(video_frames):
-                conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(video_frames) - image_token_count) + conv_messages[0][1]
-            self.conv.messages = conv_messages
-            conv_str = self.conv.get_prompt()
-            if image_token_count > len(video_frames):
-                # replace image token from back to front for the extra image tokens
-                conv_str = conv_str[::-1].replace(DEFAULT_IMAGE_TOKEN[::-1], "", len(video_frames) - image_token_count)[::-1]
-            encoding = self.processor(conv_str, images=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+            if self.use_video_encoder:
+                self.conv.messages = conv_messages
+                conv_str = self.conv.get_prompt()
+                encoding = self.processor(text=conv_str, videos=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
+            else:
+                # add <image> tokens according to the number of images
+                image_token_count = sum([message[1].count(DEFAULT_IMAGE_TOKEN) for message in conv_messages])
+                if image_token_count < len(video_frames):
+                    conv_messages[0][1] = DEFAULT_IMAGE_TOKEN * (len(video_frames) - image_token_count) + conv_messages[0][1]
+                self.conv.messages = conv_messages
+                conv_str = self.conv.get_prompt()
+                if image_token_count > len(video_frames):
+                    # replace image token from back to front for the extra image tokens
+                    conv_str = conv_str[::-1].replace(DEFAULT_IMAGE_TOKEN[::-1], "", len(video_frames) - image_token_count)[::-1]
+                encoding = self.processor(conv_str, images=video_frames, return_tensors="pt", truncation=True, max_length=self.max_seq_len)
         
-        new_conv = self.conv.copy()
-        new_conv.messages = []
+        
         encoding["labels"] = torch.full_like(encoding["input_ids"], IGNORE_INDEX, dtype=encoding["input_ids"].dtype)
         target = encoding["labels"][0]
         input_ids = encoding["input_ids"][0]
-        for i in range(0, len(conv_messages), 2):
-            new_conv.append_message(conv_messages[i][0], conv_messages[i][1])
-            prompt = new_conv.get_prompt()
-            user_len = len(self.processor(prompt, return_tensors="pt", truncation=True, max_length=self.max_seq_len)["input_ids"][0])
+        if self.conv.sep_style != SeparatorStyle.PLAIN:
+            new_conv = self.conv.copy()
+            new_conv.messages = []
+            for i in range(0, len(conv_messages), 2):
+                new_conv.append_message(conv_messages[i][0], conv_messages[i][1])
+                prompt = new_conv.get_prompt()
+                user_len = len(self.processor(prompt, return_tensors="pt", truncation=True, max_length=self.max_seq_len)["input_ids"][0])
 
-            new_conv.append_message(conv_messages[i+1][0], conv_messages[i+1][1])
-            prompt = new_conv.get_prompt()
-            user_and_assistant_len = len(self.processor(prompt, return_tensors="pt", truncation=True, max_length=self.max_seq_len)["input_ids"][0])
-            target[user_len:user_and_assistant_len] = input_ids[user_len:user_and_assistant_len]
+                new_conv.append_message(conv_messages[i+1][0], conv_messages[i+1][1])
+                prompt = new_conv.get_prompt()
+                user_and_assistant_len = len(self.processor(prompt, return_tensors="pt", truncation=True, max_length=self.max_seq_len)["input_ids"][0])
+                target[user_len:user_and_assistant_len] = input_ids[user_len:user_and_assistant_len]
             
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split, selected_idx)
@@ -923,7 +947,7 @@ def load_data_from_config(data_args, processor):
                 offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
-                data_args.is_master_worker, max_size, shuffle, max_num_frames)
+                data_args.is_master_worker, max_size, shuffle, max_num_frames, data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False)
         elif sub_dataset_config['format'] == 'classification':
             sub_dataset = ClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)
