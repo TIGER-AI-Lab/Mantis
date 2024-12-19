@@ -19,11 +19,21 @@ if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     model_name_or_path="{local_model_path}"
 else
     model_name_or_path="Qwen/Qwen2-VL-7B-Instruct"
-    vae_class_name=AutoencoderKLMochi
-    vae_model_name_or_path="genmo/mochi-1-preview"
+    
+    # vae_class_name=AutoencoderKLMochi
+    # vae_model_name_or_path="genmo/mochi-1-preview"
+    # vae_subfolder="vae"
+    # vae_latent_channel_size=12
+    # vae_temporal_compress_rate=6
+    # vae_width_compress_rate=8
+    # vae_height_compress_rate=8
+    # post_vae_patch_size=2
+
+    vae_class_name=AutoencoderKLCogVideoX
+    vae_model_name_or_path="THUDM/CogVideoX-2b"
     vae_subfolder="vae"
-    vae_latent_channel_size=12
-    vae_temporal_compress_rate=6
+    vae_latent_channel_size=16
+    vae_temporal_compress_rate=4
     vae_width_compress_rate=8
     vae_height_compress_rate=8
     post_vae_patch_size=2
@@ -53,7 +63,7 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=256
+global_batch_size=64
 min_pixels=256
 max_pixels=640
 use_liger_kernel=False

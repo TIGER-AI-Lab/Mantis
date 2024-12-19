@@ -105,10 +105,17 @@ class VAEVisionMlp(nn.Module):
         super().__init__()
         self.fc1 = nn.Linear(dim, hidden_dim)
         self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.layernorm = nn.LayerNorm(dim)
+        self.fc_out = nn.Linear(dim, hidden_dim)
 
     def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+        residual = x
+        x = self.fc2(self.act(self.fc1(x)))
+        x = x + residual
+        x = self.layernorm(x)
+        x = self.fc_out(x)
+        return x
 
 
 from diffusers import AutoencoderKLMochi
@@ -146,12 +153,18 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
     def get_dtype(self) -> torch.dtype:
         if self.vae_model is None:
             return torch.float32
-        return self.vae_model.encoder.proj_in.weight.dtype
+        try:
+            return self.vae_model.encoder.proj_in.weight.dtype
+        except:
+            return self.vae_model.encoder.conv_in.conv.weight.dtype
 
     def get_device(self) -> torch.device:
         if self.vae_model is None:
             return torch.device("cpu")
-        return self.vae_model.encoder.proj_in.weight.device
+        try:
+            return self.vae_model.encoder.proj_in.weight.device
+        except:
+            return self.vae_model.encoder.conv_in.conv.weight.device
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -191,9 +204,11 @@ class Qwen2VLVisionVAEPretrainedModel(Qwen2VLVAEPreTrainedModel):
         # latents = latents.sample()
         
         latents = latents.permute(0, 2, 1, 3, 4).flatten(0, 1)
+        
         hidden_states = self.patch_embed(latents)
         hidden_states = hidden_states.unflatten(0, (batch_size, -1)).flatten(1, 2)
         hidden_states = self.mlp(hidden_states)
+        
         return hidden_states
 
 
