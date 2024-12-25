@@ -201,6 +201,10 @@ class Qwen2VLVAEImageProcessor(BaseImageProcessor):
         self.merge_size = merge_size
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
+        
+    def vae_normalize(self, image: np.ndarray):
+        image = 2 * image - 1
+        return image
 
     def _preprocess(
         self,
@@ -288,14 +292,16 @@ class Qwen2VLVAEImageProcessor(BaseImageProcessor):
             if do_rescale:
                 image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
 
+            
             if do_normalize:
-                image = self.normalize(
+                image = self.vae_normalize(
                     image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
                 )
 
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
 
+        
         patches = np.array(processed_images)
         num_frames, num_channels, height, width = patches.shape
         num_final_tokens = smart_estimate_vae_tokens(
