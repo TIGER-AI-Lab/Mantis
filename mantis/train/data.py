@@ -434,6 +434,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         shuffle=False, 
         max_num_frames=None, 
         sample_ratio=1.0,
+        fps=1,
         use_video_encoder=False,
     ):
         self.processor = processor
@@ -463,6 +464,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
 
         self.max_seq_len = max_seq_len
         self.use_video_encoder = use_video_encoder
+        self.fps = fps
     
     def print(self, *args, **kwargs):
         if self.is_master_worker:
@@ -541,8 +543,19 @@ class ChatVideoDataset(torch.utils.data.Dataset):
 
             # sample uniformly 8 frames from the video
             total_frames = container.streams.video[0].frames
+            # print(f"Total frames: {total_frames}")
+            # print(f"FPS: {container.streams.video[0].average_rate}")
+            # print(f"Duration: {container.streams.video[0].duration}")
+            
             if self.max_num_frames and total_frames > self.max_num_frames:
-                indices = np.arange(0, total_frames, total_frames / self.max_num_frames).astype(int)
+                if self.fps:
+                    interval = math.ceil(container.streams.video[0].average_rate / self.fps)
+                    indices = np.arange(0, total_frames, interval).astype(int)
+                    if len(indices) > self.max_num_frames:
+                        indices = indices[:self.max_num_frames]
+                else:
+                    indices = np.arange(0, total_frames, total_frames / self.max_num_frames).astype(int)
+                # print(f"Sample {len(indices)} frames from {total_frames} frames")
             else:
                 indices = np.arange(total_frames)
             if self.use_video_encoder:
@@ -956,7 +969,7 @@ def load_data_from_config(data_args, processor):
                 offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
-                data_args.is_master_worker, max_size, shuffle, max_num_frames, use_video_encoder=data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False)
+                data_args.is_master_worker, max_size, shuffle, max_num_frames, fps=fps, use_video_encoder=data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False)
         elif sub_dataset_config['format'] == 'classification':
             sub_dataset = ClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)

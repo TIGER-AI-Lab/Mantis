@@ -20,23 +20,23 @@ if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
 else
     model_name_or_path="Qwen/Qwen2-VL-7B-Instruct"
     
-    # vae_class_name=AutoencoderKLMochi
-    # vae_model_name_or_path="genmo/mochi-1-preview"
-    # vae_subfolder="vae"
-    # vae_latent_channel_size=12
-    # vae_temporal_compress_rate=6
-    # vae_width_compress_rate=8
-    # vae_height_compress_rate=8
-    # post_vae_patch_size=2
-
-    vae_class_name=AutoencoderKLCogVideoX
-    vae_model_name_or_path="THUDM/CogVideoX-2b"
+    vae_class_name=AutoencoderKLMochi
+    vae_model_name_or_path="genmo/mochi-1-preview"
     vae_subfolder="vae"
-    vae_latent_channel_size=16
-    vae_temporal_compress_rate=4
+    vae_latent_channel_size=12
+    vae_temporal_compress_rate=6
     vae_width_compress_rate=8
     vae_height_compress_rate=8
     post_vae_patch_size=2
+
+    # vae_class_name=AutoencoderKLCogVideoX
+    # vae_model_name_or_path="THUDM/CogVideoX-2b"
+    # vae_subfolder="vae"
+    # vae_latent_channel_size=16
+    # vae_temporal_compress_rate=4
+    # vae_width_compress_rate=8
+    # vae_height_compress_rate=8
+    # post_vae_patch_size=2
 fi
 if [ "$HF_HUB_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of model and datasets"

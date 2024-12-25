@@ -294,9 +294,10 @@ class Qwen2VLVAEImageProcessor(BaseImageProcessor):
 
             
             if do_normalize:
-                image = self.vae_normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
+                # image = self.normalize(
+                #     image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                # )
+                image = self.vae_normalize(image)
 
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             processed_images.append(image)
