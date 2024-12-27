@@ -662,6 +662,139 @@ class ChatVideoDataset(torch.utils.data.Dataset):
 
         return encoding
 
+class SiglipVideoDataset(torch.utils.data.Dataset):
+    """
+    conv format:
+    <s> {system}\n USER: {}<0x04>ASSISTANT: {}</s> ...
+    """
+    def __init__(
+        self, processor, data_path, dataset_type, name, 
+        video_dir, split, max_seq_len,
+        is_master_worker=True, 
+        max_size=None, 
+        shuffle=False, 
+        max_num_frames=None, 
+        fps=1,
+    ):
+        self.processor = processor
+        self.data_path = Path(data_path)
+        self.dataset_type = dataset_type
+        self.name = name
+        self.split = split
+        self.is_master_worker = is_master_worker
+        self.max_size = max_size
+        self.max_num_frames = max_num_frames
+        self.print(f"Loading dataset '{name}' from {data_path}")
+        self.data = load_json_data(data_path)
+        if not video_dir:
+            self.video_dir = self.data_path.parent
+        else:
+            self.video_dir = Path(video_dir)
+        assert self.video_dir.exists(), f"{video_dir} does not exist"
+        if shuffle:
+            random.seed(42)
+            random.shuffle(self.data)
+        if self.max_size:
+            print(f"Truncating dataset to from {len(self.data)} to {self.max_size}")
+            self.data = self.data[:self.max_size]
+        
+        self.texts, self.all_selected_idxs = self.preprocess()
+
+        self.max_seq_len = max_seq_len
+        self.fps = fps
+    
+    def print(self, *args, **kwargs):
+        if self.is_master_worker:
+            print(*args, **kwargs)
+
+    def preprocess(self):
+        
+        # process formats
+        video_dir = self.video_dir
+        texts = []
+        all_selected_idxs = []
+        for i, item in tqdm(
+            enumerate(self.data), desc="Format conversations and load images", 
+            total=len(self.data), disable=not self.is_master_worker
+        ):
+            # phd
+            source_key = "text"
+            source = item[source_key]
+            
+            try:
+                if "video" in item:
+                    video_file = video_dir / item['video']
+                    assert video_file.exists(), f"{video_file} does not exist"
+                elif "images" in item and item['images'] and len(item['images']) > 0:
+                    if isinstance(item['images'][0], str):
+                        video_frames = [video_dir / image for image in item['images']]
+                        assert all([image.exists() for image in video_frames]), f"{video_frames} does not exist"
+                    elif isinstance(item['images'][0], dict):
+                        video_frames = [video_dir / image['path'] for image in item['images']]
+                        assert all([image.exists() for image in video_frames]), f"{video_frames} does not exist"
+                    elif isinstance(item['images'][0], PIL.Image.Image):
+                        video_frames = item['images']
+                texts.append(source)
+                all_selected_idxs.append(i)
+            except Exception as e:
+                print(f"Error at {i}")
+                print(e)
+        
+        return texts, all_selected_idxs
+        
+    def __len__(self):
+        return len(self.texts)
+    
+    def __getitem__(self, idx):
+        text = self.texts[idx]
+        selected_idx = self.all_selected_idxs[idx]
+        item = self.data[selected_idx]
+        video_dir = self.video_dir
+        
+        if "video" in item:
+            video_file = video_dir / item['video']
+            container = av.open(video_file)
+
+            # sample uniformly 8 frames from the video
+            total_frames = container.streams.video[0].frames
+            # print(f"Total frames: {total_frames}")
+            # print(f"FPS: {container.streams.video[0].average_rate}")
+            # print(f"Duration: {container.streams.video[0].duration}")
+            
+            if self.max_num_frames and total_frames > self.max_num_frames:
+                if self.fps:
+                    interval = math.ceil(container.streams.video[0].average_rate / self.fps)
+                    indices = np.arange(0, total_frames, interval).astype(int)
+                    if len(indices) > self.max_num_frames:
+                        indices = indices[:self.max_num_frames]
+                else:
+                    indices = np.arange(0, total_frames, total_frames / self.max_num_frames).astype(int)
+                # print(f"Sample {len(indices)} frames from {total_frames} frames")
+            else:
+                indices = np.arange(total_frames)
+            video_frames = read_video_pyav(container, indices)
+        elif "images" in item and item['images'] and len(item['images']) > 0:
+            if isinstance(item['images'][0], str):
+                video_frames = [video_dir / image for image in item['images']]
+                video_frames = load_images(video_frames)
+            elif isinstance(item['images'][0], dict):
+                video_frames = [video_dir / image['path'] for image in item['images']]
+                video_frames = load_images(video_frames)
+            elif isinstance(item['images'][0], PIL.Image.Image):
+                video_frames = item['images']
+                
+            if self.max_num_frames and len(video_frames) > self.max_num_frames:
+                indices = np.arange(0, len(video_frames), len(video_frames) / self.max_num_frames).astype(int)
+                video_frames = [video_frames[i] for i in indices]
+            # change video frames from PIL.Image to ndarray
+            video_frames = np.stack([np.array(x.convert('RGB')) for x in video_frames])
+        else:
+            video_frames = None
+        
+        encoding = self.processor(text=text, images=video_frames, return_tensors="pt", padding="max_length")
+
+        return encoding
+    
 class ClassificationDataset(torch.utils.data.Dataset):
     """
     conv format:
@@ -933,6 +1066,29 @@ class Collator():
         
         return batch_encoding
 
+class SiglipVideoCollator():
+    def __init__(self, processor, max_length=None):
+        self.processor = processor
+        self.max_length = max_length
+    
+    def __call__(self, batch):
+        
+        all_input_ids = []
+        max_input_ids_len = max([x["input_ids"].shape[1] for x in batch])
+        
+        for x in batch:
+            all_input_ids.append(torch.cat([
+                x["input_ids"], self.processor.tokenizer.pad_token_id * torch.ones((1, max_input_ids_len - x["input_ids"].shape[1]), dtype=torch.long)
+            ], dim=1))
+        all_input_ids = torch.cat(all_input_ids, dim=0)
+
+        pixel_values = [x["pixel_values"] for x in batch]
+        return {
+            "input_ids": all_input_ids,
+            "pixel_values": pixel_values,
+            "return_loss": True
+        }
+
 def load_data_from_config(data_args, processor):
     """
     Returns:
@@ -945,6 +1101,7 @@ def load_data_from_config(data_args, processor):
     data_kwargs["max_seq_len"] = data_args.max_seq_len
     print("Max Context Length:", data_args.max_seq_len)
     all_datasets = {}
+    collator_class = Collator
     for sub_dataset_config in data_config['data']:
         num_proc = sub_dataset_config.get('max_seq_len', 8)
         max_seq_len = sub_dataset_config.get('max_seq_len', data_args.max_seq_len)
@@ -976,12 +1133,16 @@ def load_data_from_config(data_args, processor):
         elif sub_dataset_config['format'] == 'qwen2_video_classification':
             sub_dataset = Qwen2VideoClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision, fps=fps)
+        elif sub_dataset_config['format'] == 'siglip_video':
+            sub_dataset = SiglipVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len,
+                data_args.is_master_worker, max_size, shuffle, max_num_frames, fps=fps)
+            collator_class = SiglipVideoCollator
         else:
             raise ValueError(f"Unknown data format {sub_dataset_config['format']}")
         if split not in all_datasets:
             all_datasets[split] = []
         all_datasets[split].append(sub_dataset)
-    collator_fn = Collator(processor, max_length=data_args.max_seq_len)
+    collator_fn = collator_class(processor, max_length=data_args.max_seq_len)
     
     train_dataset = DatasetCollection(all_datasets['train'], data_args.dataset_balancing) if 'train' in all_datasets else None
     val_dataset = DatasetCollection(all_datasets['val'], data_args.dataset_balancing) if 'val' in all_datasets else None
