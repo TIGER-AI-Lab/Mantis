@@ -135,11 +135,11 @@ if [ $lora_enabled = true ]; then
     echo $config_file
 else
     echo "lora is disabled"
-    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
+    config_file="./accelerate_configs/accelerate_config_zero3.yaml"
     echo $config_file
 fi
 
-per_device_train_batch_size=8
+per_device_train_batch_size=16
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 

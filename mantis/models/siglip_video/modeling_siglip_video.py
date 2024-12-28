@@ -1084,6 +1084,20 @@ class SiglipVideoModel(SiglipPreTrainedModel):
             context = context.unsqueeze(1)
         return self.perceiver_resampler(context, attention_mask)
 
+        # max batch_size 8
+        # all_perceiver_resampler_output = []
+        # for i in range(0, len(context), 8):
+        #     print(f"BATCH {i}")
+        #     perceiver_resampler_output = self.perceiver_resampler(
+        #         context=context[i:i+8],
+        #         attention_mask=attention_mask[i:i+8] if attention_mask is not None else None,
+        #     )
+        #     all_perceiver_resampler_output.append(perceiver_resampler_output)
+        # return BaseModelOutputWithPooling(
+        #     last_hidden_state=sum([x.last_hidden_state for x in all_perceiver_resampler_output]),
+        #     pooler_output=sum([x.pooler_output for x in all_perceiver_resampler_output]),
+        # )
+
     @add_start_docstrings_to_model_forward(SIGLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SiglipVideoOutput, config_class=SiglipConfig)
     def forward(

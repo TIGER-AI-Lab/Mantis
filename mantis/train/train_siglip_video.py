@@ -114,11 +114,26 @@ def load_model(model_args, training_args):
         
         
     if model_args.do_pretrain:
-        config = SiglipVideoConfig.from_pretrained(model_args.model_name_or_path, attn_implementation=model_args.attn_implementation)
-        model = SiglipVideoModel._from_config(config, torch_dtype=torch_dtype)
-        pretrained_model = SiglipModel.from_pretrained(model_args.model_name_or_path)
-        model.load_state_dict(pretrained_model.state_dict(), strict=False)
-        
+        if os.path.exists(training_args.output_dir + "/initial_model"):
+            print("Loading initial model from", training_args.output_dir + "/initial_model")
+            model = SiglipVideoModel.from_pretrained(
+                training_args.output_dir + "/initial_model",
+                attn_implementation=model_args.attn_implementation,
+            ).to(training_args.device)
+        else:
+            print("Assembling initial model from pretrained models")
+            config = SiglipVideoConfig.from_pretrained(model_args.model_name_or_path, attn_implementation=model_args.attn_implementation)
+            model = SiglipVideoModel._from_config(config, torch_dtype=torch_dtype).to(training_args.device)
+            pretrained_model = SiglipModel.from_pretrained(model_args.model_name_or_path)
+            model.load_state_dict(pretrained_model.state_dict(), strict=False)
+            model.save_pretrained(training_args.output_dir + "/initial_model")
+    else:
+        model = SiglipVideoModel.from_pretrained(
+            model_args.model_name_or_path,
+            attn_implementation=model_args.attn_implementation,
+        ).to(training_args.device)
+    
+    if model_args.do_pretrain:
         # pre-train only the resampler
         for name, param in model.named_parameters():
             if "resampler" in name:
@@ -126,13 +141,6 @@ def load_model(model_args, training_args):
                 print("Training", name)
             else:
                 param.requires_grad = False
-        
-    else:
-        model = SiglipVideoModel.from_pretrained(
-            model_args.model_name_or_path,
-            device=training_args.device,
-            attn_implementation=model_args.attn_implementation,
-        )
         
     for name, param in model.named_parameters():
         if "logit" in name:
