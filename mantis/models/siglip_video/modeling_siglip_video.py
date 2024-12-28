@@ -1175,17 +1175,45 @@ class SiglipVideoModel(SiglipPreTrainedModel):
         # )
         # logits_per_image = logits_per_text.t()
         
+        # print("video_embeds")
+        # print(video_embeds.size())
+        # print(video_embeds)
+        
+        # print("text_embeds")
+        # print(text_embeds.size())
+        # print(text_embeds)
+        
+        # print(self.logit_scale)
+        # print(self.logit_bias)
         logits_per_text = (
             torch.matmul(text_embeds, video_embeds.t().to(text_embeds.device)) * self.logit_scale.exp()
             + self.logit_bias
         )
         logits_per_video = logits_per_text.t()
 
+        # print("logits_per_text")
+        # print(logits_per_text.size())
+        # print(logits_per_text)
+        
+        # print("logits_per_video")
+        # print(logits_per_video.size())
+        # print(logits_per_video)
         loss = None
         if return_loss:
             # Adapted from https://github.com/google-research/big_vision/blob/01edb81a4716f93a48be43b3a4af14e29cdb3a7f/big_vision/trainers/proj/image_text/siglip.py#L287
             eye = torch.eye(logits_per_text.size(0), device=logits_per_text.device)
             m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
+            # print("eye")
+            # print(eye.size())
+            # print(eye)
+            
+            # print("m1_diag1")
+            # print(m1_diag1.size())
+            # print(m1_diag1)
+            
+            # print("m1_diag1 * logits_per_text")
+            # print((m1_diag1 * logits_per_text).size())
+            # print(m1_diag1 * logits_per_text)
             loglik = torch.nn.functional.logsigmoid(m1_diag1 * logits_per_text)
             nll = -torch.sum(loglik, dim=-1)
             loss = nll.mean()

@@ -1072,7 +1072,6 @@ class SiglipVideoCollator():
         self.max_length = max_length
     
     def __call__(self, batch):
-        
         all_input_ids = []
         max_input_ids_len = max([x["input_ids"].shape[1] for x in batch])
         

@@ -85,6 +85,15 @@ class ModelArguments:
         metadata={"help": "Whether to pretrain the model", "default": False, "required": False},
         default=True,
     )
+    initial_logit_scale: Optional[float] = field(
+        metadata={"help": "Initial logit scale", "default": 10.0, "required": False},
+        default=10.0,
+    )
+    initial_logit_bias: Optional[float] = field(
+        metadata={"help": "Initial logit bias", "default": -10.0, "required": False},
+        default=-10.0,
+    )
+    
     
 
 def load_model(model_args, training_args):
@@ -124,6 +133,12 @@ def load_model(model_args, training_args):
             device=training_args.device,
             attn_implementation=model_args.attn_implementation,
         )
+        
+    for name, param in model.named_parameters():
+        if "logit" in name:
+            param.requires_grad = True
+            print("Training", name)
+            
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
         
