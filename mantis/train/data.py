@@ -704,6 +704,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         shuffle=False, 
         max_num_frames=None, 
         fps=None,
+        video_reader_engine="pyav"
     ):
         self.processor = processor
         self.data_path = Path(data_path)
@@ -728,6 +729,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
             self.data = self.data[:self.max_size]
         
         self.texts, self.all_selected_idxs = self.preprocess()
+        self.video_reader_engine = video_reader_engine
 
         self.max_seq_len = max_seq_len
         self.fps = fps
@@ -784,13 +786,14 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
             video_file = video_dir / item['video']
             
             start = time.time()
-            video_reader = decord.VideoReader(str(video_file))
-            total_frames = len(video_reader)
-            video_fps = video_reader.get_avg_fps()
-            
-            # container = av.open(video_file)
-            # total_frames = container.streams.video[0].frames
-            # video_fps = container.streams.video[0].average_rate
+            if self.video_reader_engine == "decord":
+                video_reader = decord.VideoReader(str(video_file))
+                total_frames = len(video_reader)
+                video_fps = video_reader.get_avg_fps()
+            elif self.video_reader_engine == "pyav":
+                container = av.open(video_file)
+                total_frames = container.streams.video[0].frames
+                video_fps = container.streams.video[0].average_rate
             
             # # sample uniformly 8 frames from the video
             # print(f"Total frames: {total_frames}")
@@ -811,28 +814,30 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
             else:
                 indices = np.arange(total_frames)
             # print(f"Decoding video {video_file} with indices {indices}")
-            # video_frames = read_video_pyav(container, indices)
-            try:
-                video_frames = video_reader.get_batch(indices).asnumpy()
-            except:
-                # If batch decoding fails, try one by one
-                print("Batch decoding failed, trying sequential decoding")
-                video_frames = []
-                for idx in indices:
-                    try:
-                        frame = video_reader[idx].asnumpy()
-                        video_frames.append(frame)
-                    except:
-                        print(f"Failed to decode frame at index {idx}")
-                        continue
-                        
-                if not video_frames:
-                    print("Failed to decode any frames")
-                    return None
-                video_frames = np.stack(video_frames)
-            # video_frames = video_reader.get_batch(indices).asnumpy()
+            if self.video_reader_engine == "decord":
+                try:
+                    video_frames = video_reader.get_batch(indices).asnumpy()
+                except:
+                    # If batch decoding fails, try one by one
+                    print("Batch decoding failed, trying sequential decoding")
+                    video_frames = []
+                    for idx in indices:
+                        try:
+                            frame = video_reader[idx].asnumpy()
+                            video_frames.append(frame)
+                        except:
+                            print(f"Failed to decode frame at index {idx}")
+                            continue
+                            
+                    if not video_frames:
+                        print("Failed to decode any frames")
+                        return None
+                    video_frames = np.stack(video_frames)
+                # video_frames = video_reader.get_batch(indices).asnumpy()
+            elif self.video_reader_engine == "pyav":
+                video_frames = read_video_pyav(container, indices)
             end = time.time()
-            print(f"Decoding video {video_file} takes {end - start:.2f} seconds ({len(indices)} frames)")
+            # print(f"Decoding video {video_file} takes {end - start:.2f} seconds ({len(indices)} frames)")
         elif "images" in item and item['images'] and len(item['images']) > 0:
             if isinstance(item['images'][0], str):
                 video_frames = [video_dir / image for image in item['images']]
