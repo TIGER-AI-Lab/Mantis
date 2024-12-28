@@ -113,7 +113,7 @@ fi
 
 NGPU_PER_NODE=$(nvidia-smi --query-gpu=index --format=csv,noheader | grep -c "$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n')")
 GPU=$((${COUNT_NODE} * ${NGPU_PER_NODE}))
-WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 4))
+WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 1))
 
 if [ $WORKERS -gt 112 ]; then
     WORKERS=112
@@ -139,7 +139,7 @@ else
     echo $config_file
 fi
 
-per_device_train_batch_size=64
+per_device_train_batch_size=8
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 

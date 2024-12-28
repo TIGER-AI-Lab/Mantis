@@ -6,7 +6,7 @@ data:
     format: siglip_video
     split: train
     max_num_frames: 64
-    # fps: 8
+    # fps: 16
 #  - 
 #     name: "datikz"
 #     type: json

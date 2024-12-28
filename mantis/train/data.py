@@ -12,7 +12,7 @@ import random
 import av
 import decord
 import json
-
+import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from datasets.config import HF_DATASETS_OFFLINE, HF_DATASETS_CACHE
@@ -421,6 +421,35 @@ def read_video_pyav(container, indices):
             frames.append(frame)
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
+def read_video_decord(video_path, indices):
+    '''
+    Decode the video with Decord decoder.
+    
+    Args:
+        video_path (str): Path to the video file.
+        indices (List[int]): List of frame indices to decode.
+        
+    Returns:
+        np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
+    '''
+   
+    
+    # Set Decord to use CPU for decoding
+    decord.bridge.set_bridge('numpy')
+    
+    if len(indices) == 0:
+        indices = [0]
+        print("No indices to decode, might be an empty video please check")
+    
+    # Load video with Decord
+    vr = decord.VideoReader(video_path)
+    
+    # Decode frames at specified indices
+    frames = vr.get_batch(indices).asnumpy()
+    
+    # Decord returns frames in (N,H,W,C) format by default, same as PyAV
+    return frames
+
 class ChatVideoDataset(torch.utils.data.Dataset):
     """
     conv format:
@@ -674,7 +703,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         max_size=None, 
         shuffle=False, 
         max_num_frames=None, 
-        fps=1,
+        fps=None,
     ):
         self.processor = processor
         self.data_path = Path(data_path)
@@ -753,17 +782,26 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         
         if "video" in item:
             video_file = video_dir / item['video']
-            container = av.open(video_file)
-
-            # sample uniformly 8 frames from the video
-            total_frames = container.streams.video[0].frames
-            # print(f"Total frames: {total_frames}")
-            # print(f"FPS: {container.streams.video[0].average_rate}")
-            # print(f"Duration: {container.streams.video[0].duration}")
             
+            start = time.time()
+            video_reader = decord.VideoReader(str(video_file))
+            total_frames = len(video_reader)
+            video_fps = video_reader.get_avg_fps()
+            
+            # container = av.open(video_file)
+            # total_frames = container.streams.video[0].frames
+            # video_fps = container.streams.video[0].average_rate
+            
+            # # sample uniformly 8 frames from the video
+            # print(f"Total frames: {total_frames}")
+            # print(f"FPS: {video_fps}")
+            # # print(f"Duration: {container.streams.video[0].duration}")
+            
+            # print(f"self.max_num_frames: {self.max_num_frames}")
+            # print(f"self.fps: {self.fps}")
             if self.max_num_frames and total_frames > self.max_num_frames:
                 if self.fps:
-                    interval = math.ceil(container.streams.video[0].average_rate / self.fps)
+                    interval = math.ceil(video_fps / self.fps)
                     indices = np.arange(0, total_frames, interval).astype(int)
                     if len(indices) > self.max_num_frames:
                         indices = indices[:self.max_num_frames]
@@ -772,7 +810,29 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
                 # print(f"Sample {len(indices)} frames from {total_frames} frames")
             else:
                 indices = np.arange(total_frames)
-            video_frames = read_video_pyav(container, indices)
+            # print(f"Decoding video {video_file} with indices {indices}")
+            # video_frames = read_video_pyav(container, indices)
+            try:
+                video_frames = video_reader.get_batch(indices).asnumpy()
+            except:
+                # If batch decoding fails, try one by one
+                print("Batch decoding failed, trying sequential decoding")
+                video_frames = []
+                for idx in indices:
+                    try:
+                        frame = video_reader[idx].asnumpy()
+                        video_frames.append(frame)
+                    except:
+                        print(f"Failed to decode frame at index {idx}")
+                        continue
+                        
+                if not video_frames:
+                    print("Failed to decode any frames")
+                    return None
+                video_frames = np.stack(video_frames)
+            # video_frames = video_reader.get_batch(indices).asnumpy()
+            end = time.time()
+            print(f"Decoding video {video_file} takes {end - start:.2f} seconds ({len(indices)} frames)")
         elif "images" in item and item['images'] and len(item['images']) > 0:
             if isinstance(item['images'][0], str):
                 video_frames = [video_dir / image for image in item['images']]
@@ -1117,7 +1177,7 @@ def load_data_from_config(data_args, processor):
         revision = sub_dataset_config.get('revision', "script")
         video_dir = sub_dataset_config.get('video_dir', None)
         max_image_size = sub_dataset_config.get('max_image_size', None)
-        fps = sub_dataset_config.get('fps', 1)
+        fps = sub_dataset_config.get('fps', None)
         assert split in ['train', 'val', 'test'], f"Unknown split {split}"
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,

@@ -975,6 +975,16 @@ class SiglipVideoModel(SiglipPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        seq_length = input_ids.shape[-1]
+        if position_ids is None:
+            _seq_length = seq_length
+            all_position_ids = []
+            # recursively generate position_ids for all sequences in the batch
+            while _seq_length > 0:
+                all_position_ids.append(self.position_ids[:, :_seq_length])
+                _seq_length -= all_position_ids[-1].shape[-1]
+            position_ids = torch.cat(all_position_ids, dim=-1)
+            
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
