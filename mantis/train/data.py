@@ -553,6 +553,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
                 all_selected_idxs.append(i)
             except Exception as e:
                 print(f"Error at {i}")
+                print(video_file)
                 print(e)
         
         return conversations, all_selected_idxs
@@ -727,12 +728,14 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         if self.max_size:
             print(f"Truncating dataset to from {len(self.data)} to {self.max_size}")
             self.data = self.data[:self.max_size]
-        
-        self.texts, self.all_selected_idxs = self.preprocess()
         self.video_reader_engine = video_reader_engine
 
         self.max_seq_len = max_seq_len
         self.fps = fps
+        self.num_proc = 8
+        
+        self.texts, self.all_selected_idxs = self.preprocess()
+        
     
     def print(self, *args, **kwargs):
         if self.is_master_worker:
@@ -744,11 +747,67 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         video_dir = self.video_dir
         texts = []
         all_selected_idxs = []
+        all_video_frames = []
+        
+        
+        # def _preprocess(item, i):
+        #     source_key = "text"
+        #     source = item[source_key]
+            
+        #     try:
+        #         if "video" in item:
+        #             video_file = video_dir / item['video']
+        #             assert video_file.exists(), f"{video_file} does not exist"
+        #             # container = av.open(video_file)
+        #             # if self.max_num_frames:
+        #             #     if self.fps:
+        #             #         interval = math.ceil(container.streams.video[0].average_rate / self.fps)
+        #             #         indices = np.arange(0, container.streams.video[0].frames, interval).astype(int)
+        #             #         if len(indices) > self.max_num_frames:
+        #             #             indices = indices[:self.max_num_frames]
+        #             #     else:
+        #             #         indices = np.arange(0, container.streams.video[0].frames, container.streams.video[0].frames / self.max_num_frames).astype(int)
+        #             #     # print(f"Sample {len(indices)} frames from {container.streams.video[0].frames} frames")
+        #             # else:
+        #             #     indices = np.arange(container.streams.video[0].frames)
+        #             # video_frames = read_video_pyav(container, indices)
+        #             # all_video_frames.append(video_frames)
+        #             # print(f"Video frames: {len(video_frames)}")
+        #         elif "images" in item and item['images'] and len(item['images']) > 0:
+        #             if isinstance(item['images'][0], str):
+        #                 video_frames = [video_dir / image for image in item['images']]
+        #                 assert all([image.exists() for image in video_frames]), f"{video_frames} does not exist"
+        #             elif isinstance(item['images'][0], dict):
+        #                 video_frames = [video_dir / image['path'] for image in item['images']]
+        #                 assert all([image.exists() for image in video_frames]), f"{video_frames} does not exist"
+        #             elif isinstance(item['images'][0], PIL.Image.Image):
+        #                 video_frames = item['images']
+        #         texts.append(source)
+        #         all_selected_idxs.append(i)
+        #         item['preprocessed'] = {
+        #             "text": source,
+        #             # "video_frames": video_frames,
+        #             "selected_idx": i
+        #         }
+        #     except Exception as e:
+        #         print(f"Error at {i}")
+        #         print(e)
+        #         item['preprocessed'] = None
+        #     return item
+        
+        # def _filter_none(item):
+        #     return "preprocessed" in item and item["preprocessed"] is not None
+        
+        # new_dataset = datasets.Dataset.from_list(self.data)
+        # new_dataset = new_dataset.map(_preprocess, with_indices=True, desc="Format conversations and load images", num_proc=1)
+        # new_dataset = new_dataset.filter(_filter_none, num_proc=self.num_proc)
+        # texts = new_dataset["preprocessed"]["text"]
+        # all_selected_idxs = new_dataset["preprocessed"]["selected_idx"]
+        
         for i, item in tqdm(
             enumerate(self.data), desc="Format conversations and load images", 
             total=len(self.data), disable=not self.is_master_worker
         ):
-            # phd
             source_key = "text"
             source = item[source_key]
             
@@ -776,7 +835,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.texts)
     
-    def __getitem__(self, idx):
+    def __mygetitem__(self, idx):
         text = self.texts[idx]
         selected_idx = self.all_selected_idxs[idx]
         item = self.data[selected_idx]
@@ -859,6 +918,12 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         encoding = self.processor(text=text, images=video_frames, return_tensors="pt", padding="max_length")
 
         return encoding
+    
+    def __getitem__(self, idx):
+        try:
+            return self.__mygetitem__(idx)
+        except Exception as e:
+            return self.__mygetitem__((idx + 1) % len(self))
     
 class ClassificationDataset(torch.utils.data.Dataset):
     """
