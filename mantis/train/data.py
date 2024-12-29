@@ -907,9 +907,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
             elif isinstance(item['images'][0], PIL.Image.Image):
                 video_frames = item['images']
                 
-            if self.max_num_frames and len(video_frames) > self.max_num_frames:
-                indices = np.arange(0, len(video_frames), len(video_frames) / self.max_num_frames).astype(int)
-                video_frames = [video_frames[i] for i in indices]
+            #     video_frames = [video_frames[i] for i in indices]
             # change video frames from PIL.Image to ndarray
             video_frames = np.stack([np.array(x.convert('RGB')) for x in video_frames])
         else:
