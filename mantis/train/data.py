@@ -924,7 +924,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         try:
             return self.__mygetitem__(idx)
         except Exception as e:
-            return self.__mygetitem__((idx + 1) % len(self))
+            return self.__getitem__((idx + 1) % len(self))
     
 class ClassificationDataset(torch.utils.data.Dataset):
     """

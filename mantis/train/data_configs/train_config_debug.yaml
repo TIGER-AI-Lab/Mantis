@@ -2,11 +2,11 @@ data:
   - 
     name: "youtube_v1"
     type: json
-    path: "../../data/llava-video/data/0_30_s_youtube_v0_1/0_30_s_youtube_v0_1_cap_processed_train.frames.json"
+    path: "../../data/llava-video/data/0_30_s_youtube_v0_1/0_30_s_youtube_v0_1_cap_processed_train.json"
     format: siglip_video
     split: train
-    max_num_frames: 8
-    # fps: 2
+    max_num_frames: 128
+    fps: 2
 #  - 
 #     name: "datikz"
 #     type: json
