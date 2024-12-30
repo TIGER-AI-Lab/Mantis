@@ -752,16 +752,16 @@ class SiglipVideoPerceiverResampler(SiglipPreTrainedModel):
             # attention_mask_i = attention_mask_i.reshape(num_clips, self.max_temporal_clip_size * seq_len)
             
             compressed_context_i = self._forward(context_i, attention_mask_i)
-            print("compressed_context_i", compressed_context_i.size())
             
+            compressed_context_i = compressed_context_i.reshape(1, -1, compressed_context_i.size(-1))
             pool_output = self.head(compressed_context_i)
             
             all_compressed_context.append(compressed_context_i)
             all_pool_output.append(pool_output)
         
-        inner_cosine_similarity = torch.stack([x.mean(1).mean(0) for x in all_compressed_context], dim=0)
-        inner_cosine_similarity = inner_cosine_similarity @ inner_cosine_similarity.T
-        print("inner_cosine_similarity", inner_cosine_similarity)
+        # inner_cosine_similarity = torch.stack([x.mean(1).mean(0) for x in all_compressed_context], dim=0)
+        # inner_cosine_similarity = inner_cosine_similarity @ inner_cosine_similarity.T
+        # print("inner_cosine_similarity", inner_cosine_similarity)
         return BaseModelOutputWithPooling(
             last_hidden_state=all_compressed_context,
             pooler_output=all_pool_output,
@@ -1232,12 +1232,12 @@ class SiglipVideoModel(SiglipPreTrainedModel):
         # )
         # logits_per_image = logits_per_text.t()
         
-        print("video_embeds")
-        print(video_embeds.size())
-        # print(video_embeds)
+        # print("video_embeds")
+        # print(video_embeds.size())
+        # # print(video_embeds)
         
-        print("text_embeds")
-        print(text_embeds.size())
+        # print("text_embeds")
+        # print(text_embeds.size())
         # print(text_embeds)
         
         # print(self.logit_scale)
@@ -1257,17 +1257,17 @@ class SiglipVideoModel(SiglipPreTrainedModel):
             + self.logit_bias
         )
         
-        print("logits_per_text")
-        print(logits_per_text.size())
-        print(logits_per_text)
+        # print("logits_per_text")
+        # print(logits_per_text.size())
+        # print(logits_per_text)
         
-        print("logits_text")
-        print(logits_text.size())
-        print(logits_text)
+        # print("logits_text")
+        # print(logits_text.size())
+        # print(logits_text)
         
-        print("logits_video")
-        print(logits_video.size())
-        print(logits_video)
+        # print("logits_video")
+        # print(logits_video.size())
+        # print(logits_video)
         
         
         
