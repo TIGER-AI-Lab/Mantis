@@ -45,7 +45,7 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=64
+global_batch_size=512
 use_liger_kernel=False
 
 RUN_NAME="siglip-video"
@@ -139,7 +139,7 @@ else
     echo $config_file
 fi
 
-per_device_train_batch_size=8
+per_device_train_batch_size=128
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 
