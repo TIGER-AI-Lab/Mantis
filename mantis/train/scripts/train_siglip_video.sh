@@ -45,7 +45,7 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=256
+global_batch_size=64
 use_liger_kernel=False
 
 RUN_NAME="siglip-video"
@@ -99,7 +99,7 @@ if [ -z $MASTER_ADDR ]; then
 fi
 if [ -z $MASTER_PORT ]; then
     echo "MASTER_PORT is empty"
-    export MASTER_PORT=12956
+    export MASTER_PORT=12957
 fi
 if [ -z $COUNT_NODE ]; then
     echo "COUNT_NODE is empty"
@@ -139,7 +139,7 @@ else
     echo $config_file
 fi
 
-per_device_train_batch_size=4
+per_device_train_batch_size=8
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 

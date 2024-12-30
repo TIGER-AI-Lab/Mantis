@@ -844,7 +844,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
         if "video" in item:
             video_file = video_dir / item['video']
             
-            start = time.time()
+            # start = time.time()
             if self.video_reader_engine == "decord":
                 video_reader = decord.VideoReader(str(video_file))
                 total_frames = len(video_reader)
@@ -895,9 +895,10 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
                 # video_frames = video_reader.get_batch(indices).asnumpy()
             elif self.video_reader_engine == "pyav":
                 video_frames = read_video_pyav(container, indices)
-            end = time.time()
+            # end = time.time()
             # print(f"Decoding video {video_file} takes {end - start:.2f} seconds ({len(indices)} frames)")
         elif "images" in item and item['images'] and len(item['images']) > 0:
+            # start = time.time()
             if isinstance(item['images'][0], str):
                 video_frames = [video_dir / image for image in item['images']]
                 video_frames = load_images(video_frames)
@@ -910,6 +911,8 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
             #     video_frames = [video_frames[i] for i in indices]
             # change video frames from PIL.Image to ndarray
             video_frames = np.stack([np.array(x.convert('RGB')) for x in video_frames])
+            # end = time.time()
+            # print(f"Loaded {len(video_frames)} frames from images")
         else:
             video_frames = None
         

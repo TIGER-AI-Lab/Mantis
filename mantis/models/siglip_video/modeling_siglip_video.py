@@ -661,6 +661,10 @@ class SiglipVideoPerceiverResampler(SiglipPreTrainedModel):
 
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.head = SiglipVideoMultiheadAttentionPoolingHead(config)
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_temporal_clip_size).expand((1, -1)), persistent=False
+        )
+        self.position_embedding = nn.Embedding(config.max_temporal_clip_size, self.hidden_size)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -710,6 +714,10 @@ class SiglipVideoPerceiverResampler(SiglipPreTrainedModel):
         all_compressed_context = []
         all_pool_output = []
         for i, context_i in enumerate(context):
+            # inner_cosine_similarity = []
+            # inner_cosine_similarity = context_i.mean(dim=1)
+            # inner_cosine_similarity = inner_cosine_similarity @ inner_cosine_similarity.T
+            # print("inner_cosine_similarity", inner_cosine_similarity)
             if attention_mask is None:
                 attention_mask_i = torch.ones_like(context_i[:, :, 0])
             else:
@@ -726,19 +734,34 @@ class SiglipVideoPerceiverResampler(SiglipPreTrainedModel):
                     attention_mask_i, 
                     torch.zeros(self.max_temporal_clip_size - attention_mask_i.size(0) % self.max_temporal_clip_size, seq_len, device=attention_mask_i.device, dtype=attention_mask_i.dtype)
                 ], dim=0)
+                
+            # add position_embeddings
+            context_i = context_i.reshape(-1, self.max_temporal_clip_size, seq_len, hidden_size)
+            num_clips = context_i.size(0)
+            
+            position_ids = self.position_ids[:, :self.max_temporal_clip_size]
+            position_embed = self.position_embedding(position_ids).reshape(1, self.max_temporal_clip_size, 1, hidden_size)
+            # print(position_ids.size(), context_i.size(), position_embed.size())
+            # exit(1)
+            context_i = context_i + position_embed
+                        
+            
             context_i = context_i.reshape(-1, self.max_temporal_clip_size * seq_len, hidden_size)
             attention_mask_i = attention_mask_i.reshape(-1, self.max_temporal_clip_size * seq_len)
-            num_clips = context_i.size(0)
             # context_i = context_i.reshape(num_clips, self.max_temporal_clip_size * seq_len, hidden_size)
             # attention_mask_i = attention_mask_i.reshape(num_clips, self.max_temporal_clip_size * seq_len)
             
             compressed_context_i = self._forward(context_i, attention_mask_i)
+            print("compressed_context_i", compressed_context_i.size())
             
             pool_output = self.head(compressed_context_i)
             
             all_compressed_context.append(compressed_context_i)
             all_pool_output.append(pool_output)
         
+        inner_cosine_similarity = torch.stack([x.mean(1).mean(0) for x in all_compressed_context], dim=0)
+        inner_cosine_similarity = inner_cosine_similarity @ inner_cosine_similarity.T
+        print("inner_cosine_similarity", inner_cosine_similarity)
         return BaseModelOutputWithPooling(
             last_hidden_state=all_compressed_context,
             pooler_output=all_pool_output,
@@ -1209,12 +1232,12 @@ class SiglipVideoModel(SiglipPreTrainedModel):
         # )
         # logits_per_image = logits_per_text.t()
         
-        # print("video_embeds")
-        # print(video_embeds.size())
+        print("video_embeds")
+        print(video_embeds.size())
         # print(video_embeds)
         
-        # print("text_embeds")
-        # print(text_embeds.size())
+        print("text_embeds")
+        print(text_embeds.size())
         # print(text_embeds)
         
         # print(self.logit_scale)
@@ -1224,10 +1247,29 @@ class SiglipVideoModel(SiglipPreTrainedModel):
             + self.logit_bias
         )
         logits_per_video = logits_per_text.t()
-
-        # print("logits_per_text")
-        # print(logits_per_text.size())
-        # print(logits_per_text)
+        
+        logits_text = (
+            torch.matmul(text_embeds, text_embeds.t().to(text_embeds.device)) * self.logit_scale.exp()
+            + self.logit_bias
+        )
+        logits_video = (
+            torch.matmul(video_embeds, video_embeds.t().to(video_embeds.device)) * self.logit_scale.exp()
+            + self.logit_bias
+        )
+        
+        print("logits_per_text")
+        print(logits_per_text.size())
+        print(logits_per_text)
+        
+        print("logits_text")
+        print(logits_text.size())
+        print(logits_text)
+        
+        print("logits_video")
+        print(logits_video.size())
+        print(logits_video)
+        
+        
         
         # print("logits_per_video")
         # print(logits_per_video.size())
