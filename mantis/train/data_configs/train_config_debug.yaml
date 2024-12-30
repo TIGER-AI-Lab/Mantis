@@ -1,12 +1,20 @@
 data: 
+  # - 
+  #   name: "youtube_v1"
+  #   type: json
+  #   path: "../../data/llava-video/data/0_30_s_youtube_v0_1/0_30_s_youtube_v0_1_cap_processed_train.json"
+  #   format: siglip_video
+  #   split: train
+  #   max_num_frames: 256
+  #   fps: 4
+
   - 
     name: "youtube_v1"
     type: json
-    path: "../../data/llava-video/data/0_30_s_youtube_v0_1/0_30_s_youtube_v0_1_cap_processed_train.frames.json"
-    format: siglip_video
+    path: "../../data/llava-video/data/0_30_s_youtube_v0_1/0_30_s_youtube_v0_1_cap_processed_train.conv.json"
+    format: chat_video
     split: train
-    max_num_frames: 8
-    # fps: 2
+    max_num_frames: 32
 #  - 
 #     name: "datikz"
 #     type: json

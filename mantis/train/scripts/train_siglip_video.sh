@@ -45,7 +45,7 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=512
+global_batch_size=64
 use_liger_kernel=False
 
 RUN_NAME="siglip-video"
@@ -139,7 +139,7 @@ else
     echo $config_file
 fi
 
-per_device_train_batch_size=128
+per_device_train_batch_size=2
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 
@@ -163,7 +163,7 @@ accelerate launch --config_file=$config_file \
     --save_steps 500 \
     --eval_steps 500 \
     --save_total_limit 1 \
-    --learning_rate 1e-5 \
+    --learning_rate 1e-4 \
     --weight_decay 0.01 \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
