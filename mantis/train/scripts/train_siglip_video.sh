@@ -113,7 +113,8 @@ fi
 
 NGPU_PER_NODE=$(nvidia-smi --query-gpu=index --format=csv,noheader | grep -c "$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n')")
 GPU=$((${COUNT_NODE} * ${NGPU_PER_NODE}))
-WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 1))
+# WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 1))
+WORKERS=1
 
 if [ $WORKERS -gt 112 ]; then
     WORKERS=112
