@@ -10,7 +10,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
     # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
-    DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
+    DATA_CONFIG_FILE="./data_configs/train_qwen2_vl_vae.yaml"
     # DATA_CONFIG_FILE="./data_configs/llava_pretrain.yaml"
     # DATA_CONFIG_FILE="/h/dongfu/WorkSpace/Mantis/data/examples/chat_video/data_config.yaml"
 fi
@@ -133,7 +133,7 @@ fi
 
 NGPU_PER_NODE=$(nvidia-smi --query-gpu=index --format=csv,noheader | grep -c "$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n')")
 GPU=$((${COUNT_NODE} * ${NGPU_PER_NODE}))
-WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 4))
+WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 1))
 
 if [ $WORKERS -gt 112 ]; then
     WORKERS=112

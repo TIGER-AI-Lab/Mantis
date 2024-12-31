@@ -18,4 +18,5 @@ for i in {1..20}; do
 done
 
 cd ../..
-python prepare_cap.py --subset_name ${subset_name}
+python prepare_cap.py --subset_name ${subset_name} # not used for qwen2 vl vae
+python prepare_cap_conv.py --subset_name ${subset_name} # only use this for qwen2 vl vae

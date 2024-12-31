@@ -688,9 +688,38 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         # _target[_target == IGNORE_INDEX] = 0
         # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
         # print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        # print(input_ids.shape)
         
 
         return encoding
+
+import threading
+def timeout_handler(signum, frame):
+    raise TimeoutError("Function call timed out")
+
+def with_timeout(timeout):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            result = [TimeoutError(f"Function call timed out (timeout={timeout})")]
+            stop_event = threading.Event()
+
+            def target():
+                try:
+                    result[0] = func(*args, **kwargs)
+                except Exception as e:
+                    result[0] = e
+
+            thread = threading.Thread(target=target)
+            thread.start()
+            thread.join(timeout)
+            if thread.is_alive():
+                stop_event.set()
+                raise TimeoutError(f"Function call timed out (timeout={timeout})")
+            if isinstance(result[0], Exception):
+                raise result[0]
+            return result[0]
+        return wrapper
+    return decorator
 
 class SiglipVideoDataset(torch.utils.data.Dataset):
     """
@@ -835,6 +864,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.texts)
     
+    # @with_timeout(30)
     def __mygetitem__(self, idx):
         text = self.texts[idx]
         selected_idx = self.all_selected_idxs[idx]

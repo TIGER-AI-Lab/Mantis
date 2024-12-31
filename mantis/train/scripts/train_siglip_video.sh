@@ -10,7 +10,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
     DATA_CONFIG_FILE="./data_configs/train_config_offline.yaml"
 else
     # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
-    DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
+    DATA_CONFIG_FILE="./data_configs/train_siglip_video.yaml"
     # DATA_CONFIG_FILE="./data_configs/llava_pretrain.yaml"
     # DATA_CONFIG_FILE="/h/dongfu/WorkSpace/Mantis/data/examples/chat_video/data_config.yaml"
 fi
@@ -45,7 +45,7 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=64
+global_batch_size=128
 use_liger_kernel=False
 
 RUN_NAME="siglip-video"
