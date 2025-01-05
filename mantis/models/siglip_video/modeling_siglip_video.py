@@ -949,7 +949,7 @@ class SiglipVideoModel(SiglipPreTrainedModel):
         text_model = SiglipTextModel._from_config(text_config)
         vision_model = SiglipVisionModel._from_config(vision_config)
         perceiver_resampler = SiglipVideoPerceiverResampler(perceiver_config)
-        
+        # 8 frames as a clip, 8 * 726 = kv states. 64 tokens
 
         # Second, get the text and vision submodules (for backward compatibility)
         self.text_model = text_model.text_model
@@ -1305,7 +1305,7 @@ class SiglipVideoModel(SiglipPreTrainedModel):
             logits_per_video=logits_per_video,
             text_embeds=text_embeds,
             image_embeds=image_embeds,
-            video_embeds=perceiver_resampler_output,
+            video_embeds=video_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
             perceiver_resampler_output=perceiver_resampler_output,
