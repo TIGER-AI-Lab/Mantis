@@ -52,6 +52,7 @@ class InternVLChatModel(PreTrainedModel):
         self.num_image_token = int((image_size // patch_size) ** 2 * (config.downsample_ratio ** 2))
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.ps_version
+        self.enable_cross_attention = config.enable_cross_attention
         use_flash_attn = use_flash_attn if has_flash_attn else False
         config.vision_config.use_flash_attn = True if use_flash_attn else False
         config.llm_config.attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
@@ -87,21 +88,22 @@ class InternVLChatModel(PreTrainedModel):
         self.system_message = self.conv_template.system_message
 
     def forward(
-            self,
-            pixel_values: torch.FloatTensor,
-            input_ids: torch.LongTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            image_flags: Optional[torch.LongTensor] = None,
-            past_key_values: Optional[List[torch.FloatTensor]] = None,
-            labels: Optional[torch.LongTensor] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        pixel_values: torch.FloatTensor,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        image_flags: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        print(f"pixel_values.shape: {pixel_values.shape if pixel_values is not None else None}")
         image_flags = image_flags.squeeze(-1)
         input_embeds = self.language_model.get_input_embeddings()(input_ids).clone()
 
@@ -116,15 +118,18 @@ class InternVLChatModel(PreTrainedModel):
             print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
 
         input_ids = input_ids.reshape(B * N)
-        selected = (input_ids == self.img_context_token_id)
-        try:
-            input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
-        except Exception as e:
-            vit_embeds = vit_embeds.reshape(-1, C)
-            print(f'warning: {e}, input_embeds[selected].shape={input_embeds[selected].shape}, '
-                  f'vit_embeds.shape={vit_embeds.shape}')
-            n_token = selected.sum()
-            input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds[:n_token]
+        if not self.enable_cross_attention:
+            selected = (input_ids == self.img_context_token_id)
+            try:
+                input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
+            except Exception as e:
+                vit_embeds = vit_embeds.reshape(-1, C)
+                print(f'warning: {e}, input_embeds[selected].shape={input_embeds[selected].shape}, '
+                    f'vit_embeds.shape={vit_embeds.shape}')
+                n_token = selected.sum()
+                input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds[:n_token]
+        else:
+            pass
 
         input_embeds = input_embeds.reshape(B, N, C)
 
@@ -260,7 +265,6 @@ class InternVLChatModel(PreTrainedModel):
         if num_patches_list is None:
             num_patches_list = [pixel_values.shape[0]] if pixel_values is not None else []
         assert pixel_values is None or len(pixel_values) == sum(num_patches_list)
-        print(pixel_values.shape)
 
         img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
         self.img_context_token_id = img_context_token_id
@@ -282,12 +286,12 @@ class InternVLChatModel(PreTrainedModel):
             print(f'dynamic ViT batch size: {image_bs}')
 
         for num_patches in num_patches_list:
-            image_tokens = IMG_START_TOKEN + IMG_CONTEXT_TOKEN * self.num_image_token * num_patches + IMG_END_TOKEN
+            if not self.enable_cross_attention:
+                image_tokens = IMG_START_TOKEN + IMG_CONTEXT_TOKEN * self.num_image_token * num_patches + IMG_END_TOKEN
+            else:
+                image_tokens = IMG_START_TOKEN + IMG_CONTEXT_TOKEN * num_patches + IMG_END_TOKEN
             query = query.replace('<image>', image_tokens, 1)
 
-        print(self.num_image_token)
-        print(f"num_patches_list: {num_patches_list}")
-        print(f'query: {query}')
         model_inputs = tokenizer(query, return_tensors='pt')
         input_ids = model_inputs['input_ids'].to(self.device)
         attention_mask = model_inputs['attention_mask'].to(self.device)
@@ -323,6 +327,8 @@ class InternVLChatModel(PreTrainedModel):
     ) -> torch.LongTensor:
 
         assert self.img_context_token_id is not None
+        encoder_hidden_states = None
+        encoder_attention_mask = None
         if pixel_values is not None:
             if visual_features is not None:
                 vit_embeds = visual_features
@@ -330,20 +336,47 @@ class InternVLChatModel(PreTrainedModel):
                 vit_embeds = self.extract_feature(pixel_values)
             input_embeds = self.language_model.get_input_embeddings()(input_ids)
             B, N, C = input_embeds.shape
-            input_embeds = input_embeds.reshape(B * N, C)
 
-            input_ids = input_ids.reshape(B * N)
-            selected = (input_ids == self.img_context_token_id)
-            assert selected.sum() != 0
-            input_embeds[selected] = vit_embeds.reshape(-1, C).to(input_embeds.device)
+            if not self.enable_cross_attention:
+                input_embeds = input_embeds.reshape(B * N, C)
+                input_ids = input_ids.reshape(B * N)
+                selected = (input_ids == self.img_context_token_id)
+                assert selected.sum() != 0
+                input_embeds[selected] = vit_embeds.reshape(-1, C).to(input_embeds.device)
 
-            input_embeds = input_embeds.reshape(B, N, C)
+                input_embeds = input_embeds.reshape(B, N, C)
+            else:
+                num_images, num_tokens_per_image, C = vit_embeds.shape
+                num_imgs_per_sample = input_ids.eq(self.img_context_token_id).sum(dim=1)
+                assert num_imgs_per_sample.sum() != 0
+                max_num_img = max(num_imgs_per_sample)
+                vit_embeds_per_sample = []
+                encoder_attention_mask = torch.zeros((B, max_num_img, num_tokens_per_image), device=input_ids.device, dtype=input_ids.dtype)
+                idx = 0
+                for num_img in num_imgs_per_sample:
+                    if max_num_img == num_img:
+                        vit_embeds_per_sample.append(vit_embeds[idx:idx + num_img])
+                    else:
+                        vit_embeds_per_sample.append(
+                            torch.cat(
+                                [vit_embeds[idx:idx + num_img],
+                                    torch.zeros_like(vit_embeds[0]).unsqueeze(0).expand(max_num_img - num_img, -1, -1)],
+                                dim=0
+                            )
+                        )
+                    encoder_attention_mask[idx, :num_img] = 1
+                    idx += num_img
+                vit_embeds = torch.stack(vit_embeds_per_sample, dim=0)
+                encoder_hidden_states = vit_embeds.reshape(B, -1, C)
+                encoder_attention_mask = encoder_attention_mask.reshape(B, -1)
         else:
             input_embeds = self.language_model.get_input_embeddings()(input_ids)
 
         outputs = self.language_model.generate(
             inputs_embeds=input_embeds,
             attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             generation_config=generation_config,
             output_hidden_states=output_hidden_states,
             use_cache=True,
