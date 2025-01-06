@@ -7,7 +7,6 @@ deepspeed_config:
   zero3_init_flag: true
   zero3_save_16bit_model: true
   zero_stage: 3
-  stage3_param_persistence_threshold: 1e5
 distributed_type: DEEPSPEED
 fsdp_config: {}
 machine_rank: 0
