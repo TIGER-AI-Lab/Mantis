@@ -38,6 +38,7 @@ class InternVLChatModel(PreTrainedModel):
     main_input_name = 'pixel_values'
     base_model_prefix = 'language_model'
     _supports_flash_attn_2 = True
+    supports_gradient_checkpointing = True
     _no_split_modules = ['InternVisionModel', 'LlamaDecoderLayer', 'InternLM2DecoderLayer']
 
     def __init__(self, config: InternVLChatConfig, vision_model=None, language_model=None, use_flash_attn=True):
@@ -103,39 +104,69 @@ class InternVLChatModel(PreTrainedModel):
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        print(f"pixel_values.shape: {pixel_values.shape if pixel_values is not None else None}")
-        image_flags = image_flags.squeeze(-1)
+        # print(f"pixel_values.shape: {pixel_values.shape if pixel_values is not None else None}")
+        if image_flags is not None:
+            image_flags = image_flags.squeeze(-1)
+        else:
+            image_flags = torch.ones(pixel_values.shape[0], dtype=torch.long, device=pixel_values.device)
         input_embeds = self.language_model.get_input_embeddings()(input_ids).clone()
 
-        vit_embeds = self.extract_feature(pixel_values)
-        vit_embeds = vit_embeds[image_flags == 1]
-        vit_batch_size = pixel_values.shape[0]
+        encoder_hidden_states = None
+        encoder_attention_mask = None
+        if pixel_values is not None:
+            vit_embeds = self.extract_feature(pixel_values)
+            vit_embeds = vit_embeds[image_flags == 1]
+            vit_batch_size = pixel_values.shape[0]
 
-        B, N, C = input_embeds.shape
-        input_embeds = input_embeds.reshape(B * N, C)
+            B, N, C = input_embeds.shape
+            input_embeds = input_embeds.reshape(B * N, C)
 
-        if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
-            print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
+            if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
+                print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
 
-        input_ids = input_ids.reshape(B * N)
-        if not self.enable_cross_attention:
-            selected = (input_ids == self.img_context_token_id)
-            try:
-                input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
-            except Exception as e:
-                vit_embeds = vit_embeds.reshape(-1, C)
-                print(f'warning: {e}, input_embeds[selected].shape={input_embeds[selected].shape}, '
-                    f'vit_embeds.shape={vit_embeds.shape}')
-                n_token = selected.sum()
-                input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds[:n_token]
-        else:
-            pass
+            if not self.enable_cross_attention:
+                input_ids = input_ids.reshape(B * N)
+                selected = (input_ids == self.img_context_token_id)
+                try:
+                    input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
+                except Exception as e:
+                    vit_embeds = vit_embeds.reshape(-1, C)
+                    print(f'warning: {e}, input_embeds[selected].shape={input_embeds[selected].shape}, '
+                        f'vit_embeds.shape={vit_embeds.shape}')
+                    n_token = selected.sum()
+                    input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds[:n_token]
+            else:
+                num_images, num_tokens_per_image, C = vit_embeds.shape
+                num_imgs_per_sample = input_ids.eq(self.img_context_token_id).sum(dim=1)
+                assert num_imgs_per_sample.sum() != 0
+                max_num_img = max(num_imgs_per_sample)
+                vit_embeds_per_sample = []
+                encoder_attention_mask = torch.zeros((B, max_num_img, num_tokens_per_image), device=input_ids.device, dtype=input_ids.dtype)
+                idx = 0
+                for num_img in num_imgs_per_sample:
+                    if max_num_img == num_img:
+                        vit_embeds_per_sample.append(vit_embeds[idx:idx + num_img])
+                    else:
+                        vit_embeds_per_sample.append(
+                            torch.cat(
+                                [vit_embeds[idx:idx + num_img],
+                                    torch.zeros_like(vit_embeds[0]).unsqueeze(0).expand(max_num_img - num_img, -1, -1)],
+                                dim=0
+                            )
+                        )
+                    encoder_attention_mask[idx, :num_img] = 1
+                    idx += num_img
+                vit_embeds = torch.stack(vit_embeds_per_sample, dim=0)
+                encoder_hidden_states = vit_embeds.reshape(B, -1, C)
+                encoder_attention_mask = encoder_attention_mask.reshape(B, -1)
 
         input_embeds = input_embeds.reshape(B, N, C)
 
         outputs = self.language_model(
             inputs_embeds=input_embeds,
+            encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,

@@ -355,12 +355,12 @@ class ChatDataset(torch.utils.data.Dataset):
                     target[sep_idxs[i]+1:] = input_ids[sep_idxs[i]+1:]
                 else:
                     target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
-        elif self.conv.sep_style in [SeparatorStyle.IDEFICS_2, SeparatorStyle.IDEFICS_3, SeparatorStyle.QWEN2VL]:
+        elif self.conv.sep_style in [SeparatorStyle.IDEFICS_2, SeparatorStyle.IDEFICS_3, SeparatorStyle.QWEN2VL, SeparatorStyle.MPT]:
             if self.conv.system:
                 skip_offset = 0
             else:
                 skip_offset = 1
-            sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep)
+            sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep.strip(' \n'))
             sep_idxs = torch.nonzero((input_ids == sep_id), as_tuple=True)[0].tolist()
             for i in range(len(sep_idxs)):
                 if i % 2 == skip_offset:
@@ -465,6 +465,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         sample_ratio=1.0,
         fps=1,
         use_video_encoder=False,
+        load_video_frames=True,
     ):
         self.processor = processor
         self.data_path = Path(data_path)
@@ -494,6 +495,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         self.max_seq_len = max_seq_len
         self.use_video_encoder = use_video_encoder
         self.fps = fps
+        self.load_video_frames = load_video_frames
     
     def print(self, *args, **kwargs):
         if self.is_master_worker:
@@ -664,6 +666,20 @@ class ChatVideoDataset(torch.utils.data.Dataset):
                 target[input_ids != DEFAULT_VIDEO_TOKEN_ID] = input_ids[input_ids != DEFAULT_VIDEO_TOKEN_ID]
             else:
                 target[input_ids != DEFAULT_IMAGE_TOKEN_ID] = input_ids[input_ids != DEFAULT_IMAGE_TOKEN_ID]
+        elif self.conv.sep_style in [SeparatorStyle.MPT]:
+            if self.conv.system:
+                skip_offset = 0
+            else:
+                skip_offset = 1
+            sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep.strip('\n'))
+            sep_idxs = torch.nonzero((input_ids == sep_id), as_tuple=True)[0].tolist()
+            for i in range(len(sep_idxs)):
+                if i % 2 == skip_offset:
+                    continue
+                if i == len(sep_idxs) - 1:
+                    target[sep_idxs[i]+1:] = input_ids[sep_idxs[i]+1:]
+                else:
+                    target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
         else:
             new_conv = self.conv.copy()
             new_conv.messages = []
@@ -955,7 +971,7 @@ class SiglipVideoDataset(torch.utils.data.Dataset):
             return self.__mygetitem__(idx)
         except Exception as e:
             return self.__getitem__((idx + 1) % len(self))
-    
+        
 class ClassificationDataset(torch.utils.data.Dataset):
     """
     conv format:
@@ -1286,7 +1302,9 @@ def load_data_from_config(data_args, processor):
                 offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
-                data_args.is_master_worker, max_size, shuffle, max_num_frames, fps=fps, use_video_encoder=data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False)
+                data_args.is_master_worker, max_size, shuffle, max_num_frames, fps=fps, 
+                use_video_encoder=data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False,
+                load_video_frames=data_args.load_video_frames if hasattr(data_args, "load_video_frames") else False,)
         elif sub_dataset_config['format'] == 'classification':
             sub_dataset = ClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)

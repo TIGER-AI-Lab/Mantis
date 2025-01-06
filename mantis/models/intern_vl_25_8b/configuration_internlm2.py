@@ -95,6 +95,7 @@ class InternLM2Config(PretrainedConfig):
         rope_theta=10000,
         rope_scaling=None,
         attn_implementation='eager',
+        enable_cross_attention=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -115,6 +116,7 @@ class InternLM2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.enable_cross_attention = enable_cross_attention
         self._rope_scaling_validation()
 
         self.attn_implementation = attn_implementation

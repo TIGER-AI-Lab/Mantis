@@ -821,7 +821,12 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         kv_states = F.linear(encoder_hidden_states, kv_w, kv_bias)
         query_states = rearrange(query_states, 'b q (h d) -> b q h d', d=self.head_dim)
         kv_states = rearrange(kv_states, 'b q (h gs d) -> b q h gs d', gs=2, d=self.head_dim)
-        
+        # print(f"hidden_states.requires_grad: {hidden_states.requires_grad}")
+        # print(f"encoder_hidden_states.requires_grad: {encoder_hidden_states.requires_grad}")
+        # print(f"query_states.requires_grad: {query_states.requires_grad}")
+        # print(f"kv_states.requires_grad: {kv_states.requires_grad}")
+        # print(f"q_w.requires_grad: {q_w.requires_grad}")
+        # print(f"kv_w.requires_grad: {kv_w.requires_grad}")
         key_states = kv_states[..., -2, :]
         value_states = kv_states[..., -1, :]
         
@@ -988,12 +993,17 @@ class InternLM2DecoderLayer(nn.Module):
     def __init__(self, config: InternLM2Config):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.enable_cross_attention = config.enable_cross_attention
 
         self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
-        self.cross_attention = INTERNLM2_CROSS_ATTENTION_CLASSES[config.attn_implementation](config=config)
-
+        if self.enable_cross_attention:
+            self.cross_attention = INTERNLM2_CROSS_ATTENTION_CLASSES[config.attn_implementation](config=config)
+            self.cross_attention_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(1))
+            
         self.feed_forward = InternLM2MLP(config)
         self.attention_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            
         self.ffn_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
@@ -1029,6 +1039,7 @@ class InternLM2DecoderLayer(nn.Module):
                 'Please make sure use `attention_mask` instead.`'
             )
 
+        print("InternLM2DecoderLayer torch.is_grad_enabled()", torch.is_grad_enabled())
         residual = hidden_states
 
         hidden_states = self.attention_norm(hidden_states)
@@ -1046,8 +1057,10 @@ class InternLM2DecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         
         # Cross Attention
-        if encoder_hidden_states is not None:
+        print("(outside cross-attn) torch.is_grad_enabled()", torch.is_grad_enabled()) 
+        if self.enable_cross_attention and encoder_hidden_states is not None:
             residual = hidden_states
+            hidden_states = self.cross_attention_norm(hidden_states)
             hidden_states, cross_attn_weights, _ = self.cross_attention(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
@@ -1057,7 +1070,7 @@ class InternLM2DecoderLayer(nn.Module):
                 output_attentions=output_attentions,
                 **kwargs,
             )
-            hidden_states = residual + hidden_states
+            hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
 
         # Fully Connected
         residual = hidden_states
@@ -1261,6 +1274,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        print("InternLM2Model.forward, torch.is_grad_enabled()", torch.is_grad_enabled())
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1355,6 +1369,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
 
                     return custom_forward
 
+                print("gradient_checkpointing, layer", torch.is_grad_enabled())
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
@@ -1366,6 +1381,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
                     None,
                 )
             else:
+                print("no gradient_checkpointing, layer", torch.is_grad_enabled())
                 layer_outputs = decoder_layer(
                     hidden_states,
                     encoder_hidden_states=encoder_hidden_states,
