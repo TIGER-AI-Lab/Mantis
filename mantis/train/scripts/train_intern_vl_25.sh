@@ -48,7 +48,7 @@ qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 
-RUN_NAME="intern_vl_25_llava_next_700k_pretrain_cross_attn"
+RUN_NAME="intern_vl_25_llava_next_700k_pretrain_debug"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -170,7 +170,7 @@ accelerate launch --config_file=$config_file \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --gradient_checkpointing False \
+    --gradient_checkpointing True \
     --dataloader_num_workers $WORKERS \
     --report_to wandb \
     --do_train \
@@ -178,3 +178,4 @@ accelerate launch --config_file=$config_file \
     --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
     --resume_from_checkpoint "$resume_from_checkpoint" \
+    --enable_cross_attention False 

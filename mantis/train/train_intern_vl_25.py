@@ -115,6 +115,20 @@ class ModelArguments:
         default=True,
     )
 
+def find_all_linear_names(model):
+    cls = torch.nn.Linear
+    lora_module_names = set()
+    multimodal_keywords = ['vision_model', 'mlp1']
+    for name, module in model.named_modules():
+        if any(mm_keyword in name for mm_keyword in multimodal_keywords):
+            continue
+        if isinstance(module, cls):
+            names = name.split('.')
+            lora_module_names.add(names[0] if len(names) == 1 else names[-1])
+    if 'lm_head' in lora_module_names: # needed for 16-bit
+        lora_module_names.remove('lm_head')
+    return list(lora_module_names)
+
 def load_model(model_args, training_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
@@ -186,24 +200,27 @@ def load_model(model_args, training_args):
     # copied from intern_vl training script
     model.vision_model.gradient_checkpointing = True
     model.vision_model.encoder.gradient_checkpointing = True
+    for name, param in model.named_parameters():
+        not_to_tune_key_words = ["vision_model"]
+        if any([x in name for x in not_to_tune_key_words]):
+            param.requires_grad = False
     
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
     print("Successfully loaded model from:", model_args.model_name_or_path)
+    model.img_context_token_id = processor.img_context_token_id
     
     if model_args.lora_enabled or model_args.qlora_enabled:
         lora_config = LoraConfig(
             r=model_args.lora_r,
             lora_alpha=model_args.lora_alpha,
-            target_modules='.*.*(down_proj|gate_proj|up_proj|k_proj|q_proj|v_proj|o_proj).*$',
+            target_modules=find_all_linear_names(model),
             lora_dropout=model_args.lora_dropout,
             use_dora=model_args.dora_enabled,
             init_lora_weights="gaussian"
         )
         model = get_peft_model(model, lora_config)
     
-    
-    model.img_context_token_id = processor.img_context_token_id
     set_ignore_index(-100)
     # set_default_image_token_id(model.config.image_token_id)
     # set_default_video_token_id(model.config.video_token_id)
