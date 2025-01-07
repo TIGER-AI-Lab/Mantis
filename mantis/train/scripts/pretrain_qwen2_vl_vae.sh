@@ -190,7 +190,7 @@ accelerate launch --config_file=$config_file \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --gradient_checkpointing True \
+    --gradient_checkpointing False \
     --dataloader_num_workers $WORKERS \
     --report_to wandb \
     --do_train \
@@ -200,7 +200,6 @@ accelerate launch --config_file=$config_file \
     --resume_from_checkpoint "$resume_from_checkpoint" \
     --min_pixels $min_pixels \
     --max_pixels $max_pixels \
-    --use_liger_kernel $use_liger_kernel \
     --vae_class_name $vae_class_name \
     --vae_model_name_or_path $vae_model_name_or_path \
     --vae_subfolder $vae_subfolder \

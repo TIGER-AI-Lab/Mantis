@@ -633,7 +633,7 @@ class Qwen2VLVAEForConditionalGeneration(Qwen2VLVAEPreTrainedModel, GenerationMi
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
-
+        # print(f"original_loss", loss)
         return Qwen2VLCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
