@@ -150,7 +150,13 @@ class ChatDataset(torch.utils.data.Dataset):
                         if retried > max_retry:
                             raise e
                     
-            _max_num_images = max([len(x) for x in self.data['images'] if x])
+            if 'images' not in self.data.column_names and 'image' in self.data.column_names:
+                if not isinstance(self.data[0]['image'], list):
+                    _max_num_images = 1
+                else:
+                    _max_num_images = max([len(x) if isinstance(x, list) else 1 for x in self.data['image']])
+            else:
+                _max_num_images = max([len(x) for x in self.data['images'] if x])
             print(f"Max number of images per sample: {_max_num_images}, limit: {max_num_images}")
             if max_num_images and _max_num_images > max_num_images:
                 print(f"Filtering dataset to images <= {max_num_images}")
@@ -159,7 +165,7 @@ class ChatDataset(torch.utils.data.Dataset):
                 self.data = self.filtered_data
             if vl_only:
                 print("Filtering dataset with images only")
-                self.data = self.data.filter(lambda x: "images" in x and x['images']) # debug
+                self.data = self.data.filter(lambda x: ("images" in x and x['images']) or ("image" in x and x['image']), num_proc=num_proc)
                 print("filter out images, now {}".format(len(self.data)))
             self.image_dir = Path("/")
             if shuffle:
@@ -184,7 +190,22 @@ class ChatDataset(torch.utils.data.Dataset):
         
         # self.conv = default_conversation.copy()
         self.conv = conv_format.copy()
-        self.conversations, self.all_images = self.preprocess()
+        
+        image_key = "images" if "images" in self.data.column_names else "image" if "image" in self.data.column_names else None
+        assert image_key is not None, "No image key found in the dataset"
+        self.image_key = image_key
+        if isinstance(self.data[0][image_key], PIL.Image.Image) or \
+            isinstance(self.data[0][image_key], list) and isinstance(self.data[0][image_key][0], PIL.Image.Image):
+            # image already loaded as PIL.Image, do not do addtional operations otherwise it will be slow
+            self.check_image = False
+        else:
+            self.check_image = True
+        
+        if self.check_image:
+            self.conversations, self.all_images = self.preprocess()
+        else:
+            self.conversations = [None] * len(self.data)
+            self.all_images = [None] * len(self.data)
 
         if sample_ratio < 1.0:
             print(f"Down sampling {sample_ratio} of the data")
@@ -220,7 +241,7 @@ class ChatDataset(torch.utils.data.Dataset):
         conversations = []
         all_images = []
         
-        def preprocess_func(item, i):
+        def preprocess_func(item, i, check_image=True):
             # phd
             source_key = "conversation" if "conversation" in item else "conversations"
             source = item[source_key]
@@ -235,6 +256,9 @@ class ChatDataset(torch.utils.data.Dataset):
                 conv.append_message(role, sentence.get("content", sentence.get("text", sentence.get("value", ""))))
             # prompt = conv.get_prompt()
             conv_messages = conv.messages.copy()
+            if not check_image:
+                item['conv_messages'] = conv_messages
+                return item
             if "image" in item and item['image']:
                 if isinstance(item['image'], str):
                     image_file = image_dir / item['image']
@@ -272,26 +296,61 @@ class ChatDataset(torch.utils.data.Dataset):
         def filter_none(item):
             return item["conv_messages"] is not None
         
-        new_dataset = self.data.map(preprocess_func, with_indices=True, desc="Format conversations and load images", remove_columns=self.data.column_names, num_proc=self.num_proc)
-        new_dataset = new_dataset.filter(filter_none, num_proc=self.num_proc)
+        image_key = "images" if "images" in self.data.column_names else "image" if "image" in self.data.column_names else None
+        assert image_key is not None, "No image key found in the dataset"
+        if isinstance(self.data[0][image_key], PIL.Image.Image) or \
+            isinstance(self.data[0][image_key], list) and isinstance(self.data[0][image_key][0], PIL.Image.Image):
+            # image already loaded as PIL.Image, do not do addtional operations otherwise it will be slow
+            check_image = False
+        else:
+            check_image = True
+        
+        new_dataset = self.data.map(preprocess_func, with_indices=True, desc="Format conversations and load images", num_proc=self.num_proc, 
+            fn_kwargs={"check_image": check_image})
+        if check_image:
+            new_dataset = new_dataset.filter(filter_none, num_proc=self.num_proc)
         conversations = new_dataset["conv_messages"]
-        all_images = new_dataset["image_file"]
+        all_images = new_dataset["image_file"] if check_image else new_dataset["image"]
         
         return conversations, all_images
         
     def __len__(self):
         return len(self.conversations)
     
-    def __getitem__(self, idx):
+    def getitem(self, idx):
         conv_messages = self.conversations[idx]
         sub_images = self.all_images[idx]
-        sub_images = load_images(sub_images, max_image_size=self.max_image_size)
+        if conv_messages is None and sub_images is None:
+            conv = self.conv
+            roles = {"human": conv.roles[0], "gpt": conv.roles[1], "user": conv.roles[0], "assistant": conv.roles[1]}
+            item = self.data[idx]
+            source_key = "conversation" if "conversation" in item else "conversations"
+            source = item[source_key]
+            if roles[source[0].get("from", source[0].get("role"))] != conv.roles[0]:
+                # Skip the first one if it is not from human
+                source = source[1:]
+
+            conv.messages = []
+            for j, sentence in enumerate(source):
+                role = roles[sentence.get("from", sentence.get("role"))]
+                assert role == conv.roles[j % 2], f"{i}"
+                conv.append_message(role, sentence.get("content", sentence.get("text", sentence.get("value", ""))))
+            # prompt = conv.get_prompt()
+            conv_messages = conv.messages.copy()
+            sub_images = item[self.image_key]
+        
+        sub_images = load_images(sub_images, max_image_size=self.max_image_size, image_dir=self.image_dir)
+        if not isinstance(sub_images, list) and sub_images is not None:
+            sub_images = [sub_images]
         # resize sub_images to be at least 16 * 16 if image is too small, to avoid errors in clip image processor
         if sub_images:
+            assert all([isinstance(image, PIL.Image.Image) for image in sub_images]), f"sub_images: {sub_images}"
             for i, image in enumerate(sub_images):
                 if image.size[0] < 16 or image.size[1] < 16:
                     scale_factor = max(16 / image.size[0], 16 / image.size[1])
                     sub_images[i] = image.resize((int(image.size[0] * scale_factor), int(image.size[1] * scale_factor))).convert("RGB")
+        else:
+            pass
                     
         if self.conv.sep_style == SeparatorStyle.PLAIN:
             # NOTE: this is for the pretraining, where we only use the pure text or interleaved text and images
@@ -387,13 +446,22 @@ class ChatDataset(torch.utils.data.Dataset):
         
         # for debug, print the targets to make sure the right tokens are learned
         # need to print to make sure that the masked tokens are correct.
-        _target = target.clone().detach()
-        _target[_target == IGNORE_INDEX] = 0
-        print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
-        print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        # _target = target.clone().detach()
+        # _target[_target == IGNORE_INDEX] = 0
+        # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
+        # print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
         
 
         return encoding
+    
+    def __getitem__(self, idx):
+        try:
+            return self.getitem(idx)
+        except Exception as e:
+            raise e
+            print(f"Error at {idx}, {self.data_path}, {self.name}, {self.split}, trying to get the next item")
+            next_idx = (idx + 1) % len(self)
+            return self.__getitem__(next_idx)
 
 def read_video_pyav(container, indices):
     '''
@@ -463,7 +531,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         shuffle=False, 
         max_num_frames=None, 
         sample_ratio=1.0,
-        fps=1,
+        fps=None,
         use_video_encoder=False,
         load_video_frames=True,
     ):
@@ -571,31 +639,47 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         
         if "video" in item:
             video_file = video_dir / item['video']
-            container = av.open(video_file)
+            if video_file.is_file():
+                container = av.open(video_file)
 
-            # sample uniformly 8 frames from the video
-            total_frames = container.streams.video[0].frames
-            # print(f"Total frames: {total_frames}")
-            # print(f"FPS: {container.streams.video[0].average_rate}")
-            # print(f"Duration: {container.streams.video[0].duration}")
-            
-            if self.max_num_frames and total_frames > self.max_num_frames:
-                if self.fps:
-                    interval = math.ceil(container.streams.video[0].average_rate / self.fps)
-                    indices = np.arange(0, total_frames, interval).astype(int)
-                    if len(indices) > self.max_num_frames:
-                        indices = indices[:self.max_num_frames]
+                # sample uniformly 8 frames from the video
+                total_frames = container.streams.video[0].frames
+                # print(f"Total frames: {total_frames}")
+                # print(f"FPS: {container.streams.video[0].average_rate}")
+                # print(f"Duration: {container.streams.video[0].duration}")
+                
+                if self.max_num_frames and total_frames > self.max_num_frames:
+                    if self.fps:
+                        interval = math.ceil(container.streams.video[0].average_rate / self.fps)
+                        indices = np.arange(0, total_frames, interval).astype(int)
+                        if len(indices) > self.max_num_frames:
+                            indices = indices[:self.max_num_frames]
+                    else:
+                        interval = math.ceil(total_frames / self.max_num_frames)
+                        indices = np.arange(0, total_frames, interval).astype(int)
+                    if len(indices) == 0:
+                        print(f"Sample {len(indices)} frames from {total_frames} frames, (fps: {container.streams.video[0].average_rate}, sample_fps: {self.fps}, self.max_num_frames: {self.max_num_frames})")
+                    # print(f"Sample {len(indices)} frames from {total_frames} frames")
                 else:
+                    indices = np.arange(total_frames)
+                if self.use_video_encoder:
+                    video_frames = read_video_pyav(container, indices)
+                else:
+                    # use frames as images instead
+                    video_frames = [frame.to_image() for frame in container.decode(video=0)]
+                    video_frames = [video_frames[i] for i in indices]
+            elif video_file.is_dir():
+                frame_paths = [x for x in video_file.iterdir()]
+                frame_paths.sort(key=lambda x: int(x.stem.split("_")[-1]))
+                total_frames = len(frame_paths)
+                if self.max_num_frames and total_frames > self.max_num_frames:
                     indices = np.arange(0, total_frames, total_frames / self.max_num_frames).astype(int)
-                # print(f"Sample {len(indices)} frames from {total_frames} frames")
-            else:
-                indices = np.arange(total_frames)
-            if self.use_video_encoder:
-                video_frames = read_video_pyav(container, indices)
-            else:
-                # use frames as images instead
-                video_frames = [frame.to_image() for frame in container.decode(video=0)]
-                video_frames = [video_frames[i] for i in indices]
+                    frame_paths = [frame_paths[i] for i in indices]
+                video_frames = load_images(frame_paths)
+                if self.use_video_encoder:
+                    video_frames = np.stack([np.array(x.convert('RGB')) for x in video_frames])
+                
+                
         elif "images" in item and item['images'] and len(item['images']) > 0:
             if isinstance(item['images'][0], str):
                 video_frames = [video_dir / image for image in item['images']]

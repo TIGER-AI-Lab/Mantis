@@ -164,9 +164,9 @@ accelerate launch --config_file=$config_file \
     --save_steps 150 \
     --eval_steps 150 \
     --save_total_limit 1 \
-    --learning_rate 1e-5 \
+    --learning_rate 4e-5 \
     --weight_decay 0.01 \
-    --warmup_ratio 0.06 \
+    --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \

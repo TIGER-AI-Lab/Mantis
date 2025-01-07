@@ -5,3 +5,4 @@ data:
     path: ../../data/llava-video/llava-video-data/all_conv.json
     format: chat_video
     split: train
+    max_num_frames: 64

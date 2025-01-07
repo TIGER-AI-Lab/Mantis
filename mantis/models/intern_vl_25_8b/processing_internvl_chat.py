@@ -377,7 +377,8 @@ class InternVLChatProcessor(ProcessorMixin):
                 # count IMG_CONTEXT_TOKEN, should be equal to the len(merged_pixel_values)
                 assert sum([query.count(self.IMG_CONTEXT_TOKEN) for query in new_queries]) == len(merged_pixel_values), f"Expect {len(merged_pixel_values)} pixel_values, but get {sum([query.count(self.IMG_CONTEXT_TOKEN) for query in new_queries])} IMG_CONTEXT_TOKEN"
         else:
-            print("No images or videos")   
+            pass
+            # print("No images or videos")   
         model_inputs = self.tokenizer(new_queries, return_tensors=return_tensors, **kwargs)
         model_inputs["pixel_values"] = merged_pixel_values
         

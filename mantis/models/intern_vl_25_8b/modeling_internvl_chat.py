@@ -35,7 +35,8 @@ def version_cmp(v1, v2, op='eq'):
 
 class InternVLChatModel(PreTrainedModel):
     config_class = InternVLChatConfig
-    main_input_name = 'pixel_values'
+    # main_input_name = 'pixel_values'
+    main_input_name = 'input_ids'
     base_model_prefix = 'language_model'
     _supports_flash_attn_2 = True
     supports_gradient_checkpointing = True
@@ -87,6 +88,8 @@ class InternVLChatModel(PreTrainedModel):
         self.img_context_token_id = None
         self.conv_template = get_conv_template(self.template)
         self.system_message = self.conv_template.system_message
+        
+        self.post_init()
 
     def forward(
         self,
@@ -105,15 +108,15 @@ class InternVLChatModel(PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # print(f"pixel_values.shape: {pixel_values.shape if pixel_values is not None else None}")
-        if image_flags is not None:
-            image_flags = image_flags.squeeze(-1)
-        else:
-            image_flags = torch.ones(pixel_values.shape[0], dtype=torch.long, device=pixel_values.device)
         input_embeds = self.language_model.get_input_embeddings()(input_ids).clone()
 
         encoder_hidden_states = None
         encoder_attention_mask = None
         if pixel_values is not None:
+            if image_flags is not None:
+                image_flags = image_flags.squeeze(-1)
+            else:
+                image_flags = torch.ones(pixel_values.shape[0], dtype=torch.long, device=pixel_values.device)
             vit_embeds = self.extract_feature(pixel_values)
             vit_embeds = vit_embeds[image_flags == 1]
             vit_batch_size = pixel_values.shape[0]
@@ -160,7 +163,7 @@ class InternVLChatModel(PreTrainedModel):
                 encoder_hidden_states = vit_embeds.reshape(B, -1, C)
                 encoder_attention_mask = encoder_attention_mask.reshape(B, -1)
 
-        input_embeds = input_embeds.reshape(B, N, C)
+            input_embeds = input_embeds.reshape(B, N, C)
 
         outputs = self.language_model(
             inputs_embeds=input_embeds,
@@ -175,7 +178,7 @@ class InternVLChatModel(PreTrainedModel):
             return_dict=return_dict,
         )
         logits = outputs.logits
-
+        
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n

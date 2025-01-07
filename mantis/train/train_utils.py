@@ -9,31 +9,39 @@ from PIL import Image
 from pathlib import Path
 from tqdm import tqdm
 
-def load_image(image_file, max_image_size=None):
+def load_image(image_file, max_image_size=None, image_dir=None):
+    
     post_fixs = [".jpg", ".png", ".jpeg", ".gif"]
     if image_file is None:
         return None
     if isinstance(image_file, Image.Image):
-        image = image_file
+        image = image_file.convert("RGB")
     else:
-        image_file = Path(image_file)
-        if not image_file.exists() and not image_file.is_file():
-            if all([not image_file.with_suffix(post_fix).exists() for post_fix in post_fixs]):
-                raise FileNotFoundError(f"Cannot find image file {image_file}")
+        if isinstance(image_file, str):
+            image_file = Path(image_file) if image_dir is None else Path(image_dir) / image_file
+        elif isinstance(image_file, dict):
+            if "path" in image_file and image_file['path']:
+                image_file = Path(image_dir) / image_file['path'] if image_dir is not None else Path(image_file['path'])
+            elif "bytes" in image_file and image_file['bytes']:
+                image_file = Image.open(BytesIO(image_file['bytes'])).convert("RGB")
+        if not isinstance(image_file, Image.Image):
+            if not image_file.exists() and not image_file.is_file():
+                if all([not image_file.with_suffix(post_fix).exists() for post_fix in post_fixs]):
+                    raise FileNotFoundError(f"Cannot find image file {image_file}")
+                else:
+                    for post_fix in post_fixs:
+                        if image_file.with_suffix(post_fix).exists():
+                            image_file = image_file.with_suffix(post_fix)
+                            break
+                        
+            if not isinstance(image_file, str):
+                image_file = str(image_file)
+            if image_file.startswith("http"):
+                response = requests.get(image_file)
+                image = Image.open(BytesIO(response.content)).convert("RGB")
             else:
-                for post_fix in post_fixs:
-                    if image_file.with_suffix(post_fix).exists():
-                        image_file = image_file.with_suffix(post_fix)
-                        break
-                    
-        if not isinstance(image_file, str):
-            image_file = str(image_file)
-        if image_file.startswith("http"):
-            response = requests.get(image_file)
-            image = Image.open(BytesIO(response.content)).convert("RGB")
-        else:
-            import os
-            image = Image.open(image_file).convert("RGB")
+                import os
+                image = Image.open(image_file).convert("RGB")
     
     # control the longest side of the image
     if isinstance(max_image_size, int) and max_image_size > 0 and max(image.size) > max_image_size:
@@ -43,15 +51,15 @@ def load_image(image_file, max_image_size=None):
     return image
 
 
-def load_images(image_files, max_image_size=None):
+def load_images(image_files, max_image_size=None, image_dir=None):
     if not isinstance(image_files, list):
-        return load_image(image_files, max_image_size)
+        return load_image(image_files, max_image_size, image_dir)
     out = []
     for image_file in tqdm(image_files, desc="Loading images", disable=len(image_files) < 1000):
         if isinstance(image_file, Image.Image):
             image = image_file
         else:
-            image = load_image(image_file, max_image_size)
+            image = load_image(image_file, max_image_size, image_dir)
         out.append(image)
     return out
 

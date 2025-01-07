@@ -149,32 +149,43 @@ def load_model(model_args, training_args):
                 "attn_implementation": model_args.attn_implementation,
                 "use_flash_attn": True if model_args.attn_implementation == "flash_attention_2" else False,
             }
-            # with init_empty_weights():
-                # with torch.no_grad():
-            model = InternVLChatModel._from_config(config, **model_init_kwargs)
-            pretrained_model = AutoModel.from_pretrained(model_args.model_name_or_path, trust_remote_code=True, **model_init_kwargs)
-            model.load_state_dict(pretrained_model.state_dict(), strict=False, assign=True)
-            for layer in model.language_model.model.layers:
-                layer.cross_attention.load_state_dict(layer.attention.state_dict(), strict=True, assign=True)
-                layer.cross_attention_norm.load_state_dict(layer.attention_norm.state_dict(), strict=True, assign=True)
-                # print(layer.cross_attn_attn_gate)
-                # gate_state_dict = {'cross_attn_attn_gate': torch.zeros(1, device=model.device, dtype=torch_dtype)}
-                # layer.load_state_dict(gate_state_dict, strict=False, assign=True)
-            del pretrained_model
+            initial_emsemble_model_path = training_args.output_dir + "/initial_model"
+            if not os.path.exists(initial_emsemble_model_path):
+                print("Creating initial model...")
+                model = InternVLChatModel._from_config(config, **model_init_kwargs)
+                pretrained_model = AutoModel.from_pretrained(model_args.model_name_or_path, trust_remote_code=True, **model_init_kwargs)
+                model.load_state_dict(pretrained_model.state_dict(), strict=False)
+                for layer in model.language_model.model.layers:
+                    layer.cross_attention.load_state_dict(layer.attention.state_dict(), strict=True)
+                    layer.cross_attention_norm.load_state_dict(layer.attention_norm.state_dict(), strict=True)
+                    # print(layer.cross_attn_attn_gate)
+                    # gate_state_dict = {'cross_attn_attn_gate': torch.zeros(1, device=model.device, dtype=torch_dtype)}
+                    # layer.load_state_dict(gate_state_dict, strict=False, assign=True)
+                model.save_pretrained(initial_emsemble_model_path)
+                tokenizer.save_pretrained(initial_emsemble_model_path)
+                del model
+                del pretrained_model
+                print("Saved initial model to:", initial_emsemble_model_path)
+                exit(1)
+            model = InternVLChatModel.from_pretrained(initial_emsemble_model_path, config=config, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_flash_attn=True, trust_remote_code=True)
             model = model.to(training_args.device)
             
             # keep the vision backbone frozen all the time
             for name, param in model.named_parameters():
-                if "cross_attention" in name or "cross_attn" in name:
+                tune_key_words = ["cross_attention", "cross_attn"]
+                if any([x in name for x in tune_key_words]):
                     param.requires_grad = True
                     print("Enabling gradient for", name)
                 else:
                     param.requires_grad = False
             assert training_args.gradient_checkpointing == False, "Gradient checkpointing is not supported for partial training cross attention layers for now"
         else:
-            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_flash_attn=True, trust_remote_code=True).eval()
+            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_flash_attn=True, trust_remote_code=True)
     else:
         raise NotImplementedError("Only generation is supported for now")
+    # copied from intern_vl training script
+    model.vision_model.gradient_checkpointing = True
+    model.vision_model.encoder.gradient_checkpointing = True
     
     if bnb_config:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=training_args.gradient_checkpointing)
