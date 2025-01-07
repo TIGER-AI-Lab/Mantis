@@ -15,7 +15,7 @@ data:
     format: chat_video
     split: train
     max_num_frames: 32
-    fps: 2
+    # fps: 2
 #  - 
 #     name: "datikz"
 #     type: json

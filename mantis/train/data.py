@@ -387,10 +387,10 @@ class ChatDataset(torch.utils.data.Dataset):
         
         # for debug, print the targets to make sure the right tokens are learned
         # need to print to make sure that the masked tokens are correct.
-        # _target = target.clone().detach()
-        # _target[_target == IGNORE_INDEX] = 0
-        # print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
-        # print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
+        _target = target.clone().detach()
+        _target[_target == IGNORE_INDEX] = 0
+        print(self.processor.tokenizer.decode(input_ids, skip_special_tokens=False))
+        print(self.processor.tokenizer.decode(_target, skip_special_tokens=False))
         
 
         return encoding
@@ -563,7 +563,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.conversations)
     
-    def __getitem__(self, idx):
+    def getitem(self, idx):
         conv_messages = self.conversations[idx]
         selected_idx = self.all_selected_idxs[idx]
         item = self.data[selected_idx]
@@ -708,6 +708,15 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         
 
         return encoding
+    
+    
+    def __getitem__(self, idx):
+        try:
+            return self.getitem(idx)
+        except Exception as e:
+            next_idx = (idx + 1) % len(self)
+            print(f"Error at {idx}, try next {next_idx}")
+            return self.__getitem__(next_idx)
 
 import threading
 def timeout_handler(signum, frame):
@@ -1291,7 +1300,7 @@ def load_data_from_config(data_args, processor):
         dataset_type = sub_dataset_config.get('type', 'huggingface')
         offline_sha = sub_dataset_config.get('offline_sha', None)
         vl_only = sub_dataset_config.get('vl_only', False)
-        revision = sub_dataset_config.get('revision', "script")
+        revision = sub_dataset_config.get('revision', None)
         video_dir = sub_dataset_config.get('video_dir', None)
         max_image_size = sub_dataset_config.get('max_image_size', None)
         fps = sub_dataset_config.get('fps', None)

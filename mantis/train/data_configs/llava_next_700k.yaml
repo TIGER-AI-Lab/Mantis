@@ -1,0 +1,7 @@
+data:
+  - 
+    name: "llava_next_700k"
+    type: huggingface
+    path: lmms-lab/LLaVA-NeXT-Data
+    format: chat
+    split: train

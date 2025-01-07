@@ -48,7 +48,7 @@ class DataArguments:
         default=None,
     )
     dataset_balancing: Optional[bool] = field(
-        metadata={"help": "Whether to balance the dataset", "default": True, "required": False},
+        metadata={"help": "Whether to balance the dataset", "default": False, "required": False},
         default=False,
     )
     use_video_encoder: Optional[bool] = field(
