@@ -180,8 +180,9 @@ def load_model(model_args, training_args):
                 del model
                 del pretrained_model
                 print("Saved initial model to:", initial_emsemble_model_path)
+                print("Please re-run the script to load the initial model")
                 exit(1)
-            model = InternVLChatModel.from_pretrained(initial_emsemble_model_path, config=config, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_flash_attn=True, trust_remote_code=True)
+            model = InternVLChatModel.from_pretrained(initial_emsemble_model_path, config=config, torch_dtype=torch_dtype, use_flash_attn=True, trust_remote_code=True)
             model = model.to(training_args.device)
             
             # keep the vision backbone frozen all the time
@@ -194,7 +195,7 @@ def load_model(model_args, training_args):
                     param.requires_grad = False
             assert training_args.gradient_checkpointing == False, "Gradient checkpointing is not supported for partial training cross attention layers for now"
         else:
-            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_flash_attn=True, trust_remote_code=True)
+            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, torch_dtype=torch_dtype, use_flash_attn=True, trust_remote_code=True)
     else:
         raise NotImplementedError("Only generation is supported for now")
     # copied from intern_vl training script

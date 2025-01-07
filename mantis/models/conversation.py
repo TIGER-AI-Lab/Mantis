@@ -32,6 +32,7 @@ class Conversation:
     system_template: str = None
     system_message: str = None
     name: str = None
+    sep_offset: int = 0
 
     skip_next: bool = False
     
@@ -268,7 +269,13 @@ class Conversation:
             sep_style=self.sep_style,
             sep=self.sep,
             sep2=self.sep2,
-            version=self.version)
+            version=self.version,
+            stop_str=self.stop_str,
+            system_template=self.system_template,
+            system_message=self.system_message,
+            name=self.name,
+            sep_offset=self.sep_offset,
+        )
         
     def dict(self):
         if len(self.get_images()) > 0:
@@ -597,6 +604,7 @@ register_conv_template(
         system=None,
         messages=(),
         offset=0,
+        sep_offset=5
     )
 )
 
@@ -629,6 +637,7 @@ register_conv_template(
         system=None,
         messages=(),
         offset=0,
+        sep_offset=5
     )
 )
 

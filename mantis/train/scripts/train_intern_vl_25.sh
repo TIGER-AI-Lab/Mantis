@@ -46,7 +46,7 @@ max_seq_len=16384
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=128
+global_batch_size=8
 
 RUN_NAME="intern_vl_25_llava_next_700k_pretrain_debug"
 export WANDB_PROJECT="Mantis"
@@ -136,7 +136,7 @@ if [ $lora_enabled = true ]; then
     echo $config_file
 else
     echo "lora is disabled"
-    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
+    config_file="./accelerate_configs/accelerate_config_zero3.yaml"
     echo $config_file
 fi
 

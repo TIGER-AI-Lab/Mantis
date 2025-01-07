@@ -421,13 +421,14 @@ class ChatDataset(torch.utils.data.Dataset):
                 skip_offset = 1
             sep_id = self.processor.tokenizer.convert_tokens_to_ids(self.conv.sep.strip(' \n'))
             sep_idxs = torch.nonzero((input_ids == sep_id), as_tuple=True)[0].tolist()
+            sep_offset = 1 + self.conv.sep_offset
             for i in range(len(sep_idxs)):
                 if i % 2 == skip_offset:
                     continue
                 if i == len(sep_idxs) - 1:
-                    target[sep_idxs[i]+1:] = input_ids[sep_idxs[i]+1:]
+                    target[sep_idxs[i]+sep_offset:] = input_ids[sep_idxs[i]+sep_offset:]
                 else:
-                    target[sep_idxs[i]+1:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+1:sep_idxs[i+1] + 1]
+                    target[sep_idxs[i]+sep_offset:sep_idxs[i+1] + 1] = input_ids[sep_idxs[i]+sep_offset:sep_idxs[i+1] + 1]
         elif self.conv.sep_style == SeparatorStyle.PLAIN:
             assert DEFAULT_IMAGE_TOKEN_ID is not None, "Please set the default image token id by calling set_default_image_token_id, this is required to masking the image tokens for pretraining."
             # mask the image tokens in the text
