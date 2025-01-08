@@ -141,7 +141,7 @@ else
     echo $config_file
 fi
 
-per_device_train_batch_size=4
+per_device_train_batch_size=2
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 
