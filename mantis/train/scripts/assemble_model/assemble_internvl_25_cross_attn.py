@@ -18,5 +18,8 @@ for layer in model.language_model.model.layers:
     gate_state_dict = {'cross_attn_attn_gate': torch.zeros(1, device=model.device, dtype=torch.bfloat16)}
     layer.load_state_dict(gate_state_dict, strict=False, assign=True)
 processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention)
-model.save_pretrained('../../checkpoints/InternVL2_5-8B/intern_vl_25_llava_next_700k_pretrain_cross_attn_16384/initial_model')
-tokenizer.save_pretrained('../../checkpoints/InternVL2_5-8B/intern_vl_25_llava_next_700k_pretrain_cross_attn_16384/initial_model')
+output_dir = '../../checkpoints/InternVL2_5-8B/initial_model'
+from pathlib import Path
+Path(output_dir).mkdir(parents=True, exist_ok=True)
+model.save_pretrained(output_dir)
+tokenizer.save_pretrained(output_dir)

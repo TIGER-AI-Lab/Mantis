@@ -34,6 +34,7 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (add_start_docstrings,
                                 add_start_docstrings_to_model_forward, logging,
                                 replace_return_docstrings)
+from ring_flash_attn.zigzag_ring_flash_attn_varlen import zigzag_ring_flash_attn_varlen_func
 
 try:
     from transformers.generation.streamers import BaseStreamer
@@ -788,6 +789,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
         attention_mask: Optional[torch.LongTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         encoder_position_ids: Optional[torch.LongTensor] = None,
         # past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -803,7 +805,8 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             )
 
             # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop('padding_mask')
+            # attention_mask = kwargs.pop('padding_mask')
+            kwargs.pop('padding_mask')
 
         output_attentions = False
 
@@ -868,7 +871,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         value_states = value_states.transpose(1, 2)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len
+            query_states, key_states, value_states, attention_mask, encoder_attention_mask, q_len
         )
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.wo(attn_output)
@@ -879,7 +882,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         return attn_output, attn_weights, None
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -902,10 +905,10 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         """
         # Contains at least one padding token in the sequence
         causal = self.is_causal and query_length != 1
-        if attention_mask is not None:
+        if attention_mask is not None or encoder_attention_mask is not None:
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
-                query_states, key_states, value_states, attention_mask, query_length
+                query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -932,9 +935,11 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
 
         return attn_output
 
-    def _unpad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+    def _unpad_input(self, query_layer, key_layer, value_layer, attention_mask, encoder_attention_mask, query_length):
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+        if encoder_attention_mask is None:
+            encoder_attention_mask = torch.ones((batch_size, kv_seq_len), device=key_layer.device)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(encoder_attention_mask)
 
         key_layer = index_first_axis(
             key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
@@ -958,6 +963,8 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             indices_q = cu_seqlens_q[:-1]
             query_layer = query_layer.squeeze(1)
         else:
+            if attention_mask is None:
+                attention_mask = torch.ones((batch_size, query_length), device=query_layer.device)
             # The -q_len: slice assumes left padding.
             # attention_mask = attention_mask[:, -query_length:]
             query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)[:4]
@@ -971,6 +978,61 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+class InternLM2RingFlashCrossAttention2(InternLM2FlashCrossAttention2):
+    def _flash_attention_forward(
+        self, query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length, dropout=0.0, softmax_scale=None
+    ):
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
+
+        Args:
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            attention_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`int`, *optional*):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        """
+        # Contains at least one padding token in the sequence
+        causal = self.is_causal and query_length != 1
+        if attention_mask is not None or encoder_attention_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
+                query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            attn_output_unpad = zigzag_ring_flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=causal,
+                group=local_group,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+            )
+
+        return attn_output
 
 INTERNLM2_ATTENTION_CLASSES = {
     'eager': InternLM2Attention,
@@ -980,6 +1042,7 @@ INTERNLM2_ATTENTION_CLASSES = {
 INTERNLM2_CROSS_ATTENTION_CLASSES = {
     'eager': InternLM2CrossAttention,
     'flash_attention_2': InternLM2FlashCrossAttention2,
+    'ring_flash_attn': InternLM2RingFlashCrossAttention2,
 }
 
 # Modified from transformers.model.llama.modeling_llama.LlamaDecoderLayer
@@ -1056,7 +1119,8 @@ class InternLM2DecoderLayer(nn.Module):
             hidden_states, cross_attn_weights, _ = self.cross_attention(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
+                attention_mask=attention_mask,
+                encoder_attention_mask=encoder_attention_mask,
                 position_ids=position_ids,
                 encoder_position_ids=encoder_position_ids,
                 output_attentions=output_attentions,
@@ -1187,6 +1251,29 @@ InternLM2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+# Modified from transformers.model.llama.modeling_llama.LlamaModel
+@add_start_docstrings(
+    'The bare InternLM2 Model outputting raw hidden-states without any specific head on top.',
+    InternLM2_START_DOCSTRING,
+)
+class GatherLayer(torch.autograd.Function):
+    """Gather tensors from all process, supporting backward propagation."""
+
+    @staticmethod
+    def forward(ctx, input):
+        ctx.save_for_backward(input)
+        output = [torch.zeros_like(input) for _ in range(dist.get_world_size(local_group))]
+        dist.all_gather(output, input, group=local_group)
+        return torch.stack(output, 0)
+
+    @staticmethod
+    def backward(ctx, grads):
+        (input,) = ctx.saved_tensors
+        dist.all_reduce(grads, group=local_group)
+        grad_out = torch.zeros_like(input)
+        grad_out[:] = grads[dist.get_rank(local_group)]
+        return grad_out
+    
 
 # Modified from transformers.model.llama.modeling_llama.LlamaModel
 @add_start_docstrings(
@@ -1266,6 +1353,15 @@ class InternLM2Model(InternLM2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        global local_group
+        if group_list is not None:
+            for group_idx,group in enumerate(group_list):
+                if type(group)==torch.distributed.distributed_c10d.ProcessGroup:
+                    break
+            global inner_idx
+            inner_idx = dist.get_rank(group)
+            local_group=group
+            
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

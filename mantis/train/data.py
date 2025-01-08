@@ -1336,6 +1336,50 @@ class Collator():
         #         print(k, v)
         
         return batch_encoding
+    
+class PackingCollator(Collator):
+    def __init__(self, processor, max_length=None):
+        super().__init__(processor, max_length)
+    
+    def packing_collate_fn(self, item_list):
+        extras = []
+
+        chosen_ids = []
+        chosen_att_masks = []
+        chosen_seq_lens = []
+        rejected_ids = []
+        rejected_att_masks = []
+        rejected_seq_lens = []
+        index = 1
+        for chosen_id, chosen_mask, reject_id, rejects_mask, extra in item_list:
+            chosen_ids.append(chosen_id.flatten())
+            chosen_att_masks.append(torch.full_like(chosen_id.flatten(), index))
+            chosen_seq_lens.append(len(chosen_id.flatten()))
+            extras.append(extra)
+
+            rejected_ids.append(reject_id.flatten())
+            rejected_att_masks.append(torch.full_like(reject_id.flatten(), index + len(item_list)))
+            rejected_seq_lens.append(len(reject_id.flatten()))
+            index += 1
+
+        packed_input_ids = torch.cat(chosen_ids + rejected_ids, dim=0).unsqueeze(0)
+        packed_attention_masks = torch.cat(chosen_att_masks + rejected_att_masks, dim=0).unsqueeze(0)
+        packed_seq_lens = chosen_seq_lens + rejected_seq_lens
+
+        if self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0:
+            padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+            packed_input_ids = F.pad(packed_input_ids, (0, padding_len), value=self.tokenizer.pad_token_id)
+            packed_attention_masks = F.pad(packed_attention_masks, (0, padding_len), value=0)
+
+        return packed_input_ids, packed_attention_masks, packed_seq_lens, extras
+    
+    def pack_batch(self, batch):
+        result = {}
+        
+    def __call__(self, batch):
+        batch_encoding = self.pack_batch(batch)
+        return batch_encoding
+    
 
 class SiglipVideoCollator():
     def __init__(self, processor, max_length=None):

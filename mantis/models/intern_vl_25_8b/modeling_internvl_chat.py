@@ -146,7 +146,7 @@ class InternVLChatModel(PreTrainedModel):
                 vit_embeds_per_sample = []
                 encoder_attention_mask = torch.zeros((B, max_num_img, num_tokens_per_image), device=input_ids.device, dtype=input_ids.dtype)
                 idx = 0
-                for num_img in num_imgs_per_sample:
+                for bz_i, num_img in enumerate(num_imgs_per_sample):
                     if max_num_img == num_img:
                         vit_embeds_per_sample.append(vit_embeds[idx:idx + num_img])
                     else:
@@ -157,7 +157,7 @@ class InternVLChatModel(PreTrainedModel):
                                 dim=0
                             )
                         )
-                    encoder_attention_mask[idx, :num_img] = 1
+                    encoder_attention_mask[bz_i, :num_img] = 1
                     idx += num_img
                 vit_embeds = torch.stack(vit_embeds_per_sample, dim=0)
                 encoder_hidden_states = vit_embeds.reshape(B, -1, C)

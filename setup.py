@@ -29,6 +29,7 @@ setup(
             "numpy",
             "requests",
             "matplotlib",
+            "transformers<4.46.0",
             "transformers_stream_generator",
             "tiktoken",
             "chardet",

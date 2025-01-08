@@ -95,8 +95,16 @@ class ModelArguments:
         default='none',
     )
     attn_implementation: Optional[str] = field(
-        metadata={"help": "The attention implementation to use", "default": "flash_attention_2", "required": False},
+        metadata={"help": "The attention implementation to use (eager|flash_attention_2|ring_flash_attn)", "default": "flash_attention_2", "required": False},
         default="flash_attention_2",
+    )
+    ring_attn_group: Optional[int] = field(
+        metadata={"help": "The ring attention group", "default": 0, "required": False},
+        default=0,
+    )
+    ring_head_stride: Optional[int] = field(
+        metadata={"help": "the number of heads to do ring attention each time. It should be a divisor of the number of heads. A larger value may results in faster training but will consume more memory.", "default": 1, "required": False},
+        default=1,
     )
     conv_template: Optional[str] = field(
         metadata={"help": "The conversation template to use", "default": None, "required": False},
@@ -113,6 +121,10 @@ class ModelArguments:
     enable_cross_attention: Optional[bool] = field(
         metadata={"help": "Whether to enable cross attention", "default": True, "required": False},
         default=True,
+    )
+    do_pretrain: Optional[bool] = field(
+        metadata={"help": "Whether to do pretraining", "default": False, "required": False},
+        default=False,
     )
 
 def find_all_linear_names(model):
@@ -156,17 +168,17 @@ def load_model(model_args, training_args):
     else:
         config.enable_cross_attention = False
         config.llm_config.enable_cross_attention = False
+    use_flash_attn = True if model_args.attn_implementation == "flash_attention_2" else False
     if model_args.problem_type == "generation":
-        if model_args.enable_cross_attention:
+        if model_args.enable_cross_attention and model_args.do_pretrain:
             model_init_kwargs = {
                 "torch_dtype": torch_dtype,
                 "attn_implementation": model_args.attn_implementation,
-                "use_flash_attn": True if model_args.attn_implementation == "flash_attention_2" else False,
             }
-            initial_emsemble_model_path = training_args.output_dir + "/initial_model"
+            initial_emsemble_model_path = Path(training_args.output_dir).parent / "initial_model"
             if not os.path.exists(initial_emsemble_model_path):
                 print("Creating initial model...")
-                model = InternVLChatModel._from_config(config, **model_init_kwargs)
+                model = InternVLChatModel._from_config(config, **model_init_kwargs, use_flash_attn=use_flash_attn)
                 pretrained_model = AutoModel.from_pretrained(model_args.model_name_or_path, trust_remote_code=True, **model_init_kwargs)
                 model.load_state_dict(pretrained_model.state_dict(), strict=False)
                 for layer in model.language_model.model.layers:
@@ -177,14 +189,13 @@ def load_model(model_args, training_args):
                     # layer.load_state_dict(gate_state_dict, strict=False, assign=True)
                 model.save_pretrained(initial_emsemble_model_path)
                 tokenizer.save_pretrained(initial_emsemble_model_path)
-                del model
                 del pretrained_model
                 print("Saved initial model to:", initial_emsemble_model_path)
                 print("Please re-run the script to load the initial model")
-                exit(1)
-            model = InternVLChatModel.from_pretrained(initial_emsemble_model_path, config=config, torch_dtype=torch_dtype, use_flash_attn=True, trust_remote_code=True)
+            else:
+                model = InternVLChatModel.from_pretrained(initial_emsemble_model_path, config=config, torch_dtype=torch_dtype, use_flash_attn=use_flash_attn, trust_remote_code=True)
             model = model.to(training_args.device)
-            
+        
             # keep the vision backbone frozen all the time
             for name, param in model.named_parameters():
                 tune_key_words = ["cross_attention", "cross_attn"]
@@ -195,7 +206,7 @@ def load_model(model_args, training_args):
                     param.requires_grad = False
             assert training_args.gradient_checkpointing == False, "Gradient checkpointing is not supported for partial training cross attention layers for now"
         else:
-            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, torch_dtype=torch_dtype, use_flash_attn=True, trust_remote_code=True)
+            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, torch_dtype=torch_dtype, use_flash_attn=use_flash_attn, trust_remote_code=True)
     else:
         raise NotImplementedError("Only generation is supported for now")
     # copied from intern_vl training script

@@ -47,8 +47,9 @@ lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
+do_pretrain=True
 
-RUN_NAME="intern_vl_25_llava_next_700k_pretrain_debug"
+RUN_NAME="intern_vl_25_llava_next_700k_pretrain"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -140,7 +141,7 @@ else
     echo $config_file
 fi
 
-per_device_train_batch_size=1
+per_device_train_batch_size=4
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 
@@ -174,6 +175,7 @@ accelerate launch --config_file=$config_file \
     --dataloader_num_workers $WORKERS \
     --report_to wandb \
     --do_train \
+    --do_pretrain $do_pretrain \
     --lora_enabled $lora_enabled \
     --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
