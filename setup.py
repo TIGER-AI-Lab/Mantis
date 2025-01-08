@@ -21,6 +21,7 @@ setup(
         "datasets==2.18.0",
         "diffusers",
         "decord",
+        "ring"
     ],
     extras_require={
         "train": [
@@ -54,6 +55,7 @@ setup(
             "openai",
             "av",
             "qwen_vl_utils",
+            "ring-flash-attn"
         ],
         "eval": [
             "tqdm",
