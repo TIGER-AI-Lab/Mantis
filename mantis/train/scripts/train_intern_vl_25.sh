@@ -162,8 +162,8 @@ accelerate launch --config_file=$config_file \
     --gradient_accumulation_steps $gradient_accumulation_steps \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
-    --save_steps 150 \
-    --eval_steps 150 \
+    --save_steps 400 \
+    --eval_steps 400 \
     --save_total_limit 1 \
     --learning_rate 4e-5 \
     --weight_decay 0.01 \

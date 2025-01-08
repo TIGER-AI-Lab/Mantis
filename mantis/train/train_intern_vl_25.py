@@ -95,8 +95,12 @@ class ModelArguments:
         default='none',
     )
     attn_implementation: Optional[str] = field(
-        metadata={"help": "The attention implementation to use (eager|flash_attention_2|ring_flash_attn)", "default": "flash_attention_2", "required": False},
+        metadata={"help": "The attention implementation to use (eager|flash_attention_2)", "default": "flash_attention_2", "required": False},
         default="flash_attention_2",
+    )
+    use_ring_flash_attn: Optional[bool] = field(
+        metadata={"help": "Whether to use ring flash attention", "default": False, "required": False},
+        default=False,
     )
     ring_attn_group: Optional[int] = field(
         metadata={"help": "The ring attention group", "default": 0, "required": False},
@@ -169,16 +173,19 @@ def load_model(model_args, training_args):
         config.enable_cross_attention = False
         config.llm_config.enable_cross_attention = False
     use_flash_attn = True if model_args.attn_implementation == "flash_attention_2" else False
+    use_ring_flash_attn = model_args.use_ring_flash_attn
     if model_args.problem_type == "generation":
         if model_args.enable_cross_attention and model_args.do_pretrain:
             model_init_kwargs = {
                 "torch_dtype": torch_dtype,
                 "attn_implementation": model_args.attn_implementation,
+                "use_ring_flash_attn": use_ring_flash_attn,
+                "use_flash_attn": use_flash_attn,
             }
             initial_emsemble_model_path = Path(training_args.output_dir).parent / "initial_model"
             if not os.path.exists(initial_emsemble_model_path):
                 print("Creating initial model...")
-                model = InternVLChatModel._from_config(config, **model_init_kwargs, use_flash_attn=use_flash_attn)
+                model = InternVLChatModel._from_config(config, **model_init_kwargs)
                 pretrained_model = AutoModel.from_pretrained(model_args.model_name_or_path, trust_remote_code=True, **model_init_kwargs)
                 model.load_state_dict(pretrained_model.state_dict(), strict=False)
                 for layer in model.language_model.model.layers:
@@ -193,7 +200,7 @@ def load_model(model_args, training_args):
                 print("Saved initial model to:", initial_emsemble_model_path)
                 print("Please re-run the script to load the initial model")
             else:
-                model = InternVLChatModel.from_pretrained(initial_emsemble_model_path, config=config, torch_dtype=torch_dtype, use_flash_attn=use_flash_attn, trust_remote_code=True)
+                model = InternVLChatModel.from_pretrained(initial_emsemble_model_path, config=config, trust_remote_code=True, **model_init_kwargs)
             model = model.to(training_args.device)
         
             # keep the vision backbone frozen all the time
@@ -206,7 +213,7 @@ def load_model(model_args, training_args):
                     param.requires_grad = False
             assert training_args.gradient_checkpointing == False, "Gradient checkpointing is not supported for partial training cross attention layers for now"
         else:
-            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, torch_dtype=torch_dtype, use_flash_attn=use_flash_attn, trust_remote_code=True)
+            model = InternVLChatModel.from_pretrained(model_args.model_name_or_path, config=config, trust_remote_code=True, **model_init_kwargs)
     else:
         raise NotImplementedError("Only generation is supported for now")
     # copied from intern_vl training script
@@ -241,6 +248,11 @@ def load_model(model_args, training_args):
     
     return model, processor
     
+def setup_ring_attn(model, training_args, data_args, model_args):
+    if not model_args.use_ring_flash_attn:
+        return
+    
+
 def main(
     training_args: TrainingArguments,
     data_args: DataArguments,
@@ -269,6 +281,7 @@ def main(
             print("Resuming from checkpoint", latest_checkpoint)
     
     model, processor = load_model(model_args, training_args)
+    setup_ring_attn(model, training_args, data_args, model_args)
     
     if model_args.conv_template:
         data_args.conv_format = conv_templates[model_args.conv_template] 

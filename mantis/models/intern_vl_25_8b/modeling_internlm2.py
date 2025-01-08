@@ -1037,6 +1037,7 @@ class InternLM2RingFlashCrossAttention2(InternLM2FlashCrossAttention2):
 INTERNLM2_ATTENTION_CLASSES = {
     'eager': InternLM2Attention,
     'flash_attention_2': InternLM2FlashAttention2,
+    'ring_flash_attn': InternLM2FlashAttention2,
 }
 
 INTERNLM2_CROSS_ATTENTION_CLASSES = {
@@ -1354,8 +1355,8 @@ class InternLM2Model(InternLM2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         global local_group
-        if group_list is not None:
-            for group_idx,group in enumerate(group_list):
+        if hasattr(self, 'group_list') and self.group_list is not None:
+            for group_idx,group in enumerate(self.group_list):
                 if type(group)==torch.distributed.distributed_c10d.ProcessGroup:
                     break
             global inner_idx

@@ -7,6 +7,7 @@
 import warnings
 from typing import List, Optional, Tuple, Union
 
+import torch.distributed as dist
 import torch.utils.checkpoint
 import transformers
 from torch import nn
@@ -32,6 +33,41 @@ def version_cmp(v1, v2, op='eq'):
     op_func = getattr(operator, op)
     return op_func(version.parse(v1), version.parse(v2))
 
+def extract_local(value, rank, world_size, dim=1):
+    """Extract local tensor across the sequence dimension."""
+    value_chunks = value.chunk(2 * world_size, dim=dim)
+    local_value = torch.cat(
+        [value_chunks[rank], value_chunks[2 * world_size - rank - 1]], dim=dim
+    )
+    return local_value.to(value.device)
+def extract_local2(value, rank, world_size,  dim=1):
+    """Extract local tensor across the hidden dimension."""
+    dimension_size = value.shape[dim]
+    sub_seq_length = dimension_size // world_size
+
+    sub_seq_start = rank * sub_seq_length
+    sub_seq_end = (rank + 1) * sub_seq_length
+    local_value = value[:, sub_seq_start:sub_seq_end]
+
+    return local_value.to(value.device)
+class GatherLayer(torch.autograd.Function):
+    """Gather tensors from all process, supporting backward propagation."""
+
+    @staticmethod
+    def forward(ctx, input):
+        ctx.save_for_backward(input)
+        output = [torch.zeros_like(input) for _ in range(dist.get_world_size(local_group))]
+        dist.all_gather(output, input, group=local_group)
+        return torch.stack(output, 0)
+
+    @staticmethod
+    def backward(ctx, grads):
+        (input,) = ctx.saved_tensors
+        dist.all_reduce(grads, group=local_group)
+        grad_out = torch.zeros_like(input)
+        grad_out[:] = grads[dist.get_rank(local_group)]
+        return grad_out
+    
 
 class InternVLChatModel(PreTrainedModel):
     config_class = InternVLChatConfig
@@ -42,7 +78,7 @@ class InternVLChatModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ['InternVisionModel', 'LlamaDecoderLayer', 'InternLM2DecoderLayer']
 
-    def __init__(self, config: InternVLChatConfig, vision_model=None, language_model=None, use_flash_attn=True):
+    def __init__(self, config: InternVLChatConfig, vision_model=None, language_model=None, use_flash_attn=True, use_ring_flash_attn=False, group_list=None):
         super().__init__(config)
 
         assert version_cmp(transformers.__version__, '4.37.0', 'ge')
@@ -58,6 +94,10 @@ class InternVLChatModel(PreTrainedModel):
         use_flash_attn = use_flash_attn if has_flash_attn else False
         config.vision_config.use_flash_attn = True if use_flash_attn else False
         config.llm_config.attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
+        self.use_flash_attn = use_flash_attn
+        self.use_ring_flash_attn = use_ring_flash_attn
+        if use_ring_flash_attn:
+            config.llm_config.attn_implementation = 'ring_flash_attn'
 
         logger.info(f'num_image_token: {self.num_image_token}')
         logger.info(f'ps_version: {self.ps_version}')
@@ -74,6 +114,8 @@ class InternVLChatModel(PreTrainedModel):
                 self.language_model = InternLM2ForCausalLM(config.llm_config)
             else:
                 raise NotImplementedError(f'{config.llm_config.architectures[0]} is not implemented.')
+        self.group_list = group_list
+        self.language_model.group_list = group_list
 
         vit_hidden_size = config.vision_config.hidden_size
         llm_hidden_size = config.llm_config.hidden_size
@@ -105,6 +147,18 @@ class InternVLChatModel(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
+        
+        global local_group
+        if self.group_list is not None:
+            for group_idx,group in enumerate(self.group_list):
+                if type(group)==torch.distributed.distributed_c10d.ProcessGroup:
+                    # assert type(group)==torch.distributed.distributed_c10d.ProcessGroup
+                    break        # print("Printing decoded input ids")
+            local_group=group
+        else:
+            group=None
+            local_group=None
+        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # print(f"pixel_values.shape: {pixel_values.shape if pixel_values is not None else None}")
@@ -112,12 +166,42 @@ class InternVLChatModel(PreTrainedModel):
 
         encoder_hidden_states = None
         encoder_attention_mask = None
+        encoder_position_ids = None
         if pixel_values is not None:
             if image_flags is not None:
                 image_flags = image_flags.squeeze(-1)
             else:
                 image_flags = torch.ones(pixel_values.shape[0], dtype=torch.long, device=pixel_values.device)
+                
+            # extract using vit embeds
             vit_embeds = self.extract_feature(pixel_values)
+            if self.use_ring_flash_attn:
+                group_size = dist.get_world_size(group)
+                img_num_dim = 0
+                pad_num=0
+                if pixel_values.shape[img_num_dim] > group_size:
+                    if pixel_values.shape[img_num_dim] % group_size!=0:
+                        pad_num = group_size - pixel_values.shape[img_num_dim] % group_size
+                        if pad_num < group_size:  
+                            pad_shape = list(pixel_values.shape)
+                            pad_shape[img_num_dim] = pad_num  
+                            pad_pixel = torch.zeros(pad_shape, dtype=pixel_values.dtype, device=pixel_values.device)
+
+                            pixel_values = torch.cat([pixel_values, pad_pixel], dim=img_num_dim)
+
+                    chunked_pixel=torch.chunk(pixel_values, group_size, dim=img_num_dim)
+                    local_pixel=chunked_pixel[dist.get_rank(group)]
+                    local_vit_embeds=self.extract_feature(local_pixel)
+                    vit_embeds=GatherLayer.apply(local_vit_embeds)
+                    vit_embeds=vit_embeds.view(-1,vit_embeds.shape[-2],vit_embeds.shape[-1])
+                    if pad_num>0:
+                        vit_embeds=vit_embeds[:-pad_num]
+                else:
+                    vit_embeds = self.extract_feature(pixel_values)
+            else:
+                vit_embeds = self.extract_feature(pixel_values)
+            
+            
             vit_embeds = vit_embeds[image_flags == 1]
             vit_batch_size = pixel_values.shape[0]
 
@@ -162,15 +246,35 @@ class InternVLChatModel(PreTrainedModel):
                 vit_embeds = torch.stack(vit_embeds_per_sample, dim=0)
                 encoder_hidden_states = vit_embeds.reshape(B, -1, C)
                 encoder_attention_mask = encoder_attention_mask.reshape(B, -1)
+                encoder_position_ids = torch.arange(
+                    encoder_hidden_states.shape[1], dtype=torch.long, device=encoder_hidden_states.device
+                ).unsqueeze(0)
 
             input_embeds = input_embeds.reshape(B, N, C)
 
+        if self.use_ring_flash_attn:
+            # # for self-attention
+            # input_embeds=extract_local(input_embeds,dist.get_rank(group),dist.get_world_size(group))
+            # position_ids=extract_local(position_ids,dist.get_rank(group),dist.get_world_size(group))
+            # labels=extract_local(labels,dist.get_rank(group),dist.get_world_size(group))
+            # if loss_weight:
+            #     loss_weight=extract_local(torch.tensor(loss_weight),dist.get_rank(group),dist.get_world_size(group))
+            #     loss_weight=list(loss_weight.numpy())
+            # attention_mask=attention_mask//dist.get_world_size(group)
+            # for cross-attention
+            encoder_hidden_states=extract_local(encoder_hidden_states,dist.get_rank(group),dist.get_world_size(group))
+            encoder_position_ids=extract_local(encoder_position_ids,dist.get_rank(group),dist.get_world_size(group))
+            encoder_attention_mask=encoder_attention_mask//dist.get_world_size(group)
+        else:
+            pass
+            
         outputs = self.language_model(
             inputs_embeds=input_embeds,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=attention_mask,
             encoder_attention_mask=encoder_attention_mask,
             position_ids=position_ids,
+            encoder_position_ids=encoder_position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
