@@ -59,6 +59,22 @@ class DataArguments:
         metadata={"help": "Whether to load video frames", "default": False, "required": False},
         default=False,
     )
+    packing_type: Optional[str] = field(
+        metadata={"help": "The packing type", "default": "cross_attn", "required": False},
+        default="cross_attn",
+    )
+    max_self_attn_len: Optional[int] = field(
+        metadata={"help": "The maximum self attention length", "default": 1024, "required": False},
+        default=1024,
+    )
+    max_cross_attn_kv_len: Optional[int] = field(
+        metadata={"help": "The maximum cross attention key value length", "default": 32768, "required": False},
+        default=32768,
+    )
+    num_tokens_per_image: Optional[int] = field(
+        metadata={"help": "The number of tokens per image", "default": 256, "required": False},
+        default=256,
+    )
 
 @dataclass
 class ModelArguments:

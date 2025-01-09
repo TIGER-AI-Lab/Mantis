@@ -42,12 +42,14 @@ if [ -z $HF_TOKEN ]; then
 fi
 
 hf_hub_user_name="Mantis-VL" # set this will push the model to your hub after training
-max_seq_len=16384
+max_seq_len=4096
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 do_pretrain=True
+max_self_attn_len=$max_seq_len
+max_cross_attn_kv_len=65536
 
 RUN_NAME="intern_vl_25_llava_next_700k_pretrain"
 export WANDB_PROJECT="Mantis"
@@ -180,4 +182,6 @@ accelerate launch --config_file=$config_file \
     --qlora_enabled $qlora_enabled \
     --max_seq_len $max_seq_len \
     --resume_from_checkpoint "$resume_from_checkpoint" \
-    --enable_cross_attention True
+    --enable_cross_attention True \
+    --max_self_attn_len $max_self_attn_len \
+    --max_cross_attn_kv_len $max_cross_attn_kv_len

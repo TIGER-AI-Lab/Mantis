@@ -82,6 +82,7 @@ def _import_flash_attn():
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
+    # attention_mask: [bsz, q_len] or [bsz, kv_len]
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
@@ -91,8 +92,86 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+    
+def find_next_example(mask_slice):
+    """Given a matrix M (m, n), find the point (i, j) where M[:i][:j] all zero and M[:i][j:] all zero
+        assuming M[:i][:j] is either 
+        - (casual mask) left-bottom 1s and right-top 0s
+        - (no mask) full 1s
+    """
+    i = mask_slice[:, 0].nonzero(as_tuple=False).flatten().max().item()
+    j = mask_slice[i].nonzero(as_tuple=False).flatten().max().item()
+    i += 1
+    j += 1
+    return i, j
 
+def _get_unpad_packing_data(attention_mask):
+    """
+    Process packed attention masks to get indices and cumulative sequence lengths.
+    
+    Args:
+        attention_mask: [bsz, 1, q_len, kv_len] tensor containing packed attention masks
+        
+    Returns:
+        tuple containing:
+        - indices: flattened indices of non-zero elements
+        - cu_seqlens: cumulative sequence lengths
+        - max_seqlen_in_batch: maximum sequence length in the batch
+    """
+    indices = torch.nonzero(attention_mask.sum(-1).flatten(), as_tuple=False).flatten()
+    mask = attention_mask.squeeze(1)  # [bsz, q_len, kv_len]
+    bsz, q_len, kv_len = mask.shape
+    
+    seqlens = []
+    
+    # Process each batch
+    for b in range(bsz):
+        mask_slice = mask[b]
+        
+        sub_mask_idx = [0, 0]
+        
+        while sub_mask_idx[1] < kv_len:
+            sub_mask_slice = mask_slice[sub_mask_idx[0]:, sub_mask_idx[1]:]
+            q_i, kv_j = find_next_example(sub_mask_slice)
+            seq_len = kv_j
+                
+            seqlens.append(seq_len)
+            sub_mask_idx[0] += q_i
+            sub_mask_idx[1] += kv_j
+            print(sub_mask_idx)
+        
+    
+    seqlens_tensor = torch.tensor(seqlens, device=attention_mask.device, dtype=torch.int32)
+    
+    # Calculate cumulative sequence lengths
+    cu_seqlens = F.pad(torch.cumsum(seqlens_tensor, dim=0, dtype=torch.int32), (1, 0))
+    
+    # Get maximum sequence length
+    max_seqlen_in_batch = max(seqlens) if seqlens else 0
+    
+    return indices, cu_seqlens, max_seqlen_in_batch
 
+def unpad_packing_input(hidden_states, attention_mask):
+    """
+    Arguments:
+        hidden_states: (batch, seqlen, ...)
+        attention_mask_in_length: (batch, 1, q_len, kv_len), int, a nonzero number (e.g., 1, 2, 3, etc.) means length of concatenated sequence in b-th batch, and 0 means none.
+    Return:
+        hidden_states: (total_nnz, ...), where total_nnz = number of tokens in selected in attention_mask.
+        indices: (total_nnz), the indices of non-masked tokens from the flattened input sequence.
+        cu_seqlens: (batch + 1), the cumulative sequence lengths, used to index into hidden_states.
+        max_seqlen_in_batch: int
+    """
+    indices, cu_seqlens, max_seqlen_in_batch = _get_unpad_packing_data(attention_mask)
+    
+    # Rearrange and index hidden states
+    return (
+        index_first_axis(rearrange(hidden_states, "b s ... -> (b s) ..."), indices),
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
+    
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
@@ -672,7 +751,8 @@ class InternLM2FlashAttention2(InternLM2Attention):
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
-
+        
+        
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len
         )
@@ -710,9 +790,15 @@ class InternLM2FlashAttention2(InternLM2Attention):
         causal = self.is_causal and query_length != 1
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
+            if attention_mask is not None and attention_mask.dim() != 2:
+                assert attention_mask.dim() == 4, f"Attention mask should be 4D for packing input, got {attention_mask.dim()}"
+                query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_packing_input(
+                    query_states, key_states, value_states, attention_mask, query_length
+                )
+            else:
+                query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
+                    query_states, key_states, value_states, attention_mask, query_length
+                )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
@@ -737,7 +823,49 @@ class InternLM2FlashAttention2(InternLM2Attention):
             )
 
         return attn_output
+    
+    def _unpad_packing_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        # packing attention mask should be 4d (batch_size, num_heads, query_length, key_length)
+        assert attention_mask.dim() == 4, f"Attention mask should be 4D if not None, got {attention_mask.dim()}"
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            raise ValueError("Packing self-attention does not support query_length != kv_seq_len")
+            # The -q_len: slice assumes left padding.
+            # attention_mask = attention_mask[:, -query_length:]
+            # query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q.to(torch.int64),
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+        
     def _unpad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
@@ -907,9 +1035,14 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         causal = self.is_causal and query_length != 1
         if attention_mask is not None or encoder_attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
-                query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length
-            )
+            if attention_mask is not None and attention_mask.dim() != 2:
+                query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_packing_input(
+                    query_states, key_states, value_states, encoder_attention_mask, query_length
+                )
+            else:
+                query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
+                    query_states, key_states, value_states, encoder_attention_mask, query_length
+                )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
@@ -935,6 +1068,59 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
 
         return attn_output
 
+    def _unpad_packing_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+        # packing attention mask should be 4d (batch_size, num_heads, query_length, key_length)
+        bsz, q_len, _ = query_layer.size()
+        bsz, kv_seq_len, _, _ = key_layer.size()
+        if attention_mask.dim() == 4 and attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+            pass
+        elif attention_mask.dim() == 3 and attention_mask.size() != (bsz, q_len, kv_seq_len):
+            raise ValueError(
+                f'Attention mask should be of size {(bsz, q_len, kv_seq_len)}, but is {attention_mask.size()}'
+            )
+        else:
+            raise ValueError(
+                f'Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)} or {(bsz, q_len, kv_seq_len)}, but is {attention_mask.size()}'
+            )
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data(attention_mask)
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            if attention_mask is None:
+                attention_mask = torch.ones((batch_size, 1, query_length, kv_seq_len), device=query_layer.device)
+            # The -q_len: slice assumes left padding.
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_packing_input(query_layer, attention_mask)[:4]
+            
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q.to(torch.int64),
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+        
     def _unpad_input(self, query_layer, key_layer, value_layer, attention_mask, encoder_attention_mask, query_length):
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
         if encoder_attention_mask is None:
@@ -1457,17 +1643,25 @@ class InternLM2Model(InternLM2PreTrainedModel):
                 attention_mask = torch.ones(
                     (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
                 )
-            attention_mask = self._prepare_decoder_attention_mask(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-            )
+            if attention_mask.dim() == 2:
+                attention_mask = self._prepare_decoder_attention_mask(
+                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                )
+            else:
+                # attention_mask is already 3D(4D for attention heads)
+                attention_mask = attention_mask.to(inputs_embeds.device)
             if encoder_hidden_states is not None:
                 if encoder_attention_mask is None:
                     encoder_attention_mask = torch.ones(
                         (batch_size, encoder_hidden_states.shape[1]), dtype=torch.bool, device=inputs_embeds.device
                     )
-                encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=seq_length).to(
-                    inputs_embeds.device
-                )
+                if encoder_attention_mask.dim() == 2:
+                    encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=seq_length).to(
+                        inputs_embeds.device
+                    )
+                else:
+                    # encoder_attention_mask is already 3D(4D for attention heads)
+                    encoder_attention_mask = encoder_attention_mask.to(inputs_embeds.device)
 
         # embed positions
         hidden_states = inputs_embeds
