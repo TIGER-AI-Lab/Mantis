@@ -202,7 +202,7 @@ def load_model(model_args, training_args):
             if not os.path.exists(initial_emsemble_model_path):
                 print("Creating initial model...")
                 model = InternVLChatModel._from_config(config, **model_init_kwargs)
-                pretrained_model = AutoModel.from_pretrained(model_args.model_name_or_path, trust_remote_code=True, **model_init_kwargs)
+                pretrained_model = AutoModel.from_pretrained(model_args.model_name_or_path, trust_remote_code=True, torch_dtype=torch_dtype)
                 model.load_state_dict(pretrained_model.state_dict(), strict=False)
                 for layer in model.language_model.model.layers:
                     layer.cross_attention.load_state_dict(layer.attention.state_dict(), strict=True)

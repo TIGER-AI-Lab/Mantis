@@ -52,7 +52,7 @@ max_self_attn_len=$max_seq_len
 max_cross_attn_kv_len=8192
 packing_type="cross_attn" # or "simple" or "cross_attn"
 
-RUN_NAME="intern_vl_25_llava_next_700k_pretrain"
+RUN_NAME="intern_vl_25_llava_next_700k_pretrain_packing"
 export WANDB_PROJECT="Mantis"
 if [ $lora_enabled = true ]; then
     echo "lora is enabled"
@@ -140,7 +140,7 @@ if [ $lora_enabled = true ]; then
     echo $config_file
 else
     echo "lora is disabled"
-    config_file="./accelerate_configs/accelerate_config_zero2.yaml"
+    config_file="./accelerate_configs/accelerate_config_zero1.yaml"
     echo $config_file
 fi
 
