@@ -979,61 +979,103 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         )
 
 class InternLM2RingFlashCrossAttention2(InternLM2FlashCrossAttention2):
-    def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`int`, *optional*):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        """
-        # Contains at least one padding token in the sequence
-        causal = self.is_causal and query_length != 1
-        if attention_mask is not None or encoder_attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
-                query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        encoder_position_ids: Optional[torch.LongTensor] = None,
+        # past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        # use_cache: bool = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # InternLM2FlashAttention2 attention does not support output_attentions
+        if 'padding_mask' in kwargs:
+            warnings.warn(
+                'Passing `padding_mask` is deprecated and will be removed in v4.37. '
+                'Please make sure use `attention_mask` instead.`'
             )
 
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+            # overwrite attention_mask with padding_mask
+            # attention_mask = kwargs.pop('padding_mask')
+            kwargs.pop('padding_mask')
 
-            attn_output_unpad = zigzag_ring_flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-                group=local_group,
-            )
+        output_attentions = False
 
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
+        bsz, q_len, _ = hidden_states.size()
+        
+        encoder_bsz, encoder_q_len, _ = encoder_hidden_states.size()
+        assert bsz == encoder_bsz, f"Batch size of query and key must be the same. Got {bsz} and {encoder_bsz}"
+        
+        q_w = self.wqkv.weight[:self.num_heads * self.head_dim]
+        q_bias = self.wqkv.bias[:self.num_heads * self.head_dim] if self.wqkv.bias is not None else None
+        kv_w = self.wqkv.weight[self.num_heads * self.head_dim:]
+        kv_bias = self.wqkv.bias[self.num_heads * self.head_dim:] if self.wqkv.bias is not None else None
+        
+        query_states = F.linear(hidden_states, q_w, q_bias)
+        kv_states = F.linear(encoder_hidden_states, kv_w, kv_bias)
+        query_states = rearrange(query_states, 'b q (h d) -> b q h d', d=self.head_dim)
+        kv_states = rearrange(kv_states, 'b q (h gs d) -> b q h gs d', gs=2, d=self.head_dim)
+        key_states = kv_states[..., -2, :]
+        value_states = kv_states[..., -1, :]
+        
+        ### Original
+        # qkv_states = self.wqkv(hidden_states)
 
-        return attn_output
+        # qkv_states = rearrange(
+        #     qkv_states,
+        #     'b q (h gs d) -> b q h gs d',
+        #     gs=2 + self.num_key_value_groups,
+        #     d=self.head_dim,
+        # )
 
+        # query_states = qkv_states[..., : self.num_key_value_groups, :]
+        # query_states = rearrange(query_states, 'b q h gs d -> b q (h gs) d')
+        # key_states = qkv_states[..., -2, :]
+        # value_states = qkv_states[..., -1, :]
+        ### End Original
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        q_len = query_states.shape[-2]
+        kv_seq_len = key_states.shape[-2]
+        # if past_key_value is not None:
+        #     kv_seq_len += past_key_value[0].shape[-2]
+
+        # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        cos, sin = self.rotary_emb(value_states, seq_len=max(kv_seq_len, q_len))
+        query_states = apply_rotary_pos_emb_ct(query_states, cos, sin, position_ids)
+        key_states = apply_rotary_pos_emb_ct(key_states, cos, sin, encoder_position_ids)
+
+        # if past_key_value is not None:
+        #     # reuse k, v, self_attention
+        #     key_states = torch.cat([past_key_value[0], key_states], dim=2)
+        #     value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        # past_key_value = (key_states, value_states) if use_cache else None
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+        
+        attn_output = self._flash_attention_forward(
+            query_states, key_states, value_states, attention_mask, encoder_attention_mask, q_len
+        )
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = self.wo(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, None
+    
 INTERNLM2_ATTENTION_CLASSES = {
     'eager': InternLM2Attention,
     'flash_attention_2': InternLM2FlashAttention2,
