@@ -34,7 +34,7 @@ setup(
             "transformers_stream_generator",
             "tiktoken",
             "chardet",
-            "deepspeed",
+            "deepspeed==0.15.4",
             "peft>=0.10",
             "bitsandbytes",
             "wandb",
