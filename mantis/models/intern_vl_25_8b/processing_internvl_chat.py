@@ -405,12 +405,6 @@ class InternVLChatProcessor(ProcessorMixin):
 
     def _right_pad_inputs_with_attention_mask(self, model_inputs: List[Dict]):
         results = {}
-        # print(type(model_inputs), len(model_inputs))
-        # if type(model_inputs) is dict:
-        #     print(model_inputs.keys())
-        # print([x.keys() for x in model_inputs])
-        # print([x['input_ids'].shape for x in model_inputs])
-        # assert len(model_inputs) == 1, "This method only supports a single input, but get {} inputs".format(len(model_inputs))
         for k in model_inputs[0].keys():
             if model_inputs[0][k] is not None:
                 if k == 'input_ids':
@@ -437,8 +431,67 @@ class InternVLChatProcessor(ProcessorMixin):
                         ],
                         dim=0,
                     )
-                elif k == 'attention_mask':
-                    # add attention mask
+                elif 'attention_mask' in k:
+                    v = model_inputs[0][k]
+                    if v.dim() == 2:
+                        # add attention mask
+                        max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                        results[k] = torch.cat(
+                            [
+                                torch.cat(
+                                    [
+                                        inputs[k],
+                                        torch.tensor(
+                                            [0] * (max_length - inputs[k].shape[1]),
+                                            dtype=inputs[k].dtype,
+                                            device=inputs[k].device,
+                                        ).unsqueeze(0),
+                                    ],
+                                    dim=1,
+                                )
+                                if inputs[k].shape[1] < max_length
+                                else inputs[k]
+                                for inputs in model_inputs
+                            ],
+                            dim=0,
+                        )
+                    elif v.dim() == 4:
+                        # prepared 4d attention mask, [batch_size, num_heads, q_seq_length, kv_seq_length]
+                        max_q_length = max([inputs[k].shape[2] for inputs in model_inputs])
+                        max_kv_length = max([inputs[k].shape[3] for inputs in model_inputs])
+                        
+                        all_padded_attention_mask = []
+                        for inputs in model_inputs:
+                            attention_mask = inputs[k]
+                            cur_q_length = attention_mask.shape[2]
+                            cur_kv_length = attention_mask.shape[3]
+                            padded_attention_mask = torch.cat(
+                                [
+                                    attention_mask,
+                                    torch.zeros(
+                                        (attention_mask.shape[0], attention_mask.shape[1], max_q_length - cur_q_length, cur_kv_length),
+                                        dtype=attention_mask.dtype,
+                                        device=attention_mask.device,
+                                    ),
+                                ],
+                                dim=2,
+                            ) if attention_mask.shape[2] < max_q_length else attention_mask
+                            
+                            padded_attention_mask = torch.cat(
+                                [
+                                    padded_attention_mask,
+                                    torch.zeros(
+                                        (attention_mask.shape[0], attention_mask.shape[1], max_q_length, max_kv_length - cur_kv_length),
+                                        dtype=attention_mask.dtype,
+                                        device=attention_mask.device,
+                                    ),
+                                ],
+                                dim=3,
+                            ) if attention_mask.shape[3] < max_kv_length else padded_attention_mask
+                            all_padded_attention_mask.append(padded_attention_mask)
+                        results[k] = torch.cat(all_padded_attention_mask, dim=0)
+                elif k == 'labels':
+                    # pad with -100
                     max_length = max([inputs[k].shape[1] for inputs in model_inputs])
                     results[k] = torch.cat(
                         [
@@ -446,7 +499,7 @@ class InternVLChatProcessor(ProcessorMixin):
                                 [
                                     inputs[k],
                                     torch.tensor(
-                                        [0] * (max_length - inputs[k].shape[1]),
+                                        [-100] * (max_length - inputs[k].shape[1]),
                                         dtype=inputs[k].dtype,
                                         device=inputs[k].device,
                                     ).unsqueeze(0),
@@ -459,8 +512,8 @@ class InternVLChatProcessor(ProcessorMixin):
                         ],
                         dim=0,
                     )
-                elif k == 'labels':
-                    # pad with -100
+                elif 'position_ids' in k:
+                    # pad with 0
                     max_length = max([inputs[k].shape[1] for inputs in model_inputs])
                     results[k] = torch.cat(
                         [
@@ -468,7 +521,7 @@ class InternVLChatProcessor(ProcessorMixin):
                                 [
                                     inputs[k],
                                     torch.tensor(
-                                        [-100] * (max_length - inputs[k].shape[1]),
+                                        [0] * (max_length - inputs[k].shape[1]),
                                         dtype=inputs[k].dtype,
                                         device=inputs[k].device,
                                     ).unsqueeze(0),

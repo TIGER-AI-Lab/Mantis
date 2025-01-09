@@ -49,7 +49,8 @@ OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 do_pretrain=True
 max_self_attn_len=$max_seq_len
-max_cross_attn_kv_len=65536
+max_cross_attn_kv_len=8192
+packing_type="" # or "simple" or "cross_attn"
 
 RUN_NAME="intern_vl_25_llava_next_700k_pretrain"
 export WANDB_PROJECT="Mantis"
@@ -143,7 +144,7 @@ else
     echo $config_file
 fi
 
-per_device_train_batch_size=2
+per_device_train_batch_size=1
 gradient_accumulation_steps=$(($global_batch_size / ($per_device_train_batch_size * $GPU)))
 echo gradient_accumulation_steps=$global_batch_size / \($per_device_train_batch_size \* $GPU\) = $gradient_accumulation_steps
 
@@ -184,4 +185,5 @@ accelerate launch --config_file=$config_file \
     --resume_from_checkpoint "$resume_from_checkpoint" \
     --enable_cross_attention True \
     --max_self_attn_len $max_self_attn_len \
-    --max_cross_attn_kv_len $max_cross_attn_kv_len
+    --max_cross_attn_kv_len $max_cross_attn_kv_len \
+    --packing_type $packing_type \

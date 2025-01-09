@@ -1308,14 +1308,151 @@ class Collator():
         self.processor = processor
         self.max_length = max_length
     
+    # def _right_pad_inputs_with_attention_mask(self, model_inputs: List[Dict]):
+    #     results = {}
+    #     assert len(model_inputs) == 1, "This method only supports a single input, but get {} inputs".format(len(model_inputs))
+    #     for k in model_inputs[0].keys():
+    #         if "pixel_values" in k and isinstance(model_inputs[0][k], list):
+    #             results[k] = [inputs[k] if inputs[k] is not None else None for inputs in model_inputs]
+    #         elif model_inputs[0][k] is not None:
+    #             results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
+    #         else:
+    #             results[k] = None
+    #     return results
+
     def _right_pad_inputs_with_attention_mask(self, model_inputs: List[Dict]):
         results = {}
-        assert len(model_inputs) == 1, "This method only supports a single input, but get {} inputs".format(len(model_inputs))
         for k in model_inputs[0].keys():
-            if "pixel_values" in k and isinstance(model_inputs[0][k], list):
-                results[k] = [inputs[k] if inputs[k] is not None else None for inputs in model_inputs]
-            elif model_inputs[0][k] is not None:
-                results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
+            if model_inputs[0][k] is not None:
+                if k == 'input_ids':
+                    # add padding
+                    max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                    pad_token_id = self.tokenizer.pad_token_id
+                    # pad all inputs to the same length
+                    results[k] = torch.cat(
+                        [
+                            torch.cat(
+                                [
+                                    inputs[k],
+                                    torch.tensor(
+                                        [pad_token_id] * (max_length - inputs[k].shape[1]),
+                                        dtype=inputs[k].dtype,
+                                        device=inputs[k].device,
+                                    ).unsqueeze(0),
+                                ],
+                                dim=1,
+                            )
+                            if inputs[k].shape[1] < max_length
+                            else inputs[k]
+                            for inputs in model_inputs
+                        ],
+                        dim=0,
+                    )
+                elif 'attention_mask' in k:
+                    v = model_inputs[0][k]
+                    if v.dim() == 2:
+                        # add attention mask
+                        max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                        results[k] = torch.cat(
+                            [
+                                torch.cat(
+                                    [
+                                        inputs[k],
+                                        torch.tensor(
+                                            [0] * (max_length - inputs[k].shape[1]),
+                                            dtype=inputs[k].dtype,
+                                            device=inputs[k].device,
+                                        ).unsqueeze(0),
+                                    ],
+                                    dim=1,
+                                )
+                                if inputs[k].shape[1] < max_length
+                                else inputs[k]
+                                for inputs in model_inputs
+                            ],
+                            dim=0,
+                        )
+                    elif v.dim() == 4:
+                        # prepared 4d attention mask, [batch_size, num_heads, q_seq_length, kv_seq_length]
+                        max_q_length = max([inputs[k].shape[2] for inputs in model_inputs])
+                        max_kv_length = max([inputs[k].shape[3] for inputs in model_inputs])
+                        
+                        all_padded_attention_mask = []
+                        for inputs in model_inputs:
+                            attention_mask = inputs[k]
+                            cur_q_length = attention_mask.shape[2]
+                            cur_kv_length = attention_mask.shape[3]
+                            padded_attention_mask = torch.cat(
+                                [
+                                    attention_mask,
+                                    torch.zeros(
+                                        (attention_mask.shape[0], attention_mask.shape[1], max_q_length - cur_q_length, cur_kv_length),
+                                        dtype=attention_mask.dtype,
+                                        device=attention_mask.device,
+                                    ),
+                                ],
+                                dim=2,
+                            ) if attention_mask.shape[2] < max_q_length else attention_mask
+                            
+                            padded_attention_mask = torch.cat(
+                                [
+                                    padded_attention_mask,
+                                    torch.zeros(
+                                        (attention_mask.shape[0], attention_mask.shape[1], max_q_length, max_kv_length - cur_kv_length),
+                                        dtype=attention_mask.dtype,
+                                        device=attention_mask.device,
+                                    ),
+                                ],
+                                dim=3,
+                            ) if attention_mask.shape[3] < max_kv_length else padded_attention_mask
+                            all_padded_attention_mask.append(padded_attention_mask)
+                        results[k] = torch.cat(all_padded_attention_mask, dim=0)
+                elif k == 'labels':
+                    # pad with -100
+                    max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                    results[k] = torch.cat(
+                        [
+                            torch.cat(
+                                [
+                                    inputs[k],
+                                    torch.tensor(
+                                        [-100] * (max_length - inputs[k].shape[1]),
+                                        dtype=inputs[k].dtype,
+                                        device=inputs[k].device,
+                                    ).unsqueeze(0),
+                                ],
+                                dim=1,
+                            )
+                            if inputs[k].shape[1] < max_length
+                            else inputs[k]
+                            for inputs in model_inputs
+                        ],
+                        dim=0,
+                    )
+                elif 'position_ids' in k:
+                    # pad with 0
+                    max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                    results[k] = torch.cat(
+                        [
+                            torch.cat(
+                                [
+                                    inputs[k],
+                                    torch.tensor(
+                                        [0] * (max_length - inputs[k].shape[1]),
+                                        dtype=inputs[k].dtype,
+                                        device=inputs[k].device,
+                                    ).unsqueeze(0),
+                                ],
+                                dim=1,
+                            )
+                            if inputs[k].shape[1] < max_length
+                            else inputs[k]
+                            for inputs in model_inputs
+                        ],
+                        dim=0,
+                    )
+                else:
+                    results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
             else:
                 results[k] = None
         return results
@@ -1337,96 +1474,128 @@ class Collator():
         
         return batch_encoding
 
-class PackingDataset(torch.utils.data.IterableDataset):
+class PackingDataset(torch.utils.data.Dataset):
     def __init__(
         self, 
         dataset, 
         max_self_attn_len,
     ):
+        super().__init__()
         self.dataset = dataset
         self.max_self_attn_len = max_self_attn_len
-        self.iter_dataset = iter(self.dataset)
+        self.average_packing_interval = self.infer_average_packing_interval()
+        self.num_last_packed_items = self.average_packing_interval
+        
 
-    def __iter__(self):
-        while True:
+    def __len__(self):
+        return len(self.dataset) // self.average_packing_interval
+    
+    def infer_average_packing_interval(self):
+        num_test_packing = 20
+        num_packed_items = []
+        iter_dataset = iter(self.dataset)
+        for _ in tqdm(range(num_test_packing), desc="Infer average packing interval"):
             cur_batch = []
+            cur_cross_attn_kv_len = 0
             cur_self_attn_len = 0
             while True:
                 try:
-                    item = next(self.iter_dataset)
+                    item = next(iter_dataset)
                     cur_self_attn_len += item["input_ids"].shape[1]
                     cur_batch.append(item)
                 except StopIteration:
-                    self.iter_dataset = iter(self.dataset)
+                    iter_dataset = iter(self.dataset)
                     print("Restarting the dataset")
                     continue
                 if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
                     break
+            num_packed_items.append(len(cur_batch))
+            if len(num_packed_items) >= num_test_packing:
+                break
+            print(f"Num packed items: {len(cur_batch)}, Cross Attn KV Len: {cur_cross_attn_kv_len}, Self Attn Len: {cur_self_attn_len}")
+        print("Average packing interval:", math.ceil(sum(num_packed_items) / num_test_packing))
+        return math.ceil(sum(num_packed_items) / num_test_packing)
+
+    def __getitem__(self, idx):
+        offset = self.num_last_packed_items - self.average_packing_interval
+        start_idx = idx * self.average_packing_interval + offset
         
-            # pack the batch
-            # add encoder attention mask, attention mask, position ids, and encoder position ids
-            packed_input_ids = torch.cat([x["input_ids"] for x in cur_batch], dim=1)
-            pixel_values = [x["pixel_values"] for x in cur_batch]
-            if isinstance(pixel_values[0], list):
-                packed_pixel_values = sum([x or [] for x in pixel_values], [])
-                packed_pixel_values = packed_pixel_values or None
-            elif isinstance(pixel_values[0], torch.Tensor):
-                # [num_images, C, H, W]
-                packed_pixel_values = torch.cat([x for x in pixel_values], dim=0)
-            elif isinstance(pixel_values[0], np.ndarray):
-                packed_pixel_values = np.concatenate([x for x in pixel_values], axis=0)
-                packed_pixel_values = torch.tensor(packed_pixel_values)
+        cur_batch = []
+        cur_self_attn_len = 0
+        load_idx = start_idx
+        while True:
+            load_idx = load_idx % len(self.dataset)
+            item = self.dataset[load_idx]
+            cur_self_attn_len += item["input_ids"].shape[1]
+            cur_batch.append(item)
+            if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
+                break
+            load_idx += 1
+    
+        # pack the batch
+        # add encoder attention mask, attention mask, position ids, and encoder position ids
+        packed_input_ids = torch.cat([x["input_ids"] for x in cur_batch], dim=1)
+        pixel_values = [x["pixel_values"] for x in cur_batch]
+        if isinstance(pixel_values[0], list):
+            packed_pixel_values = sum([x or [] for x in pixel_values], [])
+            packed_pixel_values = packed_pixel_values or None
+        elif isinstance(pixel_values[0], torch.Tensor):
+            # [num_images, C, H, W]
+            packed_pixel_values = torch.cat([x for x in pixel_values], dim=0)
+        elif isinstance(pixel_values[0], np.ndarray):
+            packed_pixel_values = np.concatenate([x for x in pixel_values], axis=0)
+            packed_pixel_values = torch.tensor(packed_pixel_values)
+        else:
+            raise ValueError(f"Unknown pixel_values type {type(pixel_values[0])}")
+        
+        # create 4d attention mask
+        packed_q_len = packed_input_ids.shape[1]
+        packed_kv_len = packed_q_len
+        packed_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
+        acc_q_len = 0
+        acc_kv_len = 0
+        for i, item in enumerate(cur_batch):
+            attention_mask = item["attention_mask"][0]
+            item_q_len = item["input_ids"].shape[1]
+            item_kv_len = item_q_len
+            packed_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = attention_mask.reshape(1, item_kv_len).expand(item_q_len, item_kv_len)
+            acc_q_len += item_q_len
+            acc_kv_len += item_kv_len
+        
+        # create position ids
+        packed_position_ids = []
+        for i, item in enumerate(cur_batch):
+            item_q_len = item["input_ids"].shape[1]
+            item_kv_len = item_q_len
+            position_ids = torch.arange(item_q_len, dtype=torch.long)
+            packed_position_ids.append(position_ids)
+        packed_position_ids = torch.cat(packed_position_ids, dim=0)
+        
+        # create labels
+        packed_labels = torch.cat([x["labels"] for x in cur_batch], dim=0)
+        
+        packed_result = {
+            "input_ids": packed_input_ids,
+            "pixel_values": packed_pixel_values,
+            "attention_mask": packed_attention_mask,
+            "position_ids": packed_position_ids,
+            "labels": packed_labels,
+        }
+        
+        rest_keys = [k for k in cur_batch[0].keys() if k not in ["input_ids", "pixel_values", "attention_mask", "encoder_attention_mask", "position_ids", "encoder_position_ids", "labels"]]
+        for k in rest_keys:
+            if isinstance(cur_batch[0][k], torch.Tensor):
+                packed_k = torch.cat([x[k] for x in cur_batch], dim=0)
+            elif isinstance(cur_batch[0][k], list):
+                packed_k = sum([x[k] for x in cur_batch], [])
             else:
-                raise ValueError(f"Unknown pixel_values type {type(pixel_values[0])}")
-            
-            # create 4d attention mask
-            packed_q_len = packed_input_ids.shape[1]
-            packed_kv_len = packed_q_len
-            packed_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
-            acc_q_len = 0
-            acc_kv_len = 0
-            for i, item in enumerate(cur_batch):
-                attention_mask = item["attention_mask"][0]
-                item_q_len = item["input_ids"].shape[1]
-                item_kv_len = item_q_len
-                packed_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = attention_mask.reshape(1, item_kv_len).expand(item_q_len, item_kv_len)
-                acc_q_len += item_q_len
-                acc_kv_len += item_kv_len
-            
-            # create position ids
-            packed_position_ids = []
-            for i, item in enumerate(cur_batch):
-                item_q_len = item["input_ids"].shape[1]
-                item_kv_len = item_q_len
-                position_ids = torch.arange(item_q_len, dtype=torch.long)
-                packed_position_ids.append(position_ids)
-            packed_position_ids = torch.cat(packed_position_ids, dim=0)
-            
-            # create labels
-            packed_labels = torch.cat([x["labels"] for x in cur_batch], dim=0)
-            
-            packed_result = {
-                "input_ids": packed_input_ids,
-                "pixel_values": packed_pixel_values,
-                "attention_mask": packed_attention_mask,
-                "position_ids": packed_position_ids,
-                "labels": packed_labels,
-            }
-            
-            rest_keys = [k for k in cur_batch[0].keys() if k not in ["input_ids", "pixel_values", "attention_mask", "encoder_attention_mask", "position_ids", "encoder_position_ids", "labels"]]
-            for k in rest_keys:
-                if isinstance(cur_batch[0][k], torch.Tensor):
-                    packed_k = torch.cat([x[k] for x in cur_batch], dim=0)
-                elif isinstance(cur_batch[0][k], list):
-                    packed_k = sum([x[k] for x in cur_batch], [])
-                else:
-                    packed_k = [x[k] for x in cur_batch]
-                packed_result[k] = packed_k
-            print("Num Packed Items:", len(cur_batch), "Self Attn Len:", packed_input_ids.shape[1])
+                packed_k = [x[k] for x in cur_batch]
+            packed_result[k] = packed_k
+        # print("Num Packed Items:", len(cur_batch), "Self Attn Len:", packed_input_ids.shape[1])
                 
-            yield packed_result
+        return packed_result
             
-class CrossAttnPackingDataset(torch.utils.data.IterableDataset):
+class CrossAttnPackingDataset(torch.utils.data.Dataset):
     def __init__(
         self, 
         dataset, 
@@ -1434,124 +1603,165 @@ class CrossAttnPackingDataset(torch.utils.data.IterableDataset):
         max_cross_attn_kv_len=None,
         num_tokens_per_image=256, # internvl 25's setting
     ):
+        super().__init__()
         self.dataset = dataset
         self.max_cross_attn_kv_len = max_cross_attn_kv_len
         self.max_self_attn_len = max_self_attn_len
-        self.iter_dataset = iter(self.dataset)
         self.num_tokens_per_image = num_tokens_per_image
+        self.average_packing_interval = self.infer_average_packing_interval()
+        self.num_last_packed_items = self.average_packing_interval
+        
 
-    def __iter__(self):
-        cur_cross_attn_kv_len = 0
-        cur_self_attn_len = 0
-        cur_batch = []
-        while True:
+    def __len__(self):
+        return len(self.dataset) // self.average_packing_interval
+    
+    def infer_average_packing_interval(self):
+        num_test_packing = 20
+        num_packed_items = []
+        iter_dataset = iter(self.dataset)
+        for _ in tqdm(range(num_test_packing), desc="Infer average packing interval"):
             cur_batch = []
             cur_cross_attn_kv_len = 0
             cur_self_attn_len = 0
             while True:
                 try:
-                    item = next(self.iter_dataset)
-                    cur_cross_attn_kv_len += item["cross_attn_kv_len"]
+                    item = next(iter_dataset)
+                    cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
                     cur_self_attn_len += item["input_ids"].shape[1]
                     cur_batch.append(item)
                 except StopIteration:
-                    self.iter_dataset = iter(self.dataset)
+                    iter_dataset = iter(self.dataset)
                     print("Restarting the dataset")
                     continue
                 if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
                     break
                 if self.max_cross_attn_kv_len and cur_cross_attn_kv_len > self.max_cross_attn_kv_len:
                     break
+            num_packed_items.append(len(cur_batch))
+            if len(num_packed_items) >= num_test_packing:
+                break
+            print(f"Num packed items: {len(cur_batch)}, Cross Attn KV Len: {cur_cross_attn_kv_len}, Self Attn Len: {cur_self_attn_len}")
+        print("Average packing interval:", math.ceil(sum(num_packed_items) / num_test_packing))
+        return math.ceil(sum(num_packed_items) / num_test_packing)
+    
+    def __getitem__(self, idx):
+        offset = self.num_last_packed_items - self.average_packing_interval
+        start_idx = idx * self.average_packing_interval + offset
         
-            # pack the batch
-            # add encoder attention mask, attention mask, position ids, and encoder position ids
-            packed_input_ids = torch.cat([x["input_ids"] for x in cur_batch], dim=1)
-            pixel_values = [x["pixel_values"] for x in cur_batch]
-            if isinstance(pixel_values[0], list):
-                packed_pixel_values = sum([x or [] for x in pixel_values], [])
-                packed_pixel_values = packed_pixel_values or None
-            elif isinstance(pixel_values[0], torch.Tensor):
-                # [num_images, C, H, W]
-                packed_pixel_values = torch.cat([x for x in pixel_values], dim=0)
-            elif isinstance(pixel_values[0], np.ndarray):
-                packed_pixel_values = np.concatenate([x for x in pixel_values], axis=0)
-                packed_pixel_values = torch.tensor(packed_pixel_values)
+        cur_batch = []
+        cur_cross_attn_kv_len = 0
+        cur_self_attn_len = 0
+        load_idx = start_idx
+        while True:
+            load_idx = load_idx % len(self.dataset)
+            item = self.dataset[load_idx]
+            cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
+            cur_self_attn_len += item["input_ids"].shape[1]
+            cur_batch.append(item)
+            if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
+                break
+            if self.max_cross_attn_kv_len and cur_cross_attn_kv_len > self.max_cross_attn_kv_len:
+                break
+            load_idx += 1
+    
+        # pack the batch
+        # add encoder attention mask, attention mask, position ids, and encoder position ids
+        packed_input_ids = torch.cat([x["input_ids"] for x in cur_batch], dim=1)
+        pixel_values = [x["pixel_values"] for x in cur_batch]
+        if isinstance(pixel_values[0], list):
+            packed_pixel_values = sum([x or [] for x in pixel_values], [])
+            packed_pixel_values = packed_pixel_values or None
+        elif isinstance(pixel_values[0], torch.Tensor):
+            # [num_images, C, H, W]
+            packed_pixel_values = torch.cat([x for x in pixel_values], dim=0)
+        elif isinstance(pixel_values[0], np.ndarray):
+            packed_pixel_values = np.concatenate([x for x in pixel_values], axis=0)
+            packed_pixel_values = torch.tensor(packed_pixel_values)
+        else:
+            raise ValueError(f"Unknown pixel_values type {type(pixel_values[0])}")
+        
+        # create 4d attention mask
+        packed_q_len = packed_input_ids.shape[1]
+        packed_kv_len = packed_q_len
+        packed_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
+        acc_q_len = 0
+        acc_kv_len = 0
+        for i, item in enumerate(cur_batch):
+            attention_mask = item["attention_mask"][0]
+            item_q_len = item["input_ids"].shape[1]
+            item_kv_len = item_q_len
+            packed_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = attention_mask.reshape(1, item_kv_len).expand(item_q_len, item_kv_len)
+            acc_q_len += item_q_len
+            acc_kv_len += item_kv_len
+                                                
+        # create 4d encoder attention mask
+        packed_q_len = packed_input_ids.shape[1]
+        packed_kv_len = self.num_tokens_per_image * len(packed_pixel_values)
+        packed_encoder_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
+        acc_q_len = 0
+        acc_kv_len = 0
+        for i, item in enumerate(cur_batch):
+            item_q_len = item["input_ids"].shape[1]
+            item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
+            packed_encoder_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = 1
+            acc_q_len += item_q_len
+            acc_kv_len += item_kv_len
+        
+        # create position ids
+        packed_position_ids = []
+        for i, item in enumerate(cur_batch):
+            item_q_len = item["input_ids"].shape[1]
+            item_kv_len = item_q_len
+            position_ids = torch.arange(item_q_len, dtype=torch.long)
+            packed_position_ids.append(position_ids)
+        packed_position_ids = torch.cat(packed_position_ids, dim=0).unsqueeze(0)
+        
+        # create encoder position ids
+        packed_encoder_position_ids = []
+        for i, item in enumerate(cur_batch):
+            item_q_len = item["input_ids"].shape[1]
+            item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
+            position_ids = torch.arange(item_kv_len, dtype=torch.long)
+            packed_encoder_position_ids.append(position_ids)
+        packed_encoder_position_ids = torch.cat(packed_encoder_position_ids, dim=0).unsqueeze(0)
+        
+        # create labels
+        packed_labels = torch.cat([x["labels"] for x in cur_batch], dim=1)
+        
+        packed_result = {
+            "input_ids": packed_input_ids,
+            "pixel_values": packed_pixel_values,
+            "attention_mask": packed_attention_mask,
+            "encoder_attention_mask": packed_encoder_attention_mask,
+            "position_ids": packed_position_ids,
+            "encoder_position_ids": packed_encoder_position_ids,
+            "labels": packed_labels,
+        }
+        
+        rest_keys = [k for k in cur_batch[0].keys() if k not in ["input_ids", "pixel_values", "attention_mask", "encoder_attention_mask", "position_ids", "encoder_position_ids", "labels"]]
+        for k in rest_keys:
+            if isinstance(cur_batch[0][k], torch.Tensor):
+                packed_k = torch.cat([x[k] for x in cur_batch], dim=0)
+            elif isinstance(cur_batch[0][k], list):
+                packed_k = sum([x[k] for x in cur_batch], [])
             else:
-                raise ValueError(f"Unknown pixel_values type {type(pixel_values[0])}")
-            
-            # create 4d attention mask
-            packed_q_len = packed_input_ids.shape[1]
-            packed_kv_len = packed_q_len
-            packed_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
-            acc_q_len = 0
-            acc_kv_len = 0
-            for i, item in enumerate(cur_batch):
-                attention_mask = item["attention_mask"][0]
-                item_q_len = item["input_ids"].shape[1]
-                item_kv_len = item_q_len
-                packed_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = attention_mask.reshape(1, item_kv_len).expand(item_q_len, item_kv_len)
-                acc_q_len += item_q_len
-                acc_kv_len += item_kv_len
-                                                  
-            # create 4d encoder attention mask
-            packed_q_len = packed_input_ids.shape[1]
-            packed_kv_len = self.num_tokens_per_image * len(packed_pixel_values)
-            packed_encoder_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
-            acc_q_len = 0
-            acc_kv_len = 0
-            for i, item in enumerate(cur_batch):
-                item_q_len = item["input_ids"].shape[1]
-                item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
-                packed_encoder_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = 1
-                acc_q_len += item_q_len
-                acc_kv_len += item_kv_len
-            
-            # create position ids
-            packed_position_ids = []
-            for i, item in enumerate(cur_batch):
-                item_q_len = item["input_ids"].shape[1]
-                item_kv_len = item_q_len
-                position_ids = torch.arange(item_q_len, dtype=torch.long)
-                packed_position_ids.append(position_ids)
-            packed_position_ids = torch.cat(packed_position_ids, dim=0)
-            
-            # create encoder position ids
-            packed_encoder_position_ids = []
-            for i, item in enumerate(cur_batch):
-                item_q_len = item["input_ids"].shape[1]
-                item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
-                position_ids = torch.arange(item_kv_len, dtype=torch.long)
-                packed_encoder_position_ids.append(position_ids)
-            packed_encoder_position_ids = torch.cat(packed_encoder_position_ids, dim=0)
-            
-            # create labels
-            packed_labels = torch.cat([x["labels"] for x in cur_batch], dim=0)
-            
-            packed_result = {
-                "input_ids": packed_input_ids,
-                "pixel_values": packed_pixel_values,
-                "attention_mask": packed_attention_mask,
-                "encoder_attention_mask": packed_encoder_attention_mask,
-                "position_ids": packed_position_ids,
-                "encoder_position_ids": packed_encoder_position_ids,
-                "labels": packed_labels,
-            }
-            
-            rest_keys = [k for k in cur_batch[0].keys() if k not in ["input_ids", "pixel_values", "attention_mask", "encoder_attention_mask", "position_ids", "encoder_position_ids", "labels"]]
-            for k in rest_keys:
-                if isinstance(cur_batch[0][k], torch.Tensor):
-                    packed_k = torch.cat([x[k] for x in cur_batch], dim=0)
-                elif isinstance(cur_batch[0][k], list):
-                    packed_k = sum([x[k] for x in cur_batch], [])
-                else:
-                    packed_k = [x[k] for x in cur_batch]
-                packed_result[k] = packed_k
-            print("Num Packed Items:", len(cur_batch), \
-                    "Cross Attn Len:", self.num_tokens_per_image * len(packed_pixel_values), \
-                    "Self Attn Len:", packed_input_ids.shape[1])
+                packed_k = [x[k] for x in cur_batch]
+            packed_result[k] = packed_k
+        # print("Num Packed Items:", len(cur_batch), \
+                "Cross Attn Len:", self.num_tokens_per_image * len(packed_pixel_values), \
+                "Self Attn Len:", packed_input_ids.shape[1])
+        
+        # for debug
+        # for k, v in packed_result.items():
+        #     if isinstance(v, torch.Tensor):
+        #         print(k, v.shape)
+        #     elif isinstance(v, list):
+        #         print(k, len(v), [x.shape for x in v])
+        #     else:
+        #         print(k, v)
+        return packed_result
+    
                 
-            yield packed_result
-            
 class SiglipVideoCollator():
     def __init__(self, processor, max_length=None):
         self.processor = processor

@@ -146,6 +146,8 @@ class InternVLChatModel(PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        encoder_position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         
         global local_group
@@ -160,11 +162,13 @@ class InternVLChatModel(PreTrainedModel):
             local_group=None
         
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        
         # print(f"pixel_values.shape: {pixel_values.shape if pixel_values is not None else None}")
         input_embeds = self.language_model.get_input_embeddings()(input_ids).clone()
 
         encoder_hidden_states = None
+        packed_encoder_position_ids = encoder_position_ids # only use when packing data for training
+        packed_encoder_attention_mask = encoder_attention_mask # only use when packing data for training
         encoder_attention_mask = None
         encoder_position_ids = None
         if pixel_values is not None:
@@ -248,7 +252,15 @@ class InternVLChatModel(PreTrainedModel):
                 encoder_attention_mask = encoder_attention_mask.reshape(B, -1)
                 encoder_position_ids = torch.arange(
                     encoder_hidden_states.shape[1], dtype=torch.long, device=encoder_hidden_states.device
-                ).unsqueeze(0)
+                ).unsqueeze(0).expand(B, -1)
+                if packed_encoder_position_ids is not None:
+                    assert packed_encoder_position_ids.shape == encoder_position_ids.shape, f'{packed_encoder_position_ids.shape} != {encoder_position_ids.shape}'
+                    encoder_position_ids = packed_encoder_position_ids
+                if packed_encoder_attention_mask is not None:
+                    if not packed_encoder_attention_mask.shape[0] == encoder_attention_mask.shape[0] and \
+                        packed_encoder_attention_mask.shape[-1] == encoder_attention_mask.shape[-1]:
+                        raise ValueError(f'{packed_encoder_attention_mask.shape} != {encoder_attention_mask.shape}')
+                    encoder_attention_mask = packed_encoder_attention_mask
 
             input_embeds = input_embeds.reshape(B, N, C)
 
