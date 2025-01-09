@@ -8,13 +8,26 @@ wait_for_jobs() {
     done
 }
 
-huggingface-cli download --repo-type dataset lmms-lab/LLaVA-Video-178K --local-dir llava-video-data
-
-# for llava-video-data/llava_hound
-cd llava-video-data/llava_hound
+maker=".llava_next_video_hf_downloaded"
+if [ -f $maker ]; then
+    echo "Already downloaded lmms-lab/LLaVA-Video-178K"
+else
+    huggingface-cli download --repo-type dataset lmms-lab/LLaVA-Video-178K --local-dir llava-video-data
+    touch $maker
+fi
+# # for llava-video-data/llava_hound
+cd llava-video-data
+cd llava_hound
 # if already downloaded, skip this step
 echo "Downloading ShareGPTVideo/train_video_and_instruction/train_300k"
-# huggingface-cli download --repo-type dataset ShareGPTVideo/train_video_and_instruction --include "train_300k/*" --local-dir .
+
+maker=".sharegptvideo_hf_downloaded"
+if [ -f $maker ]; then
+    echo "Already downloaded ShareGPTVideo/train_video_and_instruction"
+else
+    huggingface-cli download --repo-type dataset ShareGPTVideo/train_video_and_instruction --include "train_300k/*" --local-dir .
+    touch $maker
+fi
 cd train_300k
 video_output_dir="../shareVideoGPTV/frames/all_frames/"
 mkdir -p $video_output_dir
@@ -23,10 +36,11 @@ for file in *.tar.gz; do
     maker=".${file}_extracted"
     if [ -f $maker ]; then
         echo "Already extracted $file"
+        rm $file
         continue
     else
         echo "Extracting $file"
-        tar -xvf $file -C $video_output_dir && touch $maker &
+        tar -xvf $file -C $video_output_dir && touch $maker && rm $file &
     fi
     wait_for_jobs
 done
@@ -52,9 +66,13 @@ for folder in *; do
             for file in *.tar.gz; do
                 maker=".${file}_extracted"
                 # Check if files exist (avoid "*.tar.gz" literal match)
-                if [ -f "$file" ]; then
+                if [ -f "$maker" ]; then
+                    echo "Already extracted $file"
+                    echo "Removing $file"
+                    rm -rf $file
+                else
                     echo "Extracting $file in $folder"
-                    tar -xf "$file" && touch $maker &
+                    tar -xf "$file" && touch $maker && rm "$file" &
                     # break
                 fi
             done
