@@ -50,7 +50,7 @@ global_batch_size=128
 do_pretrain=True
 max_self_attn_len=$max_seq_len
 max_cross_attn_kv_len=8192
-packing_type="" # or "simple" or "cross_attn"
+packing_type="cross_attn" # or "simple" or "cross_attn"
 
 RUN_NAME="intern_vl_25_llava_next_700k_pretrain"
 export WANDB_PROJECT="Mantis"

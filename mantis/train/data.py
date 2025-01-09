@@ -1747,9 +1747,7 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
             else:
                 packed_k = [x[k] for x in cur_batch]
             packed_result[k] = packed_k
-        # print("Num Packed Items:", len(cur_batch), \
-                "Cross Attn Len:", self.num_tokens_per_image * len(packed_pixel_values), \
-                "Self Attn Len:", packed_input_ids.shape[1])
+        # print("Num Packed Items:", len(cur_batch), "Cross Attn Len:", self.num_tokens_per_image * len(packed_pixel_values), "Self Attn Len:", packed_input_ids.shape[1])
         
         # for debug
         # for k, v in packed_result.items():
