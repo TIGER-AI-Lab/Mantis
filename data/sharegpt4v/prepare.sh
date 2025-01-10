@@ -1,3 +1,4 @@
+mkdir -p data/sharegpt4v
 # sharegptv sam
 gdown https://drive.google.com/uc?id=16_5S-l4X01Kv7AUPFzfJ2LZjpw1-lLVF -O data/sharegpt4v/sam_images_share-sft.zip
 mkdir -p data/sam
