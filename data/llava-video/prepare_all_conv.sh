@@ -92,4 +92,6 @@ echo "All extractions complete"
 # prepare_all.py
 # ["oe_qa", "mc_qa", "cap"],
 cd ..
-python prepare_all_conv.py --data_dir "./llava-video-data" --output_dir "./llava-video-data" --qa_types "oe_qa,mc_qa,cap"
+# python prepare_all_conv.py --data_dir "./llava-video-data" --output_dir "./llava-video-data" --qa_types "oe_qa,mc_qa,cap" # all conv
+python prepare_all_conv.py --data_dir "./llava-video-data" --output_dir "./llava-video-data" --qa_types "cap" # caption only, for pre-train
+python prepare_all_conv.py --data_dir "./llava-video-data" --output_dir "./llava-video-data" --qa_types "oe_qa,mc_qa" # qa, for instruction tuning

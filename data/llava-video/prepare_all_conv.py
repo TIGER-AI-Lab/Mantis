@@ -96,9 +96,10 @@ def with_timeout(timeout):
 
 def main(
     data_dir="./llava-video-data",
-    qa_types=["oe_qa", "mc_qa", "cap"],
+    qa_types="oe_qa,mc_qa,cap",
     output_dir="./llava-video-data"
 ):
+    qa_types = qa_types.split(",") if isinstance(qa_types, str) else qa_types
     all_data = []
     oe_qa_post_fix = "_oe_qa_processed.json"
     mc_qa_post_fix = "_mc_qa_processed.json"
@@ -146,7 +147,7 @@ def main(
                     continue
                 all_data.append(item)
     # post
-    output_file = output_dir / "all_conv.json"
+    output_file = output_dir / "all_conv.json" if set(qa_types) == set(["oe_qa", "mc_qa", "cap"]) else output_dir / f"all_conv_{'_'.join(qa_types)}.json"
     for item in all_data:
         item['video'] = str(item['video'].relative_to(output_file.parent))
     # count the number of data_source

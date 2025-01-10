@@ -106,6 +106,7 @@ class ChatDataset(torch.utils.data.Dataset):
         revision="script",
         num_proc=8,
         max_image_size=None,
+        packing_same_mm_media=False,
     ):
         self.num_proc = num_proc
         self.processor = processor
@@ -200,6 +201,22 @@ class ChatDataset(torch.utils.data.Dataset):
             self.check_image = False
         else:
             self.check_image = True
+        
+        self.packing_same_mm_media = packing_same_mm_media
+        if self.packing_same_mm_media:
+            # merge convs from the same image
+            new_data = {}
+            for item in tqdm(data, desc="Merging conversations from the same image", disable=not self.is_master_worker):
+                image_id = item[image_key]
+                if image_id not in new_data:
+                    new_data[image_id] = item
+                    new_data['seq_lens'] = [len(item['conversations'])]
+                    continue
+                else:
+                    new_data[image_id]['id'] += f"-{item['id']}"
+                    new_data[image_id]['conversations'] += item['conversations']
+                    new_data['cu_conv_lens'].append(len(new_data[image_id]['conversations']))
+            print(f"Merge {len(data)} to {len(new_data)}")
         
         if self.check_image:
             self.conversations, self.all_images = self.preprocess()
@@ -535,6 +552,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         fps=None,
         use_video_encoder=False,
         load_video_frames=True,
+        packing_same_mm_media=False,
     ):
         self.processor = processor
         self.data_path = Path(data_path)
@@ -557,9 +575,18 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         if self.max_size:
             print(f"Truncating dataset to from {len(self.data)} to {self.max_size}")
             self.data = self.data[:self.max_size]
-        
+        self.packing_same_mm_media = packing_same_mm_media
+                
         self.conv = conv_format.copy()
         self.conversations, self.all_selected_idxs = self.preprocess()
+        if self.packing_same_mm_media:
+            # merge convs from the same video
+            pack_data_idxs = defaultdict(list)
+            for i, item in tqdm(enumerate(data), desc="Merging conversations from the same video", disable=not self.is_master_worker):
+                video_id = item['video']
+                pack_data_idxs[video_id].append(i)
+            print(f"Merge {len(data)} to {len(new_data)}")
+            self.pack_data_idxs = pack_data_idxs
 
         self.max_seq_len = max_seq_len
         self.use_video_encoder = use_video_encoder
@@ -630,7 +657,10 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         return conversations, all_selected_idxs
         
     def __len__(self):
-        return len(self.conversations)
+        if self.packing_same_mm_media:
+            return len(self.pack_data)
+        else:
+            return len(self.conversations)
     
     def getitem(self, idx):
         conv_messages = self.conversations[idx]
@@ -746,6 +776,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         encoding["labels"] = torch.full_like(encoding["input_ids"], IGNORE_INDEX, dtype=encoding["input_ids"].dtype)
         target = encoding["labels"][0]
         input_ids = encoding["input_ids"][0]
+        
         if self.conv.sep_style == SeparatorStyle.PLAIN:
             if self.use_video_encoder:
                 target[input_ids != DEFAULT_VIDEO_TOKEN_ID] = input_ids[input_ids != DEFAULT_VIDEO_TOKEN_ID]
@@ -797,6 +828,9 @@ class ChatVideoDataset(torch.utils.data.Dataset):
     
     def __getitem__(self, idx):
         try:
+            if self.pack_same_mm_media:
+                
+                return self.getitem(idx)
             return self.getitem(idx)
         except Exception as e:
             next_idx = (idx + 1) % len(self)
@@ -1485,6 +1519,7 @@ class PackingDataset(torch.utils.data.Dataset):
         self.max_self_attn_len = max_self_attn_len
         self.average_packing_interval = self.infer_average_packing_interval()
         self.num_last_packed_items = self.average_packing_interval
+        self.packing_same_mm_media = self.dataset.packing_same_mm_media if hasattr(self.dataset, "packing_same_mm_media") else False
         
 
     def __len__(self):
