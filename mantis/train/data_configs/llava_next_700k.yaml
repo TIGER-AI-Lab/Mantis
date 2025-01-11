@@ -6,4 +6,3 @@ data:
     format: chat
     split: train
     vl_only: true
-    packing_same_mm_media: true
