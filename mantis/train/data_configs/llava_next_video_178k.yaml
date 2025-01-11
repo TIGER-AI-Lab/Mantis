@@ -2,7 +2,8 @@ data:
   - 
     name: "llava_next_video_178k"
     type: json
-    path: ../../data/llava-video/llava-video-data/all_conv.json
+    path: ../../data/llava-video/llava-video-data/all_conv_cap.json
     format: chat_video
     split: train
     max_num_frames: 64
+    packing_same_mm_media: true

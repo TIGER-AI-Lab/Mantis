@@ -13,7 +13,7 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
 else
     # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
     # DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
-    DATA_CONFIG_FILE="./data_configs/llava_next_700k.yaml"
+    # DATA_CONFIG_FILE="./data_configs/llava_next_700k.yaml"
     # DATA_CONFIG_FILE="./data_configs/llava_next_video_178k.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then

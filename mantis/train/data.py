@@ -21,6 +21,7 @@ from mantis.train.train_utils import (
     load_json_data,
 )
 from mantis.train.conversation import SeparatorStyle
+from collections import defaultdict
 from typing import List, Dict
 IGNORE_INDEX = -100
 DEFAULT_IMAGE_TOKEN = "<image>"
@@ -204,19 +205,21 @@ class ChatDataset(torch.utils.data.Dataset):
         
         self.packing_same_mm_media = packing_same_mm_media
         if self.packing_same_mm_media:
+            # # merge convs from the same video
+            # pack_data_idxs = defaultdict(list)
+            # for i, item in tqdm(enumerate(self.data), desc="Merging conversations from the same video", disable=not self.is_master_worker):
+            #     video_id = item['video']
+            #     pack_data_idxs[video_id].append(i)
+            # print(f"Merge {len(self.data)} to {len(pack_data_idxs)}")
+            # self.pack_data_idxs = list(pack_data_idxs.values())
+            
             # merge convs from the same image
-            new_data = {}
-            for item in tqdm(data, desc="Merging conversations from the same image", disable=not self.is_master_worker):
+            pack_data_idxs = defaultdict(list)
+            for i, item in tqdm(enumerate(self.data), desc="Merging conversations from the same image", disable=not self.is_master_worker, total=len(self.data)):
                 image_id = item[image_key]
-                if image_id not in new_data:
-                    new_data[image_id] = item
-                    new_data['seq_lens'] = [len(item['conversations'])]
-                    continue
-                else:
-                    new_data[image_id]['id'] += f"-{item['id']}"
-                    new_data[image_id]['conversations'] += item['conversations']
-                    new_data['cu_conv_lens'].append(len(new_data[image_id]['conversations']))
-            print(f"Merge {len(data)} to {len(new_data)}")
+                pack_data_idxs[image_id].append(i)
+            print(f"Merge {len(self.data)} to {len(pack_data_idxs)}")
+            self.pack_data_idxs = list(pack_data_idxs.values())
         
         if self.check_image:
             self.conversations, self.all_images = self.preprocess()
@@ -332,7 +335,10 @@ class ChatDataset(torch.utils.data.Dataset):
         return conversations, all_images
         
     def __len__(self):
-        return len(self.conversations)
+        if self.packing_same_mm_media:
+            return len(self.pack_data_idxs)
+        else:
+            return len(self.conversations)
     
     def getitem(self, idx):
         conv_messages = self.conversations[idx]
@@ -474,9 +480,12 @@ class ChatDataset(torch.utils.data.Dataset):
     
     def __getitem__(self, idx):
         try:
-            return self.getitem(idx)
+            if self.packing_same_mm_media:
+                return [self.getitem(i) for i in self.pack_data_idxs[idx]]
+            else:
+                return self.getitem(idx)
         except Exception as e:
-            raise e
+            # raise e
             print(f"Error at {idx}, {self.data_path}, {self.name}, {self.split}, trying to get the next item")
             next_idx = (idx + 1) % len(self)
             return self.__getitem__(next_idx)
@@ -582,11 +591,11 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         if self.packing_same_mm_media:
             # merge convs from the same video
             pack_data_idxs = defaultdict(list)
-            for i, item in tqdm(enumerate(data), desc="Merging conversations from the same video", disable=not self.is_master_worker):
+            for i, item in tqdm(enumerate(self.data), desc="Merging conversations from the same video", disable=not self.is_master_worker, total=len(self.data)):
                 video_id = item['video']
                 pack_data_idxs[video_id].append(i)
-            print(f"Merge {len(data)} to {len(new_data)}")
-            self.pack_data_idxs = pack_data_idxs
+            print(f"Merge {len(self.data)} to {len(pack_data_idxs)}")
+            self.pack_data_idxs = list(pack_data_idxs.values())
 
         self.max_seq_len = max_seq_len
         self.use_video_encoder = use_video_encoder
@@ -658,7 +667,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         
     def __len__(self):
         if self.packing_same_mm_media:
-            return len(self.pack_data)
+            return len(self.pack_data_idxs)
         else:
             return len(self.conversations)
     
@@ -825,14 +834,15 @@ class ChatVideoDataset(torch.utils.data.Dataset):
 
         return encoding
     
-    
     def __getitem__(self, idx):
         try:
-            if self.pack_same_mm_media:
-                
+            if self.packing_same_mm_media:
+                pack_idxs = self.pack_data_idxs[idx]
+                return [self.getitem(i) for i in pack_idxs]
+            else:
                 return self.getitem(idx)
-            return self.getitem(idx)
         except Exception as e:
+            # raise e 
             next_idx = (idx + 1) % len(self)
             print(f"Error at {idx}, try next {next_idx}")
             return self.__getitem__(next_idx)
@@ -1517,11 +1527,11 @@ class PackingDataset(torch.utils.data.Dataset):
         super().__init__()
         self.dataset = dataset
         self.max_self_attn_len = max_self_attn_len
+        assert not self.packing_same_mm_media, "Packing same mm media is not supported yet for self-attention based multi-modal models"
         self.average_packing_interval = self.infer_average_packing_interval()
         self.num_last_packed_items = self.average_packing_interval
         self.packing_same_mm_media = self.dataset.packing_same_mm_media if hasattr(self.dataset, "packing_same_mm_media") else False
         
-
     def __len__(self):
         return len(self.dataset) // self.average_packing_interval
     
@@ -1566,7 +1576,12 @@ class PackingDataset(torch.utils.data.Dataset):
             if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
                 break
             load_idx += 1
+        
+        packed_result = self.pack_batch(cur_batch)
+        self.num_last_packed_items = len(cur_batch)
+        return packed_result
     
+    def pack_batch(self, cur_batch):
         # pack the batch
         # add encoder attention mask, attention mask, position ids, and encoder position ids
         packed_input_ids = torch.cat([x["input_ids"] for x in cur_batch], dim=1)
@@ -1643,6 +1658,7 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
         self.max_cross_attn_kv_len = max_cross_attn_kv_len
         self.max_self_attn_len = max_self_attn_len
         self.num_tokens_per_image = num_tokens_per_image
+        self.packing_same_mm_media = self.dataset.packing_same_mm_media if hasattr(self.dataset, "packing_same_mm_media") else False
         self.average_packing_interval = self.infer_average_packing_interval()
         self.num_last_packed_items = self.average_packing_interval
         
@@ -1661,9 +1677,15 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
             while True:
                 try:
                     item = next(iter_dataset)
-                    cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
-                    cur_self_attn_len += item["input_ids"].shape[1]
-                    cur_batch.append(item)
+                    if self.packing_same_mm_media:
+                        assert isinstance(item, list), "Packing same mm media requires the dataset to be a list of items"
+                        cur_cross_attn_kv_len += self.num_tokens_per_image * len(item[0]["pixel_values"])
+                        cur_self_attn_len += sum([x["input_ids"].shape[1] for x in item])
+                        cur_batch.append(self.pack_batch(item, packing_same_mm_media=True))
+                    else:
+                        cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
+                        cur_self_attn_len += item["input_ids"].shape[1]
+                        cur_batch.append(item)
                 except StopIteration:
                     iter_dataset = iter(self.dataset)
                     print("Restarting the dataset")
@@ -1690,30 +1712,45 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
         while True:
             load_idx = load_idx % len(self.dataset)
             item = self.dataset[load_idx]
-            cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
-            cur_self_attn_len += item["input_ids"].shape[1]
-            cur_batch.append(item)
+            if self.packing_same_mm_media:
+                assert isinstance(item, list), "Packing same mm media requires the dataset to be a list of items"
+                cur_cross_attn_kv_len += self.num_tokens_per_image * len(item[0]["pixel_values"])
+                cur_self_attn_len += sum([x["input_ids"].shape[1] for x in item])
+                cur_batch.append(self.pack_batch(item, packing_same_mm_media=True))
+            else:
+                cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
+                cur_self_attn_len += item["input_ids"].shape[1]
+                cur_batch.append(item)
             if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
                 break
             if self.max_cross_attn_kv_len and cur_cross_attn_kv_len > self.max_cross_attn_kv_len:
                 break
             load_idx += 1
+        
+        packed_result = self.pack_batch(cur_batch)
+        self.num_last_packed_items = len(cur_batch)
+        return packed_result
     
+    def pack_batch(self, cur_batch, packing_same_mm_media=False):
         # pack the batch
         # add encoder attention mask, attention mask, position ids, and encoder position ids
         packed_input_ids = torch.cat([x["input_ids"] for x in cur_batch], dim=1)
-        pixel_values = [x["pixel_values"] for x in cur_batch]
-        if isinstance(pixel_values[0], list):
-            packed_pixel_values = sum([x or [] for x in pixel_values], [])
-            packed_pixel_values = packed_pixel_values or None
-        elif isinstance(pixel_values[0], torch.Tensor):
-            # [num_images, C, H, W]
-            packed_pixel_values = torch.cat([x for x in pixel_values], dim=0)
-        elif isinstance(pixel_values[0], np.ndarray):
-            packed_pixel_values = np.concatenate([x for x in pixel_values], axis=0)
-            packed_pixel_values = torch.tensor(packed_pixel_values)
+        if not packing_same_mm_media:
+            pixel_values = [x["pixel_values"] for x in cur_batch]
+            if isinstance(pixel_values[0], list):
+                packed_pixel_values = sum([x or [] for x in pixel_values], [])
+                packed_pixel_values = packed_pixel_values or None
+            elif isinstance(pixel_values[0], torch.Tensor):
+                # [num_images, C, H, W]
+                packed_pixel_values = torch.cat([x for x in pixel_values], dim=0)
+            elif isinstance(pixel_values[0], np.ndarray):
+                packed_pixel_values = np.concatenate([x for x in pixel_values], axis=0)
+                packed_pixel_values = torch.tensor(packed_pixel_values)
+            else:
+                raise ValueError(f"Unknown pixel_values type {type(pixel_values[0])}")
         else:
-            raise ValueError(f"Unknown pixel_values type {type(pixel_values[0])}")
+            # pack same mm media, where each item share the same cross attn kv
+            packed_pixel_values = cur_batch[0]["pixel_values"]
         
         # create 4d attention mask
         packed_q_len = packed_input_ids.shape[1]
@@ -1725,40 +1762,56 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
             attention_mask = item["attention_mask"][0]
             item_q_len = item["input_ids"].shape[1]
             item_kv_len = item_q_len
-            packed_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = attention_mask.reshape(1, item_kv_len).expand(item_q_len, item_kv_len)
+            packed_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = attention_mask.reshape(-1, item_kv_len).expand(item_q_len, item_kv_len)
             acc_q_len += item_q_len
             acc_kv_len += item_kv_len
                                                 
         # create 4d encoder attention mask
         packed_q_len = packed_input_ids.shape[1]
         packed_kv_len = self.num_tokens_per_image * len(packed_pixel_values)
-        packed_encoder_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
-        acc_q_len = 0
-        acc_kv_len = 0
-        for i, item in enumerate(cur_batch):
-            item_q_len = item["input_ids"].shape[1]
-            item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
-            packed_encoder_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = 1
-            acc_q_len += item_q_len
-            acc_kv_len += item_kv_len
+        if not packing_same_mm_media:
+            packed_encoder_attention_mask = torch.zeros((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
+            acc_q_len = 0
+            acc_kv_len = 0
+            for i, item in enumerate(cur_batch):
+                item_q_len = item["input_ids"].shape[1]
+                item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
+                if "encoder_attention_mask" in item:
+                    packed_encoder_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = \
+                        item["encoder_attention_mask"].reshape(-1, item_kv_len).expand(item_q_len, item_kv_len)
+                else:
+                    packed_encoder_attention_mask[0, 0, acc_q_len:acc_q_len+item_q_len, acc_kv_len:acc_kv_len+item_kv_len] = 1
+                acc_q_len += item_q_len
+                acc_kv_len += item_kv_len
+        else:
+            packed_encoder_attention_mask = torch.ones((1, 1, packed_q_len, packed_kv_len), dtype=torch.int32)
         
         # create position ids
         packed_position_ids = []
         for i, item in enumerate(cur_batch):
             item_q_len = item["input_ids"].shape[1]
             item_kv_len = item_q_len
-            position_ids = torch.arange(item_q_len, dtype=torch.long)
+            if "position_ids" in item:
+                position_ids = item["position_ids"][0]
+            else:
+                position_ids = torch.arange(item_q_len, dtype=torch.long)
             packed_position_ids.append(position_ids)
         packed_position_ids = torch.cat(packed_position_ids, dim=0).unsqueeze(0)
         
         # create encoder position ids
-        packed_encoder_position_ids = []
-        for i, item in enumerate(cur_batch):
-            item_q_len = item["input_ids"].shape[1]
-            item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
-            position_ids = torch.arange(item_kv_len, dtype=torch.long)
-            packed_encoder_position_ids.append(position_ids)
-        packed_encoder_position_ids = torch.cat(packed_encoder_position_ids, dim=0).unsqueeze(0)
+        if not packing_same_mm_media:
+            packed_encoder_position_ids = []
+            for i, item in enumerate(cur_batch):
+                item_q_len = item["input_ids"].shape[1]
+                item_kv_len = self.num_tokens_per_image * len(pixel_values[i])
+                if "encoder_position_ids" in item:
+                    position_ids = item["encoder_position_ids"][0]
+                else:
+                    position_ids = torch.arange(item_kv_len, dtype=torch.long)
+                packed_encoder_position_ids.append(position_ids)
+            packed_encoder_position_ids = torch.cat(packed_encoder_position_ids, dim=0).unsqueeze(0)
+        else:
+            packed_encoder_position_ids = torch.arange(packed_kv_len, dtype=torch.long).unsqueeze(0)
         
         # create labels
         packed_labels = torch.cat([x["labels"] for x in cur_batch], dim=1)
@@ -1847,16 +1900,19 @@ def load_data_from_config(data_args, processor):
         video_dir = sub_dataset_config.get('video_dir', None)
         max_image_size = sub_dataset_config.get('max_image_size', None)
         fps = sub_dataset_config.get('fps', None)
+        packing_same_mm_media = sub_dataset_config.get('packing_same_mm_media', False)
         assert split in ['train', 'val', 'test'], f"Unknown split {split}"
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, 
-                offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc)
+                offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc,
+                packing_same_mm_media=packing_same_mm_media)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_frames, fps=fps, 
                 use_video_encoder=data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False,
-                load_video_frames=data_args.load_video_frames if hasattr(data_args, "load_video_frames") else False,)
+                load_video_frames=data_args.load_video_frames if hasattr(data_args, "load_video_frames") else False,
+                packing_same_mm_media=packing_same_mm_media)
         elif sub_dataset_config['format'] == 'classification':
             sub_dataset = ClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)

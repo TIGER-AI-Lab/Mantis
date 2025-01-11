@@ -34,7 +34,6 @@ from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (add_start_docstrings,
                                 add_start_docstrings_to_model_forward, logging,
                                 replace_return_docstrings)
-from ring_flash_attn.zigzag_ring_flash_attn_varlen import zigzag_ring_flash_attn_varlen_func
 
 try:
     from transformers.generation.streamers import BaseStreamer
@@ -159,6 +158,71 @@ def _get_unpad_packing_data(attention_mask):
     # Get maximum sequence length
     max_seqlen_in_batch = max(seqlens) if seqlens else 0
     
+    return indices, cu_seqlens, max_seqlen_in_batch
+
+def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q):
+    """
+    Process packed attention masks to get indices and cumulative sequence lengths.
+    
+    Args:
+        encoder_attention_mask: [bsz, 1, q_len, kv_len] tensor containing packed attention masks (cross-attention)
+        attention_mask: [bsz, 1, q_len, q_len] tensor containing packed attention masks (self-attention)
+    Returns:
+        tuple containing:
+        - indices: flattened indices of non-zero elements
+        - cu_seqlens: cumulative sequence lengths
+        - max_seqlen_in_batch: maximum sequence length in the batch
+    """
+    # indices = torch.nonzero(encoder_attention_mask.sum(-2).flatten(), as_tuple=False).flatten()
+    indices = []
+    mask = encoder_attention_mask.squeeze(1)  # [bsz, q_len, kv_len]
+    bsz, q_len, kv_len = mask.shape
+    
+    seqlens = []
+    cur_cu_q_idx = 0
+    
+    # Process each batch
+    for b in range(bsz):
+        mask_slice = mask[b]
+        
+        sub_mask_idx = [0, 0]
+        while sub_mask_idx[1] < kv_len:
+            sub_mask_slice = mask_slice[sub_mask_idx[0]:, sub_mask_idx[1]:]
+            q_i, kv_j = find_next_example(sub_mask_slice)
+            if any(x is None for x in (q_i, kv_j)):
+                # No more examples in this batch
+                break
+            seq_len = kv_j
+            
+            # get the number q sequences between sub_mask_idx[0] and sub_mask_idx[0] + q_i
+            q_seq_lens = []
+            # print(f"q_i: {q_i}, kv_j: {kv_j}")
+            # print(f"cu_seqlens_q.shape", cu_seqlens_q.shape)
+            # print(f"cu_seqlens_q[cur_cu_q_idx]", cu_seqlens_q[cur_cu_q_idx])
+            # print(f"sub_mask_idx", sub_mask_idx)
+            # print(f"bsz, q_len, kv_len", bsz, q_len, kv_len)
+            while cu_seqlens_q[cur_cu_q_idx] < sub_mask_idx[0] + q_i + b * q_len:
+                cur_cu_q_idx += 1
+                q_seq_lens.append(cu_seqlens_q[cur_cu_q_idx] - cu_seqlens_q[cur_cu_q_idx - 1])
+            assert sum(q_seq_lens) == q_i, f"q_seq_lens: {q_seq_lens}, q_i: {q_i}"
+            
+            seqlens.extend([seq_len] * len(q_seq_lens))
+            indices.extend([torch.arange(b * kv_len + sub_mask_idx[1], b * kv_len + sub_mask_idx[1] + seq_len)] * len(q_seq_lens))
+            
+            sub_mask_idx[0] += q_i
+            sub_mask_idx[1] += kv_j
+        
+    
+    seqlens_tensor = torch.tensor(seqlens, device=encoder_attention_mask.device, dtype=torch.int32).flatten()
+    
+    # Calculate cumulative sequence lengths
+    cu_seqlens = F.pad(torch.cumsum(seqlens_tensor, dim=0, dtype=torch.int32), (1, 0))
+    
+    indices = torch.cat(indices).to(encoder_attention_mask.device)
+    
+    # Get maximum sequence length
+    max_seqlen_in_batch = max(seqlens) if seqlens else 0
+
     return indices, cu_seqlens, max_seqlen_in_batch
 
 def unpad_packing_input(hidden_states, attention_mask):
@@ -1099,7 +1163,13 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             raise ValueError(
                 f'Encoder attention mask should be of size {(bsz, 1, q_len, kv_seq_len)} or {(bsz, q_len, kv_seq_len)}, but is {encoder_attention_mask.size()}'
             )
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data(encoder_attention_mask)
+        
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, 1, query_length, query_length), device=query_layer.device)
+        # The -q_len: slice assumes left padding.
+        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_packing_input(query_layer, attention_mask)
+        
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
@@ -1108,26 +1178,6 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         value_layer = index_first_axis(
             value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
-
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            if attention_mask is None:
-                attention_mask = torch.ones((batch_size, 1, query_length, query_length), device=query_layer.device)
-            # The -q_len: slice assumes left padding.
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_packing_input(query_layer, attention_mask)[:4]
             
         return (
             query_layer,
