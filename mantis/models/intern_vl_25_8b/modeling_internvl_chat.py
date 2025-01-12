@@ -75,6 +75,7 @@ class InternVLChatModel(PreTrainedModel):
     main_input_name = 'input_ids'
     base_model_prefix = 'language_model'
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     supports_gradient_checkpointing = True
     _no_split_modules = ['InternVisionModel', 'LlamaDecoderLayer', 'InternLM2DecoderLayer']
 
@@ -93,7 +94,11 @@ class InternVLChatModel(PreTrainedModel):
         self.enable_cross_attention = config.enable_cross_attention
         use_flash_attn = use_flash_attn if has_flash_attn else False
         config.vision_config.use_flash_attn = True if use_flash_attn else False
-        config.llm_config.attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
+        if config._attn_implementation is not None and config._attn_implementation not in ['eager', 'flash_attention_2']:
+            config.llm_config.attn_implementation = config._attn_implementation
+        if config._attn_implementation == 'eager':
+            config.llm_config.attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
+        print(f"LLM Using {config.llm_config.attn_implementation} attention implementation")
         self.use_flash_attn = use_flash_attn
         self.use_ring_flash_attn = use_ring_flash_attn
         if use_ring_flash_attn:

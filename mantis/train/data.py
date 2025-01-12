@@ -1679,21 +1679,24 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
                     item = next(iter_dataset)
                     if self.packing_same_mm_media:
                         assert isinstance(item, list), "Packing same mm media requires the dataset to be a list of items"
-                        cur_cross_attn_kv_len += self.num_tokens_per_image * len(item[0]["pixel_values"])
-                        cur_self_attn_len += sum([x["input_ids"].shape[1] for x in item])
-                        cur_batch.append(self.pack_batch(item, packing_same_mm_media=True))
+                        item_cross_attn_kv_len = self.num_tokens_per_image * len(item[0]["pixel_values"])
+                        item_self_attn_len = sum([x["input_ids"].shape[1] for x in item])
+                        next_batch_item = self.pack_batch(item, packing_same_mm_media=True)
                     else:
-                        cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
-                        cur_self_attn_len += item["input_ids"].shape[1]
-                        cur_batch.append(item)
+                        item_cross_attn_kv_len = self.num_tokens_per_image * len(item["pixel_values"])
+                        item_self_attn_len = item["input_ids"].shape[1]
+                        next_batch_item = item
                 except StopIteration:
                     iter_dataset = iter(self.dataset)
                     print("Restarting the dataset")
                     continue
-                if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
+                if self.max_self_attn_len and cur_self_attn_len + item_self_attn_len > self.max_self_attn_len:
                     break
-                if self.max_cross_attn_kv_len and cur_cross_attn_kv_len > self.max_cross_attn_kv_len:
+                if self.max_cross_attn_kv_len and cur_cross_attn_kv_len + item_cross_attn_kv_len > self.max_cross_attn_kv_len:
                     break
+                cur_cross_attn_kv_len += item_cross_attn_kv_len
+                cur_self_attn_len += item_self_attn_len
+                cur_batch.append(next_batch_item)
             num_packed_items.append(len(cur_batch))
             if len(num_packed_items) >= num_test_packing:
                 break
@@ -1714,17 +1717,20 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
             item = self.dataset[load_idx]
             if self.packing_same_mm_media:
                 assert isinstance(item, list), "Packing same mm media requires the dataset to be a list of items"
-                cur_cross_attn_kv_len += self.num_tokens_per_image * len(item[0]["pixel_values"])
-                cur_self_attn_len += sum([x["input_ids"].shape[1] for x in item])
-                cur_batch.append(self.pack_batch(item, packing_same_mm_media=True))
+                item_cross_attn_kv_len = self.num_tokens_per_image * len(item[0]["pixel_values"])
+                item_self_attn_len = sum([x["input_ids"].shape[1] for x in item])
+                next_batch_item = self.pack_batch(item, packing_same_mm_media=True)
             else:
-                cur_cross_attn_kv_len += self.num_tokens_per_image * len(item["pixel_values"])
-                cur_self_attn_len += item["input_ids"].shape[1]
-                cur_batch.append(item)
-            if self.max_self_attn_len and cur_self_attn_len > self.max_self_attn_len:
+                item_cross_attn_kv_len = self.num_tokens_per_image * len(item["pixel_values"])
+                item_self_attn_len = item["input_ids"].shape[1]
+                next_batch_item = item
+            if self.max_self_attn_len and cur_self_attn_len + item_self_attn_len > self.max_self_attn_len:
                 break
-            if self.max_cross_attn_kv_len and cur_cross_attn_kv_len > self.max_cross_attn_kv_len:
+            if self.max_cross_attn_kv_len and cur_cross_attn_kv_len + item_cross_attn_kv_len > self.max_cross_attn_kv_len:
                 break
+            cur_cross_attn_kv_len += item_cross_attn_kv_len
+            cur_self_attn_len += item_self_attn_len
+            cur_batch.append(next_batch_item)
             load_idx += 1
         
         packed_result = self.pack_batch(cur_batch)
