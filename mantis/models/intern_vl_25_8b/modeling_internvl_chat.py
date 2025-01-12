@@ -33,13 +33,22 @@ def version_cmp(v1, v2, op='eq'):
     op_func = getattr(operator, op)
     return op_func(version.parse(v1), version.parse(v2))
 
-def extract_local(value, rank, world_size, dim=1):
-    """Extract local tensor across the sequence dimension."""
-    value_chunks = value.chunk(2 * world_size, dim=dim)
-    local_value = torch.cat(
-        [value_chunks[rank], value_chunks[2 * world_size - rank - 1]], dim=dim
-    )
-    return local_value.to(value.device)
+# def extract_local(value, rank, world_size, dim=1):
+#     """Extract local tensor across the sequence dimension."""
+#     value_chunks = value.chunk(2 * world_size, dim=dim)
+#     local_value = torch.cat(
+#         [value_chunks[rank], value_chunks[2 * world_size - rank - 1]], dim=dim
+#     )
+#     return local_value.to(value.device)
+def extract_local(value, cu_seqlens, rank, world_size, dim=1):
+    local_values = []
+    value = value.transpose(0, dim)
+    for i in range(len(cu_seqlens) - 1):
+        start, end = cu_seqlens[i], cu_seqlens[i + 1]
+        local_value = value[start:end].chunk(world_size, dim=0)[rank].detach().clone()
+        local_values.append(local_value)
+    return torch.cat(local_values, dim=0).transpose(0, dim).contiguous()
+
 def extract_local2(value, rank, world_size,  dim=1):
     """Extract local tensor across the hidden dimension."""
     dimension_size = value.shape[dim]
@@ -120,7 +129,7 @@ class InternVLChatModel(PreTrainedModel):
             else:
                 raise NotImplementedError(f'{config.llm_config.architectures[0]} is not implemented.')
         self.group_list = group_list
-        self.language_model.group_list = group_list
+        self.language_model.model.group_list = group_list
 
         vit_hidden_size = config.vision_config.hidden_size
         llm_hidden_size = config.llm_config.hidden_size
@@ -163,7 +172,6 @@ class InternVLChatModel(PreTrainedModel):
                     break        # print("Printing decoded input ids")
             local_group=group
         else:
-            group=None
             local_group=None
         
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -185,7 +193,7 @@ class InternVLChatModel(PreTrainedModel):
             # extract using vit embeds
             vit_embeds = self.extract_feature(pixel_values)
             if self.use_ring_flash_attn:
-                group_size = dist.get_world_size(group)
+                group_size = dist.get_world_size(local_group)
                 img_num_dim = 0
                 pad_num=0
                 if pixel_values.shape[img_num_dim] > group_size:
@@ -199,7 +207,7 @@ class InternVLChatModel(PreTrainedModel):
                             pixel_values = torch.cat([pixel_values, pad_pixel], dim=img_num_dim)
 
                     chunked_pixel=torch.chunk(pixel_values, group_size, dim=img_num_dim)
-                    local_pixel=chunked_pixel[dist.get_rank(group)]
+                    local_pixel=chunked_pixel[dist.get_rank(local_group)]
                     local_vit_embeds=self.extract_feature(local_pixel)
                     vit_embeds=GatherLayer.apply(local_vit_embeds)
                     vit_embeds=vit_embeds.view(-1,vit_embeds.shape[-2],vit_embeds.shape[-1])
@@ -268,22 +276,6 @@ class InternVLChatModel(PreTrainedModel):
                     encoder_attention_mask = packed_encoder_attention_mask
 
             input_embeds = input_embeds.reshape(B, N, C)
-
-        if self.use_ring_flash_attn:
-            # # for self-attention
-            # input_embeds=extract_local(input_embeds,dist.get_rank(group),dist.get_world_size(group))
-            # position_ids=extract_local(position_ids,dist.get_rank(group),dist.get_world_size(group))
-            # labels=extract_local(labels,dist.get_rank(group),dist.get_world_size(group))
-            # if loss_weight:
-            #     loss_weight=extract_local(torch.tensor(loss_weight),dist.get_rank(group),dist.get_world_size(group))
-            #     loss_weight=list(loss_weight.numpy())
-            # attention_mask=attention_mask//dist.get_world_size(group)
-            # for cross-attention
-            encoder_hidden_states=extract_local(encoder_hidden_states,dist.get_rank(group),dist.get_world_size(group))
-            encoder_position_ids=extract_local(encoder_position_ids,dist.get_rank(group),dist.get_world_size(group))
-            encoder_attention_mask=encoder_attention_mask//dist.get_world_size(group)
-        else:
-            pass
             
         outputs = self.language_model(
             inputs_embeds=input_embeds,

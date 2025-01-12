@@ -14,7 +14,7 @@ else
     # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
     # DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
     # DATA_CONFIG_FILE="./data_configs/llava_next_700k.yaml"
-    # DATA_CONFIG_FILE="./data_configs/llava_next_video_178k.yaml"
+    DATA_CONFIG_FILE="./data_configs/llava_next_video_178k.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
@@ -140,7 +140,12 @@ if [ $lora_enabled = true ]; then
     echo $config_file
 else
     echo "lora is disabled"
-    config_file="./accelerate_configs/accelerate_config_zero1.yaml"
+    if [ $do_pretrain = true ]; then
+        config_file="./accelerate_configs/accelerate_config_zero1.yaml"
+        echo $config_file
+    else
+        config_file="./accelerate_configs/accelerate_config_zero3.yaml"
+    fi
     echo $config_file
 fi
 

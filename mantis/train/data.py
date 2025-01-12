@@ -1660,14 +1660,13 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
         self.num_tokens_per_image = num_tokens_per_image
         self.packing_same_mm_media = self.dataset.packing_same_mm_media if hasattr(self.dataset, "packing_same_mm_media") else False
         self.average_packing_interval = self.infer_average_packing_interval()
-        self.num_last_packed_items = self.average_packing_interval
         
 
     def __len__(self):
         return len(self.dataset) // self.average_packing_interval
     
     def infer_average_packing_interval(self):
-        num_test_packing = 20
+        num_test_packing = 4
         num_packed_items = []
         iter_dataset = iter(self.dataset)
         for _ in tqdm(range(num_test_packing), desc="Infer average packing interval"):
@@ -1705,8 +1704,8 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
         return math.ceil(sum(num_packed_items) / num_test_packing)
     
     def __getitem__(self, idx):
-        offset = self.num_last_packed_items - self.average_packing_interval
-        start_idx = idx * self.average_packing_interval + offset
+        import torch.distributed as dist
+        start_idx = idx * self.average_packing_interval
         
         cur_batch = []
         cur_cross_attn_kv_len = 0
@@ -1734,7 +1733,6 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
             load_idx += 1
         
         packed_result = self.pack_batch(cur_batch)
-        self.num_last_packed_items = len(cur_batch)
         return packed_result
     
     def pack_batch(self, cur_batch, packing_same_mm_media=False):
