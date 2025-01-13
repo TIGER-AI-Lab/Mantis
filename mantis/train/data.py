@@ -1704,7 +1704,7 @@ class CrossAttnPackingDataset(torch.utils.data.Dataset):
         return math.ceil(sum(num_packed_items) / num_test_packing)
     
     def __getitem__(self, idx):
-        import torch.distributed as dist
+        print(f"get item {idx}")
         start_idx = idx * self.average_packing_interval
         
         cur_batch = []

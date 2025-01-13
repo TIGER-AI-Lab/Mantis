@@ -49,7 +49,7 @@ OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
 do_pretrain=true
 max_self_attn_len=$max_seq_len
-max_cross_attn_kv_len=16384
+max_cross_attn_kv_len=4092
 packing_type="cross_attn" # or "simple" or "cross_attn"
 
 RUN_NAME="intern_vl_25_llava_next_700k_pretrain_packing"

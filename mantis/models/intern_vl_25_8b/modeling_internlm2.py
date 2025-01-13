@@ -88,22 +88,14 @@ def _import_flash_attn():
     except ImportError:
         raise ImportError('flash_attn is not installed.')
 
-def extract_local(value, cu_seqlens, rank, world_size, dim=1):
-    local_values = []
-    value = value.transpose(0, dim)
-    for i in range(len(cu_seqlens) - 1):
-        start, end = cu_seqlens[i], cu_seqlens[i + 1]
-        local_value = value[start:end].chunk(world_size, dim=0)[rank].detach().clone()
-        local_values.append(local_value)
-    return torch.cat(local_values, dim=0).transpose(0, dim).contiguous()
 
-# def extract_local(value, rank, world_size, dim=1):
-#     """Extract local tensor across the sequence dimension."""
-#     value_chunks = value.chunk(2 * world_size, dim=dim)
-#     local_value = torch.cat(
-#         [value_chunks[rank], value_chunks[2 * world_size - rank - 1]], dim=dim
-#     )
-#     return local_value.to(value.device)
+def extract_local(value, rank, world_size, dim=1):
+    """Extract local tensor across the sequence dimension."""
+    value_chunks = value.chunk(2 * world_size, dim=dim)
+    local_value = torch.cat(
+        [value_chunks[rank], value_chunks[2 * world_size - rank - 1]], dim=dim
+    )
+    return local_value.to(value.device)
 def extract_local2(value, rank, world_size,  dim=1):
     """Extract local tensor across the hidden dimension."""
     dimension_size = value.shape[dim]
@@ -126,6 +118,7 @@ class GatherLayer(torch.autograd.Function):
             output = [torch.zeros_like(input) for _ in range(dist.get_world_size(local_group))]
         else:
             output = [torch.zeros(torch.Size(shape), device=input.device, dtype=input.dtype) for shape in shape_list]
+        # print(f"output: {output}", f"input: {input}", f"local_group: {local_group}")
         dist.all_gather(output, input, group=local_group)
         if dim is not None:
             return torch.cat(output, dim)
@@ -136,7 +129,7 @@ class GatherLayer(torch.autograd.Function):
     def backward(ctx, grads):
         (input, shape_list) = ctx.saved_tensors
         dim = ctx.dim
-        dist.all_reduce(grads, group=local_group)
+        dist.all_reduce(grads.contiguous(), group=local_group)
         grad_out = torch.zeros_like(input)
         
         if dim is None:
@@ -151,7 +144,7 @@ class GatherLayer(torch.autograd.Function):
                 grad_out[:] = grads.split(seq_lens, dim)[dist.get_rank(local_group)]
         return grad_out, None, None
 
-def gather_reorder(hidden_states, cu_seqlens, dim=1):
+def gather_reorder_naive(hidden_states, cu_seqlens, dim=1):
     """
     Gather hidden states from all processes and reorder them.
     Args:
@@ -175,6 +168,61 @@ def gather_reorder(hidden_states, cu_seqlens, dim=1):
             local_hidden_states = hidden_states[start:end]
             new_hidden_states.append(local_hidden_states)
     return torch.cat(new_hidden_states, dim=0).transpose(0, dim).contiguous()
+
+def gather_reorder_zigzag(hidden_states, cu_seqlens, dim=1):
+    """
+    Gather hidden states from all processes and reorder them.
+    Args:
+        hidden_states: hidden states to gather and reorder
+        cu_seqlens: cumulative sequence lengths in the dim dimension [world_size, num_sequences+1]
+        dim: dimension to gather and reorder
+    """
+    hidden_states = hidden_states.transpose(0, dim)
+    world_size, num_sequences = cu_seqlens.shape
+    num_sequences = num_sequences - 1
+    # print(f"Before cu_seqlens: {cu_seqlens}")
+    original_cu_seqlens = F.pad(torch.cumsum((cu_seqlens[:, 1:] - cu_seqlens[:, :-1]).sum(0), dim=0), (1, 0))
+    cu_seqlens = cu_seqlens.clone()
+    cu_seqlens[1:] += torch.cumsum(cu_seqlens.max(-1,keepdim=True)[0], dim=0)[:-1]
+    
+    new_hidden_states = [[None for _ in range(2*world_size)] for _ in range(num_sequences)]
+    # print(f"cu_seqlens: {cu_seqlens}")
+    for i in range(num_sequences):
+        # print(f"i: {i}")
+        for j in range(world_size):
+            ori_start, ori_end = original_cu_seqlens[i], original_cu_seqlens[i + 1]
+            value_chunks = hidden_states[ori_start:ori_end].chunk(2*world_size, dim=0)
+            local_value = [value_chunks[j], value_chunks[2 * world_size - j - 1]]
+            start, end = cu_seqlens[j, i], cu_seqlens[j, i + 1]
+            # print(f"j: {j}", f"start: {start}", f"end: {end}")
+            local_hidden_states = hidden_states[start:end]
+            new_hidden_states[i][j] = local_hidden_states[:local_value[0].shape[0]]
+            new_hidden_states[i][2 * world_size - j - 1] = local_hidden_states[local_value[0].shape[0]:]
+    new_hidden_states = [torch.cat(x, dim=0) for x in new_hidden_states]
+    return torch.cat(new_hidden_states, dim=0).transpose(0, dim).contiguous()
+
+def gather_reorder(hidden_states, world_size, dim=1):
+    """
+    Gather hidden states from all processes and reorder them.
+    Args:
+        hidden_states: hidden states to gather and reorder
+        dim: dimension to gather and reorder
+    """
+    hidden_states = hidden_states.transpose(0, dim)
+    new_hidden_states = []
+    
+    value_chunks = hidden_states.chunk(2 * world_size, dim=0)
+    
+    new_hidden_states = [None for _ in range(2*world_size)]
+    previous_seq_len_sum = 0
+    for j in range(world_size):
+        local_value_chunks = [value_chunks[j], value_chunks[2 * world_size - j - 1]]
+        new_hidden_states[j] = hidden_states[previous_seq_len_sum:previous_seq_len_sum + local_value_chunks[0].shape[0]]
+        previous_seq_len_sum += local_value_chunks[0].shape[0]
+        new_hidden_states[2 * world_size - j - 1] = hidden_states[previous_seq_len_sum:previous_seq_len_sum + local_value_chunks[1].shape[0]]
+        previous_seq_len_sum += local_value_chunks[1].shape[0]
+    new_hidden_states = torch.cat(new_hidden_states, dim=0).transpose(0, dim).contiguous()
+    return new_hidden_states
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
@@ -279,6 +327,7 @@ def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q):
     seqlens = []
     cur_cu_q_idx = 0
     
+    previous_q_seqlens = []
     # Process each batch
     for b in range(bsz):
         mask_slice = mask[b]
@@ -294,15 +343,12 @@ def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q):
             
             # get the number q sequences between sub_mask_idx[0] and sub_mask_idx[0] + q_i
             q_seq_lens = []
-            # print(f"q_i: {q_i}, kv_j: {kv_j}")
-            # print(f"cu_seqlens_q.shape", cu_seqlens_q.shape)
-            # print(f"cu_seqlens_q[cur_cu_q_idx]", cu_seqlens_q[cur_cu_q_idx])
-            # print(f"sub_mask_idx", sub_mask_idx)
-            # print(f"bsz, q_len, kv_len", bsz, q_len, kv_len)
-            while cu_seqlens_q[cur_cu_q_idx] < sub_mask_idx[0] + q_i + b * q_len:
+            previous_seq_len_sum = sum(previous_q_seqlens)
+            while cu_seqlens_q[cur_cu_q_idx] < previous_seq_len_sum + q_i:
                 cur_cu_q_idx += 1
                 q_seq_lens.append(cu_seqlens_q[cur_cu_q_idx] - cu_seqlens_q[cur_cu_q_idx - 1])
             assert sum(q_seq_lens) == q_i, f"q_seq_lens: {q_seq_lens}, q_i: {q_i}"
+            previous_q_seqlens.extend(q_seq_lens)
             
             seqlens.extend([seq_len] * len(q_seq_lens))
             indices.extend([torch.arange(b * kv_len + sub_mask_idx[1], b * kv_len + sub_mask_idx[1] + seq_len)] * len(q_seq_lens))
@@ -1751,6 +1797,178 @@ InternLM2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+def _right_pad_inputs_with_attention_mask(model_inputs: List[dict]) -> dict:
+    results = {}
+    for k in model_inputs[0].keys():
+        if model_inputs[0][k] is not None:
+            if k == 'input_ids':
+                # add padding
+                max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                # pad_token_id = self.tokenizer.pad_token_id
+                pad_token_id = 2 # self.tokenizer.pad_token_id, hard coded for internlm2
+                # pad all inputs to the same length
+                results[k] = torch.cat(
+                    [
+                        torch.cat(
+                            [
+                                inputs[k],
+                                torch.tensor(
+                                    [pad_token_id] * (max_length - inputs[k].shape[1]),
+                                    dtype=inputs[k].dtype,
+                                    device=inputs[k].device,
+                                ).unsqueeze(0),
+                            ],
+                            dim=1,
+                        )
+                        if inputs[k].shape[1] < max_length
+                        else inputs[k]
+                        for inputs in model_inputs
+                    ],
+                    dim=0,
+                )
+            elif 'attention_mask' in k:
+                v = model_inputs[0][k]
+                if v.dim() == 2:
+                    # add attention mask
+                    max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                    results[k] = torch.cat(
+                        [
+                            torch.cat(
+                                [
+                                    inputs[k],
+                                    torch.tensor(
+                                        [0] * (max_length - inputs[k].shape[1]),
+                                        dtype=inputs[k].dtype,
+                                        device=inputs[k].device,
+                                    ).unsqueeze(0),
+                                ],
+                                dim=1,
+                            )
+                            if inputs[k].shape[1] < max_length
+                            else inputs[k]
+                            for inputs in model_inputs
+                        ],
+                        dim=0,
+                    )
+                elif v.dim() == 4:
+                    # prepared 4d attention mask, [batch_size, num_heads, q_seq_length, kv_seq_length]
+                    max_q_length = max([inputs[k].shape[2] for inputs in model_inputs])
+                    max_kv_length = max([inputs[k].shape[3] for inputs in model_inputs])
+                    
+                    all_padded_attention_mask = []
+                    for inputs in model_inputs:
+                        attention_mask = inputs[k]
+                        cur_q_length = attention_mask.shape[2]
+                        cur_kv_length = attention_mask.shape[3]
+                        padded_attention_mask = torch.cat(
+                            [
+                                attention_mask,
+                                torch.zeros(
+                                    (attention_mask.shape[0], attention_mask.shape[1], max_q_length - cur_q_length, cur_kv_length),
+                                    dtype=attention_mask.dtype,
+                                    device=attention_mask.device,
+                                ),
+                            ],
+                            dim=2,
+                        ) if attention_mask.shape[2] < max_q_length else attention_mask
+                        
+                        padded_attention_mask = torch.cat(
+                            [
+                                padded_attention_mask,
+                                torch.zeros(
+                                    (attention_mask.shape[0], attention_mask.shape[1], max_q_length, max_kv_length - cur_kv_length),
+                                    dtype=attention_mask.dtype,
+                                    device=attention_mask.device,
+                                ),
+                            ],
+                            dim=3,
+                        ) if attention_mask.shape[3] < max_kv_length else padded_attention_mask
+                        all_padded_attention_mask.append(padded_attention_mask)
+                    results[k] = torch.cat(all_padded_attention_mask, dim=0)
+            elif k == 'labels':
+                # pad with -100
+                max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                results[k] = torch.cat(
+                    [
+                        torch.cat(
+                            [
+                                inputs[k],
+                                torch.tensor(
+                                    [-100] * (max_length - inputs[k].shape[1]),
+                                    dtype=inputs[k].dtype,
+                                    device=inputs[k].device,
+                                ).unsqueeze(0),
+                            ],
+                            dim=1,
+                        )
+                        if inputs[k].shape[1] < max_length
+                        else inputs[k]
+                        for inputs in model_inputs
+                    ],
+                    dim=0,
+                )
+            elif 'position_ids' in k:
+                # pad with 0
+                max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                results[k] = torch.cat(
+                    [
+                        torch.cat(
+                            [
+                                inputs[k],
+                                torch.tensor(
+                                    [0] * (max_length - inputs[k].shape[1]),
+                                    dtype=inputs[k].dtype,
+                                    device=inputs[k].device,
+                                ).unsqueeze(0),
+                            ],
+                            dim=1,
+                        )
+                        if inputs[k].shape[1] < max_length
+                        else inputs[k]
+                        for inputs in model_inputs
+                    ],
+                    dim=0,
+                )
+            elif "hidden_states" in k:
+                # pad with 0
+                max_length = max([inputs[k].shape[1] for inputs in model_inputs])
+                results[k] = torch.cat(
+                    [
+                        torch.cat(
+                            [
+                                inputs[k],
+                                torch.zeros(
+                                    (inputs[k].shape[0], max_length - inputs[k].shape[1], inputs[k].shape[2]),
+                                    dtype=inputs[k].dtype,
+                                    device=inputs[k].device,
+                                ),
+                            ],
+                            dim=1,
+                        )
+                        if inputs[k].shape[1] < max_length
+                        else inputs[k]
+                        for inputs in model_inputs
+                    ],
+                    dim=0,
+                )
+            else:
+                results[k] = torch.cat([inputs[k] for inputs in model_inputs], dim=0)
+        else:
+            results[k] = None
+    return results
+
+def gather_value(value):
+    value_shape = torch.tensor(value.shape, device=value.device)
+    all_gather_value_shape = GatherLayer.apply(value_shape)
+    value_numel = torch.tensor(value.numel(), device=value.device)
+    all_gather_value_numel = GatherLayer.apply(value_numel).view(-1)
+    
+    value = value.view(-1)
+    value = GatherLayer.apply(value, all_gather_value_numel.unsqueeze(1), 0)
+    values = value.split(all_gather_value_numel.tolist())
+    # recover the original shape
+    values = [v.view(torch.Size(s)) for v, s in zip(values, all_gather_value_shape)]
+    return values
 
 
 # Modified from transformers.model.llama.modeling_llama.LlamaModel
@@ -1928,7 +2146,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
         next_decoder_cache = () if use_cache else None
         
         if self.config.attn_implementation == 'ring_flash_attn':
-            # print("Before split")
+            # print("Before gather")
             # print("hidden_states", hidden_states.shape)
             # print("encoder_hidden_states", encoder_hidden_states.shape if encoder_hidden_states is not None else None)
             # print("attention_mask", attention_mask.shape if attention_mask is not None else None)
@@ -1936,30 +2154,63 @@ class InternLM2Model(InternLM2PreTrainedModel):
             # print("position_ids", position_ids.shape)
             # print("encoder_position_ids", encoder_position_ids.shape if encoder_position_ids is not None else None)
             # print("local_group", local_group)
-            indices_q, cu_seq_lens_q, max_seq_lens_q = _get_unpad_packing_data(attention_mask)
-            if encoder_attention_mask is not None:
-                indices_k, cu_seq_lens_k, max_seq_lens_k = _get_unpad_packing_data(encoder_attention_mask)
+            
+            # gather hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
+            gather_batch = [{} for _ in range(dist.get_world_size(local_group))]
+            for key, values in zip(
+                ['hidden_states', 'encoder_hidden_states', 'attention_mask', 'encoder_attention_mask', 'position_ids', 'encoder_position_ids'], 
+                [hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids]
+            ):
+                if values is not None:
+                    values = gather_value(values)
+                    assert len(values) == dist.get_world_size(local_group), f'Values should be gathered to {dist.get_world_size(local_group)}, but got {len(values)}'
+                    for i, v in enumerate(values):
+                        gather_batch[i][key] = v
+                else:
+                    for i in range(dist.get_world_size(local_group)):
+                        gather_batch[i][key] = None
+            bszs_gather = [x['hidden_states'].shape[0] for x in gather_batch] # for later gather
+            # padding hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
+            gather_batch = _right_pad_inputs_with_attention_mask(gather_batch)
+            hidden_states = gather_batch['hidden_states']
+            encoder_hidden_states = gather_batch['encoder_hidden_states']
+            attention_mask = gather_batch['attention_mask']
+            encoder_attention_mask = gather_batch['encoder_attention_mask']
+            position_ids = gather_batch['position_ids']
+            encoder_position_ids = gather_batch['encoder_position_ids']
+            # print("After Gather")
+            # print("hidden_states", hidden_states.shape)
+            # print("encoder_hidden_states", encoder_hidden_states.shape if encoder_hidden_states is not None else None)
+            # print("attention_mask", attention_mask.shape if attention_mask is not None else None)
+            # print("encoder_attention_mask", encoder_attention_mask.shape if encoder_attention_mask is not None else None)
+            # print("position_ids", position_ids.shape)
+            # print("encoder_position_ids", encoder_position_ids.shape if encoder_position_ids is not None else None)
+            
+            # extract local hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
+            hidden_states_size = torch.tensor(hidden_states.shape, device=hidden_states.device)
+            all_gather_hidden_states_size = GatherLayer.apply(hidden_states_size)
+            assert all([(x==all_gather_hidden_states_size[0]).all() for x in all_gather_hidden_states_size]), f'All gather hidden states size should be the same, but got {all_gather_hidden_states_size}'
             world_size = dist.get_world_size(local_group)
             rank = dist.get_rank(local_group)
-            hidden_states = extract_local(hidden_states, cu_seq_lens_q, rank, world_size)
-            encoder_hidden_states = extract_local(encoder_hidden_states, cu_seq_lens_k, rank, world_size) if encoder_hidden_states is not None else None
+            hidden_states = extract_local(hidden_states, rank, world_size)
+            encoder_hidden_states = extract_local(encoder_hidden_states, rank, world_size) if encoder_hidden_states is not None else None
             if attention_mask.dim() == 2:
-                attention_mask = extract_local(attention_mask, cu_seq_lens_q, rank, world_size)
+                attention_mask = extract_local(attention_mask, rank, world_size)
             else:
                 assert attention_mask.dim() == 4, 'Attention mask should be 2D or 4D' # [bsz, 1, q_len, kv_len]
-                attention_mask = extract_local(attention_mask, cu_seq_lens_q, rank, world_size, dim=-2) 
-                attention_mask = extract_local(attention_mask, cu_seq_lens_q, rank, world_size, dim=-1)
+                attention_mask = extract_local(attention_mask, rank, world_size, dim=-2) 
+                attention_mask = extract_local(attention_mask, rank, world_size, dim=-1)
             if encoder_attention_mask is not None:
                 if encoder_attention_mask.dim() == 2:
-                    encoder_attention_mask = extract_local(encoder_attention_mask, cu_seq_lens_k, rank, world_size)
+                    encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size)
                 else:
                     assert encoder_attention_mask.dim() == 4, 'Attention mask should be 2D or 4D'
-                    encoder_attention_mask = extract_local(encoder_attention_mask, cu_seq_lens_q, rank, world_size, dim=-2)
-                    encoder_attention_mask = extract_local(encoder_attention_mask, cu_seq_lens_k, rank, world_size, dim=-1)
+                    encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size, dim=-2)
+                    encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size, dim=-1)
             original_position_ids = position_ids
             # print("original_position_ids", original_position_ids)
-            position_ids = extract_local(position_ids, cu_seq_lens_q, rank, world_size)
-            encoder_position_ids = extract_local(encoder_position_ids, cu_seq_lens_k, rank, world_size) if encoder_position_ids is not None else None
+            position_ids = extract_local(position_ids, rank, world_size)
+            encoder_position_ids = extract_local(encoder_position_ids, rank, world_size) if encoder_position_ids is not None else None
             # print("After split")
             # print("hidden_states", hidden_states.shape)
             # print("input_embeds", inputs_embeds.shape)
@@ -1970,23 +2221,20 @@ class InternLM2Model(InternLM2PreTrainedModel):
             # print("encoder_position_ids", encoder_position_ids.shape if encoder_position_ids is not None else None)
             # exit(1)
             
-            # gather position_ids, the following are used for assertion, make sure the gather is correct
-            # indices_q, cu_seq_lens_q, max_seq_lens_q = _get_unpad_packing_data(attention_mask)
-            # cu_seq_lens_q_gather = cu_seq_lens_q
-            # cu_seq_lens_q_gather = GatherLayer.apply(cu_seq_lens_q_gather)
-            
+            # # gather position_ids, the following are used for assertion, make sure the gather is correct
             # position_ids_size = torch.tensor(position_ids.shape, device=position_ids.device)
             # all_gather_position_ids_size = GatherLayer.apply(position_ids_size)
             # position_ids = GatherLayer.apply(position_ids, all_gather_position_ids_size, 1)
             # # reorder position_ids based on cu_seq_lens_q_gather
-            # # print("position_ids", position_ids)
+            # print("position_ids", position_ids)
             
-            # position_ids = gather_reorder(position_ids, cu_seq_lens_q_gather)
-            # # print(f"position_ids == original_position_ids: {position_ids == original_position_ids}")
-            # # print(f"(position_ids == original_position_ids).sum(): {(position_ids == original_position_ids).sum()}")
-            # # print(f"position_ids.shape: {position_ids.shape}")
-            # # print(f"original_position_ids.shape: {original_position_ids.shape}")
+            # position_ids = gather_reorder(position_ids, world_size)
+            # print(f"position_ids == original_position_ids: {position_ids == original_position_ids}")
+            # print(f"(position_ids == original_position_ids).sum(): {(position_ids == original_position_ids).sum()}")
+            # print(f"position_ids.shape: {position_ids.shape}")
+            # print(f"original_position_ids.shape: {original_position_ids.shape}")
             # assert not (position_ids != original_position_ids).any(), 'Position ids should be the same after gather'
+            # position_ids = extract_local(position_ids, rank, world_size)
             
         else:
             pass
@@ -2039,25 +2287,31 @@ class InternLM2Model(InternLM2PreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        if self.config.attn_implementation == 'ring_flash_attn' and False:
-            indices_q, cu_seq_lens_q, max_seq_lens_q = _get_unpad_packing_data(attention_mask)
-            cu_seq_lens_q_gather = cu_seq_lens_q
-            cu_seq_lens_q_gather = GatherLayer.apply(cu_seq_lens_q_gather)
+        if self.config.attn_implementation == 'ring_flash_attn':
+            local_rank = dist.get_rank(local_group)
+            world_size = dist.get_world_size(local_group)
             # gather hidden_states
             hidden_states_size = torch.tensor(hidden_states.shape, device=hidden_states.device)
             all_gather_hidden_states_size = GatherLayer.apply(hidden_states_size)
             # print("Before gather", hidden_states.shape)
             hidden_states = GatherLayer.apply(hidden_states, all_gather_hidden_states_size, 1)
-            hidden_states = gather_reorder(hidden_states, cu_seq_lens_q_gather)
+            hidden_states = gather_reorder(hidden_states, world_size)
             # print("After gather", hidden_states.shape)
+            hidden_states = hidden_states[sum(bszs_gather[:local_rank]):sum(bszs_gather[:local_rank+1])][:, :seq_length]
             if output_hidden_states:
+                all_hidden_states_gather = torch.stack(all_hidden_states)
+                all_hidden_states_size = torch.tensor(all_hidden_states_gather.size(), device=all_hidden_states_gather.device)
+                all_gather_hidden_states_size = GatherLayer.apply(all_hidden_states_size)
                 all_hidden_states = GatherLayer.apply(torch.stack(all_hidden_states), all_gather_hidden_states_size, 2)
-                all_hidden_states = gather_reorder(all_hidden_states, cu_seq_lens_q_gather, dim=2)
+                all_hidden_states = gather_reorder(all_hidden_states, world_size, dim=2)
+                all_hidden_states = all_hidden_states[:, sum(bszs_gather[:local_rank]):sum(bszs_gather[:local_rank+1])][:, :, :seq_length]
             if output_attentions:
+                # maybe wrong
                 shape = torch.tensor(torch.stack(all_self_attns).size(), device=hidden_states.device)
                 shape_list = GatherLayer.apply(shape)
                 all_self_attns = GatherLayer.apply(torch.stack(all_self_attns), shape_list, 2)
-                all_self_attns = gather_reorder(all_self_attns, cu_seq_lens_q_gather, dim=2)
+                all_self_attns = gather_reorder(all_self_attns, world_size, dim=2)
+                all_self_attns = all_self_attns[:, sum(bszs_gather[:local_rank]):sum(bszs_gather[:local_rank+1])]
         else:
             # add hidden states from the last decoder layer
             if output_hidden_states:
@@ -2157,6 +2411,57 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        
+        debug_ring_attention = False
+        if debug_ring_attention:
+            output_hidden_states = True
+            self.config.attn_implementation = 'flash_attention_2'
+            for layer in self.model.layers:
+                layer.attention.class_flash_attn_varlen_func = flash_attn_varlen_func
+                layer.attention.class_flash_attn_func = flash_attn_func
+                layer.cross_attention.class_flash_attn_varlen_func = flash_attn_varlen_func
+                layer.cross_attention.class_flash_attn_func = flash_attn_func
+            with torch.no_grad():
+                outputs = self.model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    inputs_embeds=inputs_embeds,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    encoder_position_ids=encoder_position_ids,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                no_ring_hidden_states = outputs[0]
+                no_ring_logits = self.output(no_ring_hidden_states)
+                no_ring_logits = no_ring_logits.float()
+                no_ring_all_hidden_states = outputs.hidden_states
+            
+                no_ring_loss = None
+                if labels is not None:
+                    # Shift so that tokens < n predict n
+                    shift_logits = no_ring_logits[..., :-1, :].contiguous()
+                    shift_labels = labels[..., 1:].contiguous()
+                    # Flatten the tokens
+                    loss_fct = CrossEntropyLoss()
+                    shift_logits = shift_logits.view(-1, self.config.vocab_size)
+                    shift_labels = shift_labels.view(-1)
+                    # Enable model parallelism
+                    shift_labels = shift_labels.to(shift_logits.device)
+                    no_ring_loss = loss_fct(shift_logits, shift_labels)
+                print("no_ring_loss", no_ring_loss)
+                
+            
+            self.config.attn_implementation = 'ring_flash_attn'
+            for layer in self.model.layers:
+                layer.attention.class_flash_attn_varlen_func = ring_flash_attn_varlen_func
+                layer.attention.class_flash_attn_func = ring_flash_attn_func
+                layer.cross_attention.class_flash_attn_varlen_func = ring_flash_attn_varlen_func
+                layer.cross_attention.class_flash_attn_func = ring_flash_attn_func
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
@@ -2177,11 +2482,31 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         logits = self.output(hidden_states)
         logits = logits.float()
         
-        if self.config.attn_implementation == 'ring_flash_attn':
-            _, cu_seq_lens_q, _ = _get_unpad_packing_data(attention_mask)
-            world_size = dist.get_world_size(local_group)
-            rank = dist.get_rank(local_group)
-            labels = extract_local(labels, cu_seq_lens_q, rank, world_size)
+        if debug_ring_attention:
+            all_hidden_states = outputs.hidden_states
+            
+            # compute difference between logits and hidden_states
+            for no_ring_v, v in [(no_ring_logits, logits), (no_ring_hidden_states, hidden_states)]:
+                assert no_ring_v.shape == v.shape, f"no_ring_v.shape: {no_ring_v.shape}, v.shape: {v.shape}"
+                assert no_ring_v.dtype == v.dtype, f"no_ring_v.dtype: {no_ring_v.dtype}, v.dtype: {v.dtype}"
+            diff = (no_ring_logits - logits).abs().mean()
+            print(f"diff between logits: {diff}")
+            diff = (no_ring_hidden_states - hidden_states).abs().mean()
+            print(f"diff between hidden_states: {diff}")
+            
+            print("ring", [v.shape for v in all_hidden_states])
+            print("no ring", [v.shape for v in no_ring_all_hidden_states])
+            for i, (no_ring_v, v) in enumerate(zip(no_ring_all_hidden_states, all_hidden_states)):
+                assert no_ring_v.shape == v.shape, f"no_ring_v.shape: {no_ring_v.shape}, v.shape: {v.shape}"
+                assert no_ring_v.dtype == v.dtype, f"no_ring_v.dtype: {no_ring_v.dtype}, v.dtype: {v.dtype}"
+                diff = (no_ring_v - v).abs().mean()
+                print(f"diff between all_hidden_states[{i}]: {diff}")
+        
+        # if self.config.attn_implementation == 'ring_flash_attn':
+        #     _, cu_seq_lens_q, _ = _get_unpad_packing_data(attention_mask)
+        #     world_size = dist.get_world_size(local_group)
+        #     rank = dist.get_rank(local_group)
+        #     labels = extract_local(labels, cu_seq_lens_q, rank, world_size)
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n

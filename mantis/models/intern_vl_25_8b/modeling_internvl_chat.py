@@ -192,8 +192,9 @@ class InternVLChatModel(PreTrainedModel):
                 
             # extract using vit embeds
             vit_embeds = self.extract_feature(pixel_values)
-            if self.use_ring_flash_attn:
+            if self.use_ring_flash_attn and False:
                 group_size = dist.get_world_size(local_group)
+                rank = dist.get_rank(local_group)
                 img_num_dim = 0
                 pad_num=0
                 if pixel_values.shape[img_num_dim] > group_size:
@@ -206,10 +207,15 @@ class InternVLChatModel(PreTrainedModel):
 
                             pixel_values = torch.cat([pixel_values, pad_pixel], dim=img_num_dim)
 
+                    print("pixel_values",pixel_values.shape)
+                    print("group_size",group_size)
                     chunked_pixel=torch.chunk(pixel_values, group_size, dim=img_num_dim)
                     local_pixel=chunked_pixel[dist.get_rank(local_group)]
                     local_vit_embeds=self.extract_feature(local_pixel)
+                    print('rank', rank, "local_vit_embeds",local_vit_embeds.shape)
+                    print("gather")
                     vit_embeds=GatherLayer.apply(local_vit_embeds)
+                    print("gather done")
                     vit_embeds=vit_embeds.view(-1,vit_embeds.shape[-2],vit_embeds.shape[-1])
                     if pad_num>0:
                         vit_embeds=vit_embeds[:-pad_num]
@@ -307,7 +313,7 @@ class InternVLChatModel(PreTrainedModel):
         #     shift_labels = shift_labels.to(shift_logits.device)
         #     loss = loss_fct(shift_logits, shift_labels)
 
-        # print(f"original loss: {loss}")
+        print(f"original loss: {loss}")
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output

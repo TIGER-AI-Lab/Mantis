@@ -6,3 +6,4 @@ data:
     format: chat
     split: train
     vl_only: true
+    max_size: 100000
