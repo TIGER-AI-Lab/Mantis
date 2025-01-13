@@ -38,6 +38,69 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.enable_flash_sdp(True)
 
+class RingAttentionSampler(DistributedSampler):
+    
+    def __init__(
+        self,
+        dataset,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        shuffle: bool = True,
+        seed: int = 0,
+        drop_last: bool = False,
+        per_device_batch_size: int = None
+    ) -> None:
+        super().__init__(dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last)
+        # If the dataset length is evenly divisible by # of replicas, then there
+        # is no need to drop any data, since the dataset will be split equally.
+        if self.drop_last and len(self.dataset) % self.num_replicas != 0:  # type: ignore[arg-type]
+            # Split to nearest available length that is evenly divisible.
+            # This is to ensure each rank receives the same amount of data when
+            # using this Sampler.
+            self.num_samples = math.ceil(
+                (len(self.dataset) - self.num_replicas) * self.num_replicas  # type: ignore[arg-type]
+            )
+        else:
+            self.num_samples = math.ceil(len(self.dataset) * self.num_replicas)  # type: ignore[arg-type]
+        self.total_size = self.num_samples // self.num_replicas
+        self.per_device_batch_size = per_device_batch_size
+        if self.total_size % self.per_device_batch_size != 0:
+            self.total_size = self.total_size - (self.total_size % self.per_device_batch_size) + self.per_device_batch_size
+        
+    def __iter__(self):
+        if self.shuffle:
+            # deterministically shuffle based on epoch and seed
+            g = torch.Generator()
+            g.manual_seed(self.seed + self.epoch)
+            indices = torch.randperm(len(self.dataset), generator=g).tolist()  # type: ignore[arg-type]
+        else:
+            indices = list(range(len(self.dataset)))  # type: ignore[arg-type]
+
+        if not self.drop_last:
+            # add extra samples to make it evenly divisible
+            padding_size = self.total_size - len(indices)
+            if padding_size <= len(indices):
+                indices += indices[:padding_size]
+            else:
+                indices += (indices * math.ceil(padding_size / len(indices)))[
+                    :padding_size
+                ]
+        else:
+            # remove tail of data to make it evenly divisible.
+            indices = indices[: self.total_size]
+        assert len(indices) == self.total_size, f"len(indices)={len(indices)}, self.total_size={self.total_size}"
+        
+        if self.per_device_batch_size:
+            indices = torch.tensor(indices).reshape(-1, self.per_device_batch_size)
+            indices = indices.repeat_interleave(self.num_replicas, dim=0).reshape(-1).tolist()
+        else:
+            indices = torch.tensor(indices).repeat_interleave(self.num_replicas).tolist()
+        assert len(indices) == self.num_samples, f"len(indices)={len(indices)}, self.num_samples={self.num_samples}"
+        
+        print("Rank:", dist.get_rank(), "Sampler rank:", self.rank, "Num replicas:", self.num_replicas, "Indices:", indices[:10])
+
+        return iter(indices)
+    
 class Trainer(HFTrainer):
     def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]:
         if hasattr(self.args, "num_replicas") and self.args.num_replicas > 0:
@@ -45,11 +108,11 @@ class Trainer(HFTrainer):
             print("Using distributed sampler because num_replicas > 1 for ring flash attention")
             assert hasattr(self.args, "sampler_rank"), "sampler_rank is required for distributed training, please set it in the training script"
             print("Rank:", dist.get_rank(), "Sampler rank:", self.args.sampler_rank, "Num replicas:", self.args.num_replicas)
-            return DistributedSampler(
+            return RingAttentionSampler(
                 self.train_dataset, 
                 num_replicas=self.args.num_replicas, rank=self.args.sampler_rank, 
                 seed=self.args.seed, shuffle=False, 
-                # per_device_batch_size=self.args.per_device_train_batch_size
+                per_device_batch_size=self.args.per_device_train_batch_size
             )
         else:
             return DistributedSampler(self.train_dataset, seed=self.args.seed, shuffle=False)
@@ -227,9 +290,13 @@ def load_model(model_args, training_args):
                 dist.new_group(ranks=list(range(i * model_args.ring_attn_group_size, (i + 1) * model_args.ring_attn_group_size))))
         dist.barrier()
         model_init_kwargs["group_list"] = group_list
-        training_args.num_replicas = num_groups
-        training_args.sampler_rank = dist.get_rank() // model_args.ring_attn_group_size
+        # training_args.num_replicas = num_groups
+        # training_args.sampler_rank = dist.get_rank() // model_args.ring_attn_group_size
+        training_args.num_replicas = model_args.ring_attn_group_size
+        training_args.sampler_rank = dist.get_rank() % model_args.ring_attn_group_size
         training_args.gradient_accumulation_steps *= training_args.num_replicas
+        training_args.per_device_train_batch_size *= training_args.num_replicas
+        
     if model_args.problem_type == "generation":
         if model_args.enable_cross_attention and model_args.do_pretrain:
             initial_emsemble_model_path = Path(training_args.output_dir).parent / "initial_model"

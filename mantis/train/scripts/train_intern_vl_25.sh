@@ -46,7 +46,7 @@ max_seq_len=4096
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=128
+global_batch_size=32
 do_pretrain=true
 max_self_attn_len=$max_seq_len
 max_cross_attn_kv_len=4092
@@ -141,7 +141,7 @@ if [ $lora_enabled = true ]; then
 else
     echo "lora is disabled"
     if [ $do_pretrain = true ]; then
-        config_file="./accelerate_configs/accelerate_config_zero2.yaml"
+        config_file="./accelerate_configs/accelerate_config_zero1.yaml"
         echo $config_file
     else
         config_file="./accelerate_configs/accelerate_config_zero3.yaml"

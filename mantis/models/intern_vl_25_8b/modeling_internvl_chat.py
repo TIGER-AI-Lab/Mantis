@@ -129,6 +129,7 @@ class InternVLChatModel(PreTrainedModel):
             else:
                 raise NotImplementedError(f'{config.llm_config.architectures[0]} is not implemented.')
         self.group_list = group_list
+        self.language_model.group_list = group_list
         self.language_model.model.group_list = group_list
 
         vit_hidden_size = config.vision_config.hidden_size

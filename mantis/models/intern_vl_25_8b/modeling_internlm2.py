@@ -96,6 +96,13 @@ def extract_local(value, rank, world_size, dim=1):
         [value_chunks[rank], value_chunks[2 * world_size - rank - 1]], dim=dim
     )
     return local_value.to(value.device)
+
+# def extract_local(value, rank, world_size, dim=1):
+#     """Extract local tensor across the sequence dimension."""
+#     value_chunks = value.chunk(world_size, dim=dim)
+#     local_value = value_chunks[rank]
+#     return local_value.to(value.device)
+
 def extract_local2(value, rank, world_size,  dim=1):
     """Extract local tensor across the hidden dimension."""
     dimension_size = value.shape[dim]
@@ -129,7 +136,8 @@ class GatherLayer(torch.autograd.Function):
     def backward(ctx, grads):
         (input, shape_list) = ctx.saved_tensors
         dim = ctx.dim
-        dist.all_reduce(grads.contiguous(), group=local_group)
+        
+        dist.all_reduce(grads, group=local_group)
         grad_out = torch.zeros_like(input)
         
         if dim is None:
@@ -257,7 +265,7 @@ def find_next_example(mask_slice):
     j += 1
     return i, j
 
-def _get_unpad_packing_data(attention_mask):
+def _get_unpad_packing_data(attention_mask, return_seq_len=False):
     """
     Process packed attention masks to get indices and cumulative sequence lengths.
     
@@ -282,7 +290,7 @@ def _get_unpad_packing_data(attention_mask):
         mask_slice = mask[b]
         
         sub_mask_idx = [0, 0]
-        
+        seqlens.append([])
         while sub_mask_idx[1] < kv_len:
             sub_mask_slice = mask_slice[sub_mask_idx[0]:, sub_mask_idx[1]:]
             q_i, kv_j = find_next_example(sub_mask_slice)
@@ -291,22 +299,24 @@ def _get_unpad_packing_data(attention_mask):
                 break
             seq_len = kv_j
                 
-            seqlens.append(seq_len)
+            seqlens[-1].append(seq_len)
             sub_mask_idx[0] += q_i
             sub_mask_idx[1] += kv_j
         
-    
-    seqlens_tensor = torch.tensor(seqlens, device=attention_mask.device, dtype=torch.int32)
+    seqlens_tensor = torch.cat([torch.tensor(x, device=attention_mask.device, dtype=torch.int32) for x in seqlens])
     
     # Calculate cumulative sequence lengths
     cu_seqlens = F.pad(torch.cumsum(seqlens_tensor, dim=0, dtype=torch.int32), (1, 0))
     
     # Get maximum sequence length
-    max_seqlen_in_batch = max(seqlens) if seqlens else 0
-    
+    max_seqlen_in_batch = max([max(x) if x else 0 for x in seqlens]) if seqlens else 0
+    if any([len(x) == 0 for x in seqlens]):
+        print("Warning #### Some sequences have zero length.")
+    if return_seq_len:
+        return indices, cu_seqlens, max_seqlen_in_batch, seqlens
     return indices, cu_seqlens, max_seqlen_in_batch
 
-def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q):
+def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q, seqlens_q):
     """
     Process packed attention masks to get indices and cumulative sequence lengths.
     
@@ -333,11 +343,23 @@ def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q):
         mask_slice = mask[b]
         
         sub_mask_idx = [0, 0]
+        num_q_current_batch = 0
         while sub_mask_idx[1] < kv_len:
             sub_mask_slice = mask_slice[sub_mask_idx[0]:, sub_mask_idx[1]:]
             q_i, kv_j = find_next_example(sub_mask_slice)
             if any(x is None for x in (q_i, kv_j)):
                 # No more examples in this batch
+                # pad 0 if there are still some q sequences left
+                if num_q_current_batch < len(seqlens_q[b]):
+                    q_seq_lens = []
+                    previous_seq_len_sum = sum(previous_q_seqlens)
+                    while num_q_current_batch < len(seqlens_q[b]):
+                        cur_cu_q_idx += 1
+                        q_seq_lens.append(cu_seqlens_q[cur_cu_q_idx] - cu_seqlens_q[cur_cu_q_idx - 1])
+                        assert q_seq_lens[-1] == seqlens_q[b][num_q_current_batch], f"q_seq_lens[-1]: {q_seq_lens[-1]}, seqlens_q[b][num_q_current_batch]: {seqlens_q[b][num_q_current_batch]}"
+                        num_q_current_batch += 1
+                    previous_q_seqlens.extend(q_seq_lens)
+                    seqlens.extend([0] * len(q_seq_lens))
                 break
             seq_len = kv_j
             
@@ -349,13 +371,26 @@ def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q):
                 q_seq_lens.append(cu_seqlens_q[cur_cu_q_idx] - cu_seqlens_q[cur_cu_q_idx - 1])
             assert sum(q_seq_lens) == q_i, f"q_seq_lens: {q_seq_lens}, q_i: {q_i}"
             previous_q_seqlens.extend(q_seq_lens)
+            num_q_current_batch += len(q_seq_lens)
             
             seqlens.extend([seq_len] * len(q_seq_lens))
             indices.extend([torch.arange(b * kv_len + sub_mask_idx[1], b * kv_len + sub_mask_idx[1] + seq_len)] * len(q_seq_lens))
             
             sub_mask_idx[0] += q_i
             sub_mask_idx[1] += kv_j
-        
+            
+        if num_q_current_batch < len(seqlens_q[b]):
+            q_seq_lens = []
+            previous_seq_len_sum = sum(previous_q_seqlens)
+            while num_q_current_batch < len(seqlens_q[b]):
+                cur_cu_q_idx += 1
+                q_seq_lens.append(cu_seqlens_q[cur_cu_q_idx] - cu_seqlens_q[cur_cu_q_idx - 1])
+                assert q_seq_lens[-1] == seqlens_q[b][num_q_current_batch], f"q_seq_lens[-1]: {q_seq_lens[-1]}, seqlens_q[b][num_q_current_batch]: {seqlens_q[b][num_q_current_batch]}"
+                num_q_current_batch += 1
+            previous_q_seqlens.extend(q_seq_lens)
+            seqlens.extend([0] * len(q_seq_lens))
+                    
+    assert len(seqlens) == len(cu_seqlens_q) - 1, f"seqlens: {seqlens}, cu_seqlens_q: {cu_seqlens_q}"
     
     seqlens_tensor = torch.tensor(seqlens, device=encoder_attention_mask.device, dtype=torch.int32).flatten()
     
@@ -369,7 +404,7 @@ def _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q):
 
     return indices, cu_seqlens, max_seqlen_in_batch
 
-def unpad_packing_input(hidden_states, attention_mask):
+def unpad_packing_input(hidden_states, attention_mask, return_seq_len=False):
     """
     Arguments:
         hidden_states: (batch, seqlen, ...)
@@ -380,15 +415,25 @@ def unpad_packing_input(hidden_states, attention_mask):
         cu_seqlens: (batch + 1), the cumulative sequence lengths, used to index into hidden_states.
         max_seqlen_in_batch: int
     """
-    indices, cu_seqlens, max_seqlen_in_batch = _get_unpad_packing_data(attention_mask)
-    
-    # Rearrange and index hidden states
-    return (
-        index_first_axis(rearrange(hidden_states, "b s ... -> (b s) ..."), indices),
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
+    if return_seq_len:
+        indices, cu_seqlens, max_seqlen_in_batch, seqlens = _get_unpad_packing_data(attention_mask, return_seq_len=return_seq_len)
+        # Rearrange and index hidden states
+        return (
+            index_first_axis(rearrange(hidden_states, "b s ... -> (b s) ..."), indices),
+            indices,
+            cu_seqlens,
+            max_seqlen_in_batch,
+            seqlens
+        )
+    else:
+        indices, cu_seqlens, max_seqlen_in_batch = _get_unpad_packing_data(attention_mask)
+        # Rearrange and index hidden states
+        return (
+            index_first_axis(rearrange(hidden_states, "b s ... -> (b s) ..."), indices),
+            indices,
+            cu_seqlens,
+            max_seqlen_in_batch,
+        )
     
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
@@ -1499,9 +1544,9 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, 1, query_length, query_length), device=query_layer.device)
         # The -q_len: slice assumes left padding.
-        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_packing_input(query_layer, attention_mask)
+        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, seqlens_q = unpad_packing_input(query_layer, attention_mask, return_seq_len=True)
         
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q)
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q, seqlens_q)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
@@ -1655,6 +1700,7 @@ class InternLM2DecoderLayer(nn.Module):
             use_cache=use_cache,
             **kwargs,
         )
+        # print("Rank:", dist.get_rank(), "hidden_states.nans:", torch.isnan(hidden_states).sum())
         hidden_states = residual + hidden_states
         
         # Cross Attention
@@ -1671,6 +1717,7 @@ class InternLM2DecoderLayer(nn.Module):
                 output_attentions=output_attentions,
                 **kwargs,
             )
+            # print("Rank:", dist.get_rank(), "cross hidden_states.nans:", torch.isnan(hidden_states).sum())
             hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
 
         # Fully Connected
@@ -1958,20 +2005,53 @@ def _right_pad_inputs_with_attention_mask(model_inputs: List[dict]) -> dict:
     return results
 
 def gather_value(value):
-    # print("Rank:", dist.get_rank())
-    # print("Gather value shape: (Start)", value.shape)
     value_shape = torch.tensor(value.shape, device=value.device)
-    all_gather_value_shape = GatherLayer.apply(value_shape)
+    all_value_shapes = [torch.zeros_like(value_shape) for _ in range(dist.get_world_size(local_group))]
+    dist.all_gather(all_value_shapes, value_shape, group=local_group)
+    all_value_shapes = [torch.Size(s) for s in all_value_shapes]
     value_numel = torch.tensor(value.numel(), device=value.device)
-    all_gather_value_numel = GatherLayer.apply(value_numel).view(-1)
+    all_value_numels = [torch.zeros_like(value_numel) for _ in range(dist.get_world_size(local_group))]
+    dist.all_gather(all_value_numels, value_numel, group=local_group)
     
-    value = value.view(-1)
-    value = GatherLayer.apply(value, all_gather_value_numel.unsqueeze(1), 0)
-    values = value.split(all_gather_value_numel.tolist())
-    # recover the original shape
-    values = [v.view(torch.Size(s)) for v, s in zip(values, all_gather_value_shape)]
-    # print("Gathered value shape (Done):", values[0].shape)
-    return values
+    flat_value = value.flatten()
+    max_numel = max([numel.item() for numel in all_value_numels])
+    padded_value = torch.cat(
+        [
+            flat_value,
+            torch.zeros(max_numel - flat_value.shape[0], dtype=flat_value.dtype, device=flat_value.device),
+        ]
+    )
+    all_values = [torch.zeros(max_numel, dtype=padded_value.dtype, device=padded_value.device) for _ in range(dist.get_world_size(local_group))]
+    dist.all_gather(all_values, padded_value, group=local_group)
+    all_values = [v[:numel.item()].view(s) for v, numel, s in zip(all_values, all_value_numels, all_value_shapes)]
+    return all_values
+    
+    # if shape_list is None:
+    #     output = [torch.zeros_like(input) for _ in range(dist.get_world_size(local_group))]
+    # else:
+    #     output = [torch.zeros(torch.Size(shape), device=input.device, dtype=input.dtype) for shape in shape_list]
+    # # print(f"output: {output}", f"input: {input}", f"local_group: {local_group}")
+    # dist.all_gather(output, input, group=local_group)
+    # if dim is not None:
+    #     return torch.cat(output, dim)
+    # else:
+    #     return torch.stack(output)
+
+# def gather_value(value):
+#     # print("Rank:", dist.get_rank())
+#     # print("Gather value shape: (Start)", value.shape)
+#     value_shape = torch.tensor(value.shape, device=value.device)
+#     all_gather_value_shape = GatherLayer.apply(value_shape)
+#     value_numel = torch.tensor(value.numel(), device=value.device)
+#     all_gather_value_numel = GatherLayer.apply(value_numel).view(-1)
+    
+#     value = value.view(-1)
+#     value = GatherLayer.apply(value, all_gather_value_numel.unsqueeze(1), 0)
+#     values = value.split(all_gather_value_numel.tolist())
+#     # recover the original shape
+#     values = [v.view(torch.Size(s)) for v, s in zip(values, all_gather_value_shape)]
+#     # print("Gathered value shape (Done):", values[0].shape)
+#     return values
 
 
 # Modified from transformers.model.llama.modeling_llama.LlamaModel
@@ -2160,32 +2240,32 @@ class InternLM2Model(InternLM2PreTrainedModel):
             
             # gather hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
             # print("rank", dist.get_rank(local_group), "start gather")
-            gather_batch = [{} for _ in range(dist.get_world_size(local_group))]
-            for key, values in zip(
-                ['hidden_states', 'encoder_hidden_states', 'attention_mask', 'encoder_attention_mask', 'position_ids', 'encoder_position_ids'], 
-                [hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids]
-            ):
-                # print(f"Processing {key}")
-                if values is not None:
-                    values = gather_value(values)
-                    assert len(values) == dist.get_world_size(local_group), f'Values should be gathered to {dist.get_world_size(local_group)}, but got {len(values)}'
-                    for i, v in enumerate(values):
-                        gather_batch[i][key] = v
-                else:
-                    for i in range(dist.get_world_size(local_group)):
-                        gather_batch[i][key] = None
-            # print("rank", dist.get_rank(local_group), "Gathered")
-            bszs_gather = [x['hidden_states'].shape[0] for x in gather_batch] # for later gather
-            # padding hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
-            # print("rank", dist.get_rank(local_group), "start padding")
-            gather_batch = _right_pad_inputs_with_attention_mask(gather_batch)
-            # print("rank", dist.get_rank(local_group), "finish padding")
-            hidden_states = gather_batch['hidden_states']
-            encoder_hidden_states = gather_batch['encoder_hidden_states']
-            attention_mask = gather_batch['attention_mask']
-            encoder_attention_mask = gather_batch['encoder_attention_mask']
-            position_ids = gather_batch['position_ids']
-            encoder_position_ids = gather_batch['encoder_position_ids']
+            # gather_batch = [{} for _ in range(dist.get_world_size(local_group))]
+            # for key, values in zip(
+            #     ['hidden_states', 'encoder_hidden_states', 'attention_mask', 'encoder_attention_mask', 'position_ids', 'encoder_position_ids'], 
+            #     [hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids]
+            # ):
+            #     # print(f"Processing {key}")
+            #     if values is not None:
+            #         values = gather_value(values)
+            #         assert len(values) == dist.get_world_size(local_group), f'Values should be gathered to {dist.get_world_size(local_group)}, but got {len(values)}'
+            #         for i, v in enumerate(values):
+            #             gather_batch[i][key] = v
+            #     else:
+            #         for i in range(dist.get_world_size(local_group)):
+            #             gather_batch[i][key] = None
+            # # print("rank", dist.get_rank(local_group), "Gathered")
+            # bszs_gather = [x['hidden_states'].shape[0] for x in gather_batch] # for later gather
+            # # padding hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
+            # # print("rank", dist.get_rank(local_group), "start padding")
+            # gather_batch = _right_pad_inputs_with_attention_mask(gather_batch)
+            # # print("rank", dist.get_rank(local_group), "finish padding")
+            # hidden_states = gather_batch['hidden_states']
+            # encoder_hidden_states = gather_batch['encoder_hidden_states']
+            # attention_mask = gather_batch['attention_mask']
+            # encoder_attention_mask = gather_batch['encoder_attention_mask']
+            # position_ids = gather_batch['position_ids']
+            # encoder_position_ids = gather_batch['encoder_position_ids']
             # print("After Gather")
             # print("hidden_states", hidden_states.shape)
             # print("encoder_hidden_states", encoder_hidden_states.shape if encoder_hidden_states is not None else None)
@@ -2196,26 +2276,44 @@ class InternLM2Model(InternLM2PreTrainedModel):
             
             # extract local hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
             # print("rank", dist.get_rank(local_group), "start extract local")
-            hidden_states_size = torch.tensor(hidden_states.shape, device=hidden_states.device)
-            all_gather_hidden_states_size = GatherLayer.apply(hidden_states_size)
-            assert all([(x==all_gather_hidden_states_size[0]).all() for x in all_gather_hidden_states_size]), f'All gather hidden states size should be the same, but got {all_gather_hidden_states_size}'
+            # hidden_states_size = torch.tensor(hidden_states.shape, device=hidden_states.device)
+            # all_gather_hidden_states_size = GatherLayer.apply(hidden_states_size)
+            # assert all([(x==all_gather_hidden_states_size[0]).all() for x in all_gather_hidden_states_size]), f'All gather hidden states size should be the same, but got {all_gather_hidden_states_size}'
             world_size = dist.get_world_size(local_group)
             rank = dist.get_rank(local_group)
             hidden_states = extract_local(hidden_states, rank, world_size)
             encoder_hidden_states = extract_local(encoder_hidden_states, rank, world_size) if encoder_hidden_states is not None else None
-            if attention_mask.dim() == 2:
-                attention_mask = extract_local(attention_mask, rank, world_size)
-            else:
-                assert attention_mask.dim() == 4, 'Attention mask should be 2D or 4D' # [bsz, 1, q_len, kv_len]
-                attention_mask = extract_local(attention_mask, rank, world_size, dim=-2) 
-                attention_mask = extract_local(attention_mask, rank, world_size, dim=-1)
-            if encoder_attention_mask is not None:
-                if encoder_attention_mask.dim() == 2:
-                    encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size)
+            original_attention_mask = attention_mask
+            original_encoder_attention_mask = encoder_attention_mask
+            try:
+                if attention_mask.dim() == 2:
+                    attention_mask = extract_local(attention_mask, rank, world_size)
                 else:
-                    assert encoder_attention_mask.dim() == 4, 'Attention mask should be 2D or 4D'
-                    encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size, dim=-2)
-                    encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size, dim=-1)
+                    assert attention_mask.dim() == 4, 'Attention mask should be 2D or 4D' # [bsz, 1, q_len, kv_len]
+                    attention_mask = extract_local(attention_mask, rank, world_size, dim=-2) 
+                    attention_mask = extract_local(attention_mask, rank, world_size, dim=-1)
+                if encoder_attention_mask is not None:
+                    if encoder_attention_mask.dim() == 2:
+                        encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size)
+                    else:
+                        assert encoder_attention_mask.dim() == 4, 'Attention mask should be 2D or 4D'
+                        encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size, dim=-2)
+                        encoder_attention_mask = extract_local(encoder_attention_mask, rank, world_size, dim=-1)
+                indices_q, cu_seqlens_q, max_seqlen_in_batch_q, seqlens_q = _get_unpad_packing_data(attention_mask, return_seq_len=True)
+        
+                indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q, seqlens_q)
+                # print('cu_seqlens_q', cu_seqlens_q)
+                # print('cu_seqlens_k', cu_seqlens_k)
+                # assert all(1 in attention_mask[i] for i in range(attention_mask.size(0))), 'Attention mask should have 1'
+            except:
+                # save original attention mask
+                torch.save(original_attention_mask, f'original_attention_mask_{rank}.pt')
+                torch.save(original_encoder_attention_mask, f'original_encoder_attention_mask_{rank}.pt')
+                torch.save(attention_mask, f'attention_mask_{rank}.pt')
+                torch.save(encoder_attention_mask, f'encoder_attention_mask_{rank}.pt')
+                print('cu_seqlens_q', cu_seqlens_q)
+                print('cu_seqlens_k', cu_seqlens_k)
+                raise 
             original_position_ids = position_ids
             # print("original_position_ids", original_position_ids)
             position_ids = extract_local(position_ids, rank, world_size)
@@ -2250,6 +2348,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
             pass
 
         for idx, decoder_layer in enumerate(self.layers):
+            # print(f"Decoder layer {idx}")
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -2297,7 +2396,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        if self.config.attn_implementation == 'ring_flash_attn':
+        if self.config.attn_implementation == 'ring_flash_attn' and False:
             local_rank = dist.get_rank(local_group)
             world_size = dist.get_world_size(local_group)
             # gather hidden_states
@@ -2414,7 +2513,15 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
+        global local_group
+        if hasattr(self, 'group_list') and self.group_list is not None:
+            for group_idx,group in enumerate(self.group_list):
+                if type(group)==torch.distributed.distributed_c10d.ProcessGroup:
+                    break
+            global inner_idx
+            inner_idx = dist.get_rank(group)
+            local_group=group
+            
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2422,6 +2529,22 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         
+        if self.config.attn_implementation == 'ring_flash_attn':
+            world_size = dist.get_world_size(local_group)
+            rank = dist.get_rank(local_group)
+            # gather_batch = [{} for _ in range(dist.get_world_size(local_group))]
+            # for key, value in [('labels', labels)]:
+            #     if value is not None:
+            #         value = gather_value(value)
+            #         assert len(value) == dist.get_world_size(local_group), f'Values should be gathered to {dist.get_world_size(local_group)}, but got {len(value)}'
+            #         for i, v in enumerate(value):
+            #             gather_batch[i][key] = v
+            #     else:
+            #         for i in range(dist.get_world_size(local_group)):
+            #             gather_batch[i][key] = None
+            # gather_batch = _right_pad_inputs_with_attention_mask(gather_batch)
+            # labels = gather_batch['labels']
+            labels = extract_local(labels, rank, world_size) if labels is not None else None
         debug_ring_attention = False
         if debug_ring_attention:
             output_hidden_states = True
@@ -2447,9 +2570,11 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
                     return_dict=return_dict,
                 )
                 no_ring_hidden_states = outputs[0]
+                no_ring_hidden_states = extract_local(no_ring_hidden_states, rank, world_size)
                 no_ring_logits = self.output(no_ring_hidden_states)
                 no_ring_logits = no_ring_logits.float()
                 no_ring_all_hidden_states = outputs.hidden_states
+                no_ring_all_hidden_states = [extract_local(v, rank, world_size) for v in no_ring_all_hidden_states]
             
                 no_ring_loss = None
                 if labels is not None:
@@ -2492,6 +2617,11 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         logits = self.output(hidden_states)
         logits = logits.float()
         
+        if torch.isnan(logits).any():
+            print('logits', logits)
+            print('hidden_states', hidden_states)
+            raise ValueError('Logits contains nan')
+        
         if debug_ring_attention:
             all_hidden_states = outputs.hidden_states
             
@@ -2504,6 +2634,7 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
             diff = (no_ring_hidden_states - hidden_states).abs().mean()
             print(f"diff between hidden_states: {diff}")
             
+            
             print("ring", [v.shape for v in all_hidden_states])
             print("no ring", [v.shape for v in no_ring_all_hidden_states])
             for i, (no_ring_v, v) in enumerate(zip(no_ring_all_hidden_states, all_hidden_states)):
@@ -2511,26 +2642,20 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
                 assert no_ring_v.dtype == v.dtype, f"no_ring_v.dtype: {no_ring_v.dtype}, v.dtype: {v.dtype}"
                 diff = (no_ring_v - v).abs().mean()
                 print(f"diff between all_hidden_states[{i}]: {diff}")
-        
+                
+            if torch.isnan(diff).any():
+                print('ring hidden_states', hidden_states)
+                print('torch.isnan(no_ring_hidden_states).any()', torch.isnan(no_ring_hidden_states).any())
+                print('torch.isnan(hidden_states).any()', torch.isnan(hidden_states).any())
+                # save attention mask, encoder_attention_mask, position_ids, encoder_position_ids
+                torch.save(attention_mask, 'attention_mask.pt')
+                torch.save(encoder_attention_mask, 'encoder_attention_mask.pt')
+                torch.save(position_ids, 'position_ids.pt')
+                torch.save(encoder_position_ids, 'encoder_position_ids.pt')
+                raise ValueError('Hidden states contains nan')
         
         loss = None
         if labels is not None:
-            if self.config.attn_implementation == 'ring_flash_attn' and False:
-                world_size = dist.get_world_size(local_group)
-                rank = dist.get_rank(local_group)
-                gather_batch = [{} for _ in range(dist.get_world_size(local_group))]
-                for key, value in [('labels', labels)]:
-                    if value is not None:
-                        value = gather_value(value)
-                        assert len(value) == dist.get_world_size(local_group), f'Values should be gathered to {dist.get_world_size(local_group)}, but got {len(value)}'
-                        for i, v in enumerate(value):
-                            gather_batch[i][key] = v
-                    else:
-                        for i in range(dist.get_world_size(local_group)):
-                            gather_batch[i][key] = None
-                gather_batch = _right_pad_inputs_with_attention_mask(gather_batch)
-                labels = gather_batch['labels']
-                labels = extract_local(labels, rank, world_size)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -2541,6 +2666,11 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
+            # check is loss is nan, then set it to zero
+            if torch.isnan(loss).any():
+                loss_fct = CrossEntropyLoss(reduction='sum')
+                loss = loss_fct(shift_logits, shift_labels)
+        print("loss", loss)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
