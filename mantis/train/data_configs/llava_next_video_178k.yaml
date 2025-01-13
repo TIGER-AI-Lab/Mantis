@@ -2,7 +2,7 @@ data:
   - 
     name: "llava_next_video_178k"
     type: json
-    path: ../../data/llava-video/llava-video-data/all_conv_cap.json
+    path: /home/dongfu/WorkSpace/Mantis/data/llava-video/data/0_30_s_youtube_v0_1/0_30_s_youtube_v0_1_cap_processed_train.conv_double.json
     format: chat_video
     split: train
     max_num_frames: 32

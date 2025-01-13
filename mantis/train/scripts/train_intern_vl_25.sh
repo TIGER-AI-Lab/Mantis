@@ -13,8 +13,8 @@ if [ "$HF_DATASETS_OFFLINE" = 1 ]; then
 else
     # DATA_CONFIG_FILE="./data_configs/mantis_instruct.yaml"  # change to this for offical training
     # DATA_CONFIG_FILE="./data_configs/train_config_debug.yaml"
-    # DATA_CONFIG_FILE="./data_configs/llava_next_700k.yaml"
-    DATA_CONFIG_FILE="./data_configs/llava_next_video_178k.yaml"
+    DATA_CONFIG_FILE="./data_configs/llava_next_700k.yaml"
+    # DATA_CONFIG_FILE="./data_configs/llava_next_video_178k.yaml"
 fi
 if [ "$TRANSFORMERS_OFFLINE" = 1 ]; then
     echo "Warning: Offline mode is enabled. Using local copy of models"
@@ -47,9 +47,9 @@ lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
 global_batch_size=128
-do_pretrain=True
+do_pretrain=true
 max_self_attn_len=$max_seq_len
-max_cross_attn_kv_len=8192
+max_cross_attn_kv_len=16384
 packing_type="cross_attn" # or "simple" or "cross_attn"
 
 RUN_NAME="intern_vl_25_llava_next_700k_pretrain_packing"
@@ -117,8 +117,7 @@ fi
 
 NGPU_PER_NODE=$(nvidia-smi --query-gpu=index --format=csv,noheader | grep -c "$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n')")
 GPU=$((${COUNT_NODE} * ${NGPU_PER_NODE}))
-# WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 4))
-WORKERS=2
+WORKERS=$((${COUNT_NODE} * ${NGPU_PER_NODE} * 2))
 
 if [ $WORKERS -gt 112 ]; then
     WORKERS=112
@@ -141,7 +140,7 @@ if [ $lora_enabled = true ]; then
 else
     echo "lora is disabled"
     if [ $do_pretrain = true ]; then
-        config_file="./accelerate_configs/accelerate_config_zero1.yaml"
+        config_file="./accelerate_configs/accelerate_config_zero2.yaml"
         echo $config_file
     else
         config_file="./accelerate_configs/accelerate_config_zero3.yaml"

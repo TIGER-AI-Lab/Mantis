@@ -696,7 +696,7 @@ class InternLM2CrossAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
-        self.is_causal = True
+        self.is_causal = False
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -1407,6 +1407,13 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
             
+            # print("Rank:", dist.get_rank())
+            # print(f"query_states: {query_states.shape}")
+            # print(f"key_states: {key_states.shape}")
+            # print(f"value_states: {value_states.shape}")
+            # print(f"cu_seqlens_q: {cu_seqlens_q}")
+            # print(f"cu_seqlens_k: {cu_seqlens_k}")
+            
             attn_output_unpad = self.class_flash_attn_varlen_func(
                 query_states,
                 key_states,
@@ -2032,7 +2039,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        if self.config.attn_implementation == 'ring_flash_attn':
+        if self.config.attn_implementation == 'ring_flash_attn' and False:
             indices_q, cu_seq_lens_q, max_seq_lens_q = _get_unpad_packing_data(attention_mask)
             cu_seq_lens_q_gather = cu_seq_lens_q
             cu_seq_lens_q_gather = GatherLayer.apply(cu_seq_lens_q_gather)
@@ -2169,7 +2176,12 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         hidden_states = outputs[0]
         logits = self.output(hidden_states)
         logits = logits.float()
-
+        
+        if self.config.attn_implementation == 'ring_flash_attn':
+            _, cu_seq_lens_q, _ = _get_unpad_packing_data(attention_mask)
+            world_size = dist.get_world_size(local_group)
+            rank = dist.get_rank(local_group)
+            labels = extract_local(labels, cu_seq_lens_q, rank, world_size)
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n

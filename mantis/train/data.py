@@ -165,16 +165,16 @@ class ChatDataset(torch.utils.data.Dataset):
                 self.filtered_data = self.data.filter(lambda x: len(x['images']) <= max_num_images if ('images' in x and x['images']) else True) # max 5 images
                 print(f"Filtered dataset size changed from {len(self.data)} to {len(self.filtered_data)}")
                 self.data = self.filtered_data
-            if vl_only:
-                print("Filtering dataset with images only")
-                self.data = self.data.filter(lambda x: ("images" in x and x['images']) or ("image" in x and x['image']), num_proc=num_proc)
-                print("filter out images, now {}".format(len(self.data)))
-            self.image_dir = Path("/")
             if shuffle:
                 self.data = self.data.shuffle(seed=42)
             if self.max_size:
                 print(f"Truncating dataset to from {len(self.data)} to {self.max_size}")
                 self.data = self.data.select(range(self.max_size))
+            if vl_only:
+                print("Filtering dataset with images only")
+                self.data = self.data.filter(lambda x: ("images" in x and x['images']) or ("image" in x and x['image']), num_proc=num_proc)
+                print("filter out images, now {}".format(len(self.data)))
+            self.image_dir = Path("/")
                     
         # filtering examples with image more than max_num_images
         if isinstance(max_num_images, int) and max_num_images > 0:

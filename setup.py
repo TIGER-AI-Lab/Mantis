@@ -55,7 +55,7 @@ setup(
             "openai",
             "av",
             "qwen_vl_utils",
-            "ring-flash-attn"
+            "ring-flash-attn @ git+https://github.com/jdf-prog/ring-flash-attention.git",
         ],
         "eval": [
             "tqdm",
