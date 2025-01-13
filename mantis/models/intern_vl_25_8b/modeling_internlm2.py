@@ -1958,6 +1958,8 @@ def _right_pad_inputs_with_attention_mask(model_inputs: List[dict]) -> dict:
     return results
 
 def gather_value(value):
+    # print("Rank:", dist.get_rank())
+    # print("Gather value shape: (Start)", value.shape)
     value_shape = torch.tensor(value.shape, device=value.device)
     all_gather_value_shape = GatherLayer.apply(value_shape)
     value_numel = torch.tensor(value.numel(), device=value.device)
@@ -1968,6 +1970,7 @@ def gather_value(value):
     values = value.split(all_gather_value_numel.tolist())
     # recover the original shape
     values = [v.view(torch.Size(s)) for v, s in zip(values, all_gather_value_shape)]
+    # print("Gathered value shape (Done):", values[0].shape)
     return values
 
 
@@ -2156,11 +2159,13 @@ class InternLM2Model(InternLM2PreTrainedModel):
             # print("local_group", local_group)
             
             # gather hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
+            # print("rank", dist.get_rank(local_group), "start gather")
             gather_batch = [{} for _ in range(dist.get_world_size(local_group))]
             for key, values in zip(
                 ['hidden_states', 'encoder_hidden_states', 'attention_mask', 'encoder_attention_mask', 'position_ids', 'encoder_position_ids'], 
                 [hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids]
             ):
+                # print(f"Processing {key}")
                 if values is not None:
                     values = gather_value(values)
                     assert len(values) == dist.get_world_size(local_group), f'Values should be gathered to {dist.get_world_size(local_group)}, but got {len(values)}'
@@ -2169,9 +2174,12 @@ class InternLM2Model(InternLM2PreTrainedModel):
                 else:
                     for i in range(dist.get_world_size(local_group)):
                         gather_batch[i][key] = None
+            # print("rank", dist.get_rank(local_group), "Gathered")
             bszs_gather = [x['hidden_states'].shape[0] for x in gather_batch] # for later gather
             # padding hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
+            # print("rank", dist.get_rank(local_group), "start padding")
             gather_batch = _right_pad_inputs_with_attention_mask(gather_batch)
+            # print("rank", dist.get_rank(local_group), "finish padding")
             hidden_states = gather_batch['hidden_states']
             encoder_hidden_states = gather_batch['encoder_hidden_states']
             attention_mask = gather_batch['attention_mask']
@@ -2187,6 +2195,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
             # print("encoder_position_ids", encoder_position_ids.shape if encoder_position_ids is not None else None)
             
             # extract local hidden_states, encoder_hidden_states, attention_mask, encoder_attention_mask, position_ids, encoder_position_ids
+            # print("rank", dist.get_rank(local_group), "start extract local")
             hidden_states_size = torch.tensor(hidden_states.shape, device=hidden_states.device)
             all_gather_hidden_states_size = GatherLayer.apply(hidden_states_size)
             assert all([(x==all_gather_hidden_states_size[0]).all() for x in all_gather_hidden_states_size]), f'All gather hidden states size should be the same, but got {all_gather_hidden_states_size}'
@@ -2211,6 +2220,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
             # print("original_position_ids", original_position_ids)
             position_ids = extract_local(position_ids, rank, world_size)
             encoder_position_ids = extract_local(encoder_position_ids, rank, world_size) if encoder_position_ids is not None else None
+            # print("rank", dist.get_rank(local_group), "finish extract local")
             # print("After split")
             # print("hidden_states", hidden_states.shape)
             # print("input_embeds", inputs_embeds.shape)
@@ -2502,13 +2512,25 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
                 diff = (no_ring_v - v).abs().mean()
                 print(f"diff between all_hidden_states[{i}]: {diff}")
         
-        # if self.config.attn_implementation == 'ring_flash_attn':
-        #     _, cu_seq_lens_q, _ = _get_unpad_packing_data(attention_mask)
-        #     world_size = dist.get_world_size(local_group)
-        #     rank = dist.get_rank(local_group)
-        #     labels = extract_local(labels, cu_seq_lens_q, rank, world_size)
+        
         loss = None
         if labels is not None:
+            if self.config.attn_implementation == 'ring_flash_attn' and False:
+                world_size = dist.get_world_size(local_group)
+                rank = dist.get_rank(local_group)
+                gather_batch = [{} for _ in range(dist.get_world_size(local_group))]
+                for key, value in [('labels', labels)]:
+                    if value is not None:
+                        value = gather_value(value)
+                        assert len(value) == dist.get_world_size(local_group), f'Values should be gathered to {dist.get_world_size(local_group)}, but got {len(value)}'
+                        for i, v in enumerate(value):
+                            gather_batch[i][key] = v
+                    else:
+                        for i in range(dist.get_world_size(local_group)):
+                            gather_batch[i][key] = None
+                gather_batch = _right_pad_inputs_with_attention_mask(gather_batch)
+                labels = gather_batch['labels']
+                labels = extract_local(labels, rank, world_size)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()

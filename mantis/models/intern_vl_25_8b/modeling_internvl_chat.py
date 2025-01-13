@@ -313,7 +313,11 @@ class InternVLChatModel(PreTrainedModel):
         #     shift_labels = shift_labels.to(shift_logits.device)
         #     loss = loss_fct(shift_logits, shift_labels)
 
-        print(f"original loss: {loss}")
+        # print(f"original loss: {loss}")
+        # rank = dist.get_rank(local_group)
+        # print(f"rank: {rank} reaching barrier")
+        # dist.barrier()
+        # print(f"rank: {rank} passed barrier")
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output

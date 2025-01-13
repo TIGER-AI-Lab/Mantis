@@ -51,6 +51,7 @@ do_pretrain=true
 max_self_attn_len=$max_seq_len
 max_cross_attn_kv_len=4092
 packing_type="cross_attn" # or "simple" or "cross_attn"
+use_ring_flash_attn=true
 
 RUN_NAME="intern_vl_25_llava_next_700k_pretrain_packing"
 export WANDB_PROJECT="Mantis"
@@ -191,3 +192,4 @@ accelerate launch --config_file=$config_file \
     --max_self_attn_len $max_self_attn_len \
     --max_cross_attn_kv_len $max_cross_attn_kv_len \
     --packing_type $packing_type \
+    --use_ring_flash_attn $use_ring_flash_attn
