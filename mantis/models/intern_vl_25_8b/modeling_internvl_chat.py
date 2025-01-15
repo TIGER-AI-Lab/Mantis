@@ -193,7 +193,7 @@ class InternVLChatModel(PreTrainedModel):
                 
             # extract using vit embeds
             vit_embeds = self.extract_feature(pixel_values)
-            if self.use_ring_flash_attn and False:
+            if self.use_ring_flash_attn:
                 group_size = dist.get_world_size(local_group)
                 rank = dist.get_rank(local_group)
                 img_num_dim = 0
@@ -208,15 +208,10 @@ class InternVLChatModel(PreTrainedModel):
 
                             pixel_values = torch.cat([pixel_values, pad_pixel], dim=img_num_dim)
 
-                    print("pixel_values",pixel_values.shape)
-                    print("group_size",group_size)
                     chunked_pixel=torch.chunk(pixel_values, group_size, dim=img_num_dim)
                     local_pixel=chunked_pixel[dist.get_rank(local_group)]
                     local_vit_embeds=self.extract_feature(local_pixel)
-                    print('rank', rank, "local_vit_embeds",local_vit_embeds.shape)
-                    print("gather")
                     vit_embeds=GatherLayer.apply(local_vit_embeds)
-                    print("gather done")
                     vit_embeds=vit_embeds.view(-1,vit_embeds.shape[-2],vit_embeds.shape[-1])
                     if pad_num>0:
                         vit_embeds=vit_embeds[:-pad_num]
@@ -233,7 +228,7 @@ class InternVLChatModel(PreTrainedModel):
             input_embeds = input_embeds.reshape(B * N, C)
 
             if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
-                print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
+                print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}, vit tokens: {vit_batch_size * 256}')
 
             if not self.enable_cross_attention:
                 input_ids = input_ids.reshape(B * N)

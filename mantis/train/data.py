@@ -13,6 +13,7 @@ import av
 import decord
 import json
 import numpy as np
+import torch.distributed as dist
 from pathlib import Path
 from tqdm import tqdm
 from datasets.config import HF_DATASETS_OFFLINE, HF_DATASETS_CACHE
@@ -108,6 +109,7 @@ class ChatDataset(torch.utils.data.Dataset):
         num_proc=8,
         max_image_size=None,
         packing_same_mm_media=False,
+        ensure_seq_len_multiple_of=None, # for ring attention, usually 2 * dist.get_world_size()
     ):
         self.num_proc = num_proc
         self.processor = processor
@@ -119,6 +121,7 @@ class ChatDataset(torch.utils.data.Dataset):
         self.max_size = max_size
         self.max_num_images = max_num_images
         self.max_image_size = max_image_size
+        self.ensure_seq_len_multiple_of = ensure_seq_len_multiple_of
         # print("Sleeping for", int(os.environ.get("LOCAL_RANK", 0)) * 5, "seconds")
         # time.sleep(int(os.environ.get("LOCAL_RANK", 0)) * 5) # avoid error when multiple processes try to access the same file
         if self.data_path.exists() and self.dataset_type != "huggingface":
@@ -464,6 +467,17 @@ class ChatDataset(torch.utils.data.Dataset):
         # replace IGNORE_INDEX in target_ids with 0 and decode it, then print for debug
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split, idx)
+            
+        # for ring attention
+        if self.ensure_seq_len_multiple_of and len(input_ids) % self.ensure_seq_len_multiple_of != 0:
+            pad_value = self.processor.tokenizer.pad_token_id
+            pad_len = self.ensure_seq_len_multiple_of - len(input_ids) % self.ensure_seq_len_multiple_of
+            input_ids = torch.cat([input_ids, torch.full((pad_len,), pad_value, dtype=torch.long)])
+            target = torch.cat([target, torch.full((pad_len,), IGNORE_INDEX, dtype=torch.long)])
+            encoding["input_ids"] = input_ids.unsqueeze(0)
+            encoding["labels"] = target.unsqueeze(0)
+            if "attention_mask" in encoding:
+                encoding["attention_mask"] = torch.cat([encoding["attention_mask"][0], torch.full((pad_len,), 1, dtype=torch.long)]).unsqueeze(0) # should use 1 for ring attention for cu_seq_len
         
         # print(self.data_path, self.name, len(sub_images), input_ids.shape, [x.size for x in sub_images], conv_messages[0])
         # print(self.data_path, self.name, self.split)
@@ -562,6 +576,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         use_video_encoder=False,
         load_video_frames=True,
         packing_same_mm_media=False,
+        ensure_seq_len_multiple_of=None, # for ring attention, usually 2 * dist.get_world_size()
     ):
         self.processor = processor
         self.data_path = Path(data_path)
@@ -571,6 +586,7 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         self.is_master_worker = is_master_worker
         self.max_size = max_size
         self.max_num_frames = max_num_frames
+        self.ensure_seq_len_multiple_of = ensure_seq_len_multiple_of
         self.print(f"Loading dataset '{name}' from {data_path}")
         self.data = load_json_data(data_path)
         if not video_dir:
@@ -821,7 +837,16 @@ class ChatVideoDataset(torch.utils.data.Dataset):
         if torch.all(target == IGNORE_INDEX):
             print("no labels for a sample in ", self.data_path, self.name, self.split, selected_idx)
         
-        # print(self.data_path, self.name, self.split)
+        # for ring attention
+        if self.ensure_seq_len_multiple_of and len(input_ids) % self.ensure_seq_len_multiple_of != 0:
+            pad_value = self.processor.tokenizer.pad_token_id
+            pad_len = self.ensure_seq_len_multiple_of - len(input_ids) % self.ensure_seq_len_multiple_of
+            input_ids = torch.cat([input_ids, torch.full((pad_len,), pad_value, dtype=torch.long)])
+            target = torch.cat([target, torch.full((pad_len,), IGNORE_INDEX, dtype=torch.long)])
+            encoding["input_ids"] = input_ids.unsqueeze(0)
+            encoding["labels"] = target.unsqueeze(0)
+            if "attention_mask" in encoding:
+                encoding["attention_mask"] = torch.cat([encoding["attention_mask"][0], torch.full((pad_len,), 1, dtype=torch.long)]).unsqueeze(0) # should use 1 for ring attention for cu_seq_len
         
         # for debug, print the targets to make sure the right tokens are learned
         # need to print to make sure that the masked tokens are correct.
@@ -1904,18 +1929,19 @@ def load_data_from_config(data_args, processor):
         max_image_size = sub_dataset_config.get('max_image_size', None)
         fps = sub_dataset_config.get('fps', None)
         packing_same_mm_media = sub_dataset_config.get('packing_same_mm_media', False)
+        ensure_seq_len_multiple_of = data_args.ensure_seq_len_multiple_of if hasattr(data_args, "ensure_seq_len_multiple_of") else None
         assert split in ['train', 'val', 'test'], f"Unknown split {split}"
         if sub_dataset_config['format'] == 'chat':
             sub_dataset = ChatDataset(processor, data_path, dataset_type, name, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, 
                 offline_sha=offline_sha, revision=revision, max_image_size=max_image_size, num_proc=num_proc,
-                packing_same_mm_media=packing_same_mm_media)
+                packing_same_mm_media=packing_same_mm_media, ensure_seq_len_multiple_of=ensure_seq_len_multiple_of)
         elif sub_dataset_config['format'] == 'chat_video':
             sub_dataset = ChatVideoDataset(processor, data_path, dataset_type, name, video_dir, split, max_seq_len, data_args.conv_format,
                 data_args.is_master_worker, max_size, shuffle, max_num_frames, fps=fps, 
                 use_video_encoder=data_args.use_video_encoder if hasattr(data_args, "use_video_encoder") else False,
                 load_video_frames=data_args.load_video_frames if hasattr(data_args, "load_video_frames") else False,
-                packing_same_mm_media=packing_same_mm_media)
+                packing_same_mm_media=packing_same_mm_media, ensure_seq_len_multiple_of=ensure_seq_len_multiple_of)
         elif sub_dataset_config['format'] == 'classification':
             sub_dataset = ClassificationDataset(processor, data_path, dataset_type, name, split, max_seq_len,
                 data_args.is_master_worker, max_size, shuffle, max_num_images, vl_only, offline_sha=offline_sha, revision=revision)

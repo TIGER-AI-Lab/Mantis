@@ -46,10 +46,10 @@ max_seq_len=4096
 lora_enabled=false
 qlora_enabled=false
 OUTPUT_DIR="../../checkpoints"
-global_batch_size=32
+global_batch_size=128
 do_pretrain=true
 max_self_attn_len=$max_seq_len
-max_cross_attn_kv_len=4092
+max_cross_attn_kv_len=4096
 packing_type="cross_attn" # or "simple" or "cross_attn"
 use_ring_flash_attn=true
 
@@ -104,7 +104,7 @@ if [ -z $MASTER_ADDR ]; then
 fi
 if [ -z $MASTER_PORT ]; then
     echo "MASTER_PORT is empty"
-    export MASTER_PORT=12956
+    export MASTER_PORT=12957
 fi
 if [ -z $COUNT_NODE ]; then
     echo "COUNT_NODE is empty"

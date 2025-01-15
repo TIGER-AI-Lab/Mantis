@@ -35,7 +35,9 @@ class InternVLChatConfig(PretrainedConfig):
             ps_version='v1',
             min_dynamic_patch=1,
             max_dynamic_patch=6,
-            enable_cross_attention=False,
+            enable_cross_attention=True,
+            enable_shared_cross_attention=False,
+            local_attention_group_size=256*8,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -67,6 +69,9 @@ class InternVLChatConfig(PretrainedConfig):
         self.max_dynamic_patch = max_dynamic_patch
         self.enable_cross_attention = enable_cross_attention
         self.llm_config.enable_cross_attention = enable_cross_attention
+        self.enable_shared_cross_attention = enable_shared_cross_attention
+        self.llm_config.local_attention_group_size = local_attention_group_size
+        self.llm_config.enable_shared_cross_attention = enable_shared_cross_attention
 
         logger.info(f'vision_select_layer: {self.select_layer}')
         logger.info(f'ps_version: {self.ps_version}')

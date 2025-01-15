@@ -64,7 +64,7 @@ class RingAttentionSampler(DistributedSampler):
             self.num_samples = math.ceil(len(self.dataset) * self.num_replicas)  # type: ignore[arg-type]
         self.total_size = self.num_samples // self.num_replicas
         self.per_device_batch_size = per_device_batch_size
-        if self.total_size % self.per_device_batch_size != 0:
+        if self.per_device_batch_size and self.total_size % self.per_device_batch_size != 0:
             self.total_size = self.total_size - (self.total_size % self.per_device_batch_size) + self.per_device_batch_size
         
     def __iter__(self):
@@ -95,7 +95,7 @@ class RingAttentionSampler(DistributedSampler):
             indices = indices.repeat_interleave(self.num_replicas, dim=0).reshape(-1).tolist()
         else:
             indices = torch.tensor(indices).repeat_interleave(self.num_replicas).tolist()
-        assert len(indices) == self.num_samples, f"len(indices)={len(indices)}, self.num_samples={self.num_samples}"
+        # assert len(indices) == self.num_samples, f"len(indices)={len(indices)}, self.num_samples={self.num_samples}"
         
         print("Rank:", dist.get_rank(), "Sampler rank:", self.rank, "Num replicas:", self.num_replicas, "Indices:", indices[:10])
 
@@ -239,7 +239,7 @@ def find_all_linear_names(model):
         lora_module_names.remove('lm_head')
     return list(lora_module_names)
 
-def load_model(model_args, training_args):
+def load_model(model_args, training_args, data_args):
     print("Loading model...")
     torch_dtype = torch.bfloat16 if training_args.bf16 else torch.float16 if training_args.fp16 else torch.float32
     from transformers import AutoTokenizer, AutoModel
@@ -294,8 +294,9 @@ def load_model(model_args, training_args):
         # training_args.sampler_rank = dist.get_rank() // model_args.ring_attn_group_size
         training_args.num_replicas = model_args.ring_attn_group_size
         training_args.sampler_rank = dist.get_rank() % model_args.ring_attn_group_size
-        training_args.gradient_accumulation_steps *= training_args.num_replicas
-        training_args.per_device_train_batch_size *= training_args.num_replicas
+        # training_args.gradient_accumulation_steps *= training_args.num_replicas
+        # training_args.per_device_train_batch_size *= training_args.num_replicas
+        data_args.ensure_seq_len_multiple_of = 2 * model_args.ring_attn_group_size
         
     if model_args.problem_type == "generation":
         if model_args.enable_cross_attention and model_args.do_pretrain:
@@ -393,7 +394,7 @@ def main(
             training_args.resume_from_checkpoint = latest_checkpoint
             print("Resuming from checkpoint", latest_checkpoint)
     
-    model, processor = load_model(model_args, training_args)
+    model, processor = load_model(model_args, training_args, data_args)
     
     if model_args.conv_template:
         data_args.conv_format = conv_templates[model_args.conv_template] 
