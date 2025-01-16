@@ -824,6 +824,7 @@ class InternLM2CrossAttention(nn.Module):
             (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim,
             bias=config.bias,
         )
+        self.wq_kv_params = None
 
         self.wo = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.bias)
         self._init_rope()
@@ -859,6 +860,39 @@ class InternLM2CrossAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    def get_q_kv_weights(self):
+        if not self.wq_kv_params:
+            wqkv_weight = rearrange(
+                self.wqkv.weight,
+                '(h gs d) in -> h gs d in',
+                gs=2 + self.num_key_value_groups,
+                d=self.head_dim,
+            )
+            q_weights = wqkv_weight[:, : self.num_key_value_groups, :, :]
+            kv_weights = wqkv_weight[:, self.num_key_value_groups:, :, :]
+            q_weights = q_weights.reshape(-1, q_weights.size(-1))
+            kv_weights = kv_weights.reshape(-1, kv_weights.size(-1))
+            
+            # for bias
+            if self.wqkv.bias is not None:
+                wqkv_bias = rearrange(
+                    self.wqkv.bias,
+                    '(h gs d) -> h gs d',
+                    gs=2 + self.num_key_value_groups,
+                    d=self.head_dim,
+                )
+                q_bias = wqkv_bias[:, : self.num_key_value_groups, :]
+                kv_bias = wqkv_bias[:, self.num_key_value_groups:, :]
+                q_bias = q_bias.flatten()
+                kv_bias = kv_bias.flatten()
+            else:
+                q_bias=None
+                kv_bias=None
+            self.wq_kv_params = (q_weights, kv_weights, q_bias, kv_bias)
+        else:
+            q_weights, kv_weights, q_bias, kv_bias = self.wq_kv_params
+        return q_weights, kv_weights, q_bias, kv_bias
+            
     @staticmethod
     def _forward(
         self,
@@ -867,9 +901,9 @@ class InternLM2CrossAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         encoder_position_ids: Optional[torch.LongTensor] = None,
-        # past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
-        # use_cache: bool = False,
+        use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if 'padding_mask' in kwargs:
@@ -883,10 +917,7 @@ class InternLM2CrossAttention(nn.Module):
         encoder_bsz, encoder_q_len, _ = encoder_hidden_states.size()
         assert bsz == encoder_bsz, f"Batch size of query and key must be the same. Got {bsz} and {encoder_bsz}"
         
-        q_w = self.wqkv.weight[:self.num_heads * self.head_dim]
-        q_bias = self.wqkv.bias[:self.num_heads * self.head_dim] if self.wqkv.bias is not None else None
-        kv_w = self.wqkv.weight[self.num_heads * self.head_dim:]
-        kv_bias = self.wqkv.bias[self.num_heads * self.head_dim:] if self.wqkv.bias is not None else None
+        q_w, kv_w, q_bias, kv_bias = self.get_q_kv_weights()
         
         query_states = F.linear(hidden_states, q_w, q_bias)
         kv_states = F.linear(encoder_hidden_states, kv_w, kv_bias)
@@ -917,8 +948,8 @@ class InternLM2CrossAttention(nn.Module):
 
         q_len = query_states.shape[-2]
         kv_seq_len = key_states.shape[-2]
-        # if past_key_value is not None:
-        #     kv_seq_len += past_key_value[0].shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
         # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -926,12 +957,12 @@ class InternLM2CrossAttention(nn.Module):
         query_states = apply_rotary_pos_emb_ct(query_states, cos, sin, position_ids)
         key_states = apply_rotary_pos_emb_ct(key_states, cos, sin, encoder_position_ids)
         
-        # if past_key_value is not None:
-        #     # reuse k, v, self_attention
-        #     key_states = torch.cat([past_key_value[0], key_states], dim=2)
-        #     value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        if past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        # past_key_value = (key_states, value_states) if use_cache else None
+        past_key_value = (key_states, value_states) if use_cache else None
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -969,7 +1000,7 @@ class InternLM2CrossAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights, past_key_value
     
     def forward(self, *args, **kwargs):
         return self._forward(self, *args, **kwargs)
@@ -1094,10 +1125,7 @@ class InternLM2SDPACrossAttention(InternLM2CrossAttention):
         encoder_bsz, encoder_q_len, _ = encoder_hidden_states.size()
         assert bsz == encoder_bsz, f"Batch size of query and key must be the same. Got {bsz} and {encoder_bsz}"
         
-        q_w = self.wqkv.weight[:self.num_heads * self.head_dim]
-        q_bias = self.wqkv.bias[:self.num_heads * self.head_dim] if self.wqkv.bias is not None else None
-        kv_w = self.wqkv.weight[self.num_heads * self.head_dim:]
-        kv_bias = self.wqkv.bias[self.num_heads * self.head_dim:] if self.wqkv.bias is not None else None
+        q_w, kv_w, q_bias, kv_bias = self.get_q_kv_weights()
         
         query_states = F.linear(hidden_states, q_w, q_bias)
         kv_states = F.linear(encoder_hidden_states, kv_w, kv_bias)
@@ -1210,7 +1238,8 @@ class InternLM2FlashAttention2(InternLM2Attention):
             kv_seq_len += past_key_value[0].shape[-2]
 
         cos, sin = self.rotary_emb(value_states, seq_len=position_ids.max().item() + 1)
-
+        print(cos.shape, sin.shape, position_ids.shape, position_ids.max().item())
+        print(query_states.shape, key_states.shape)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -1424,9 +1453,9 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         encoder_position_ids: Optional[torch.LongTensor] = None,
-        # past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
-        # use_cache: bool = False,
+        use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # InternLM2FlashAttention2 attention does not support output_attentions
@@ -1447,10 +1476,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         encoder_bsz, encoder_q_len, _ = encoder_hidden_states.size()
         assert bsz == encoder_bsz, f"Batch size of query and key must be the same. Got {bsz} and {encoder_bsz}"
         
-        q_w = self.wqkv.weight[:self.num_heads * self.head_dim]
-        q_bias = self.wqkv.bias[:self.num_heads * self.head_dim] if self.wqkv.bias is not None else None
-        kv_w = self.wqkv.weight[self.num_heads * self.head_dim:]
-        kv_bias = self.wqkv.bias[self.num_heads * self.head_dim:] if self.wqkv.bias is not None else None
+        q_w, kv_w, q_bias, kv_bias = self.get_q_kv_weights()
         
         query_states = F.linear(hidden_states, q_w, q_bias)
         kv_states = F.linear(encoder_hidden_states, kv_w, kv_bias)
@@ -1459,7 +1485,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         key_states = kv_states[..., -2, :]
         value_states = kv_states[..., -1, :]
         
-        ### Original
+        # ## Original
         # qkv_states = self.wqkv(hidden_states)
 
         # qkv_states = rearrange(
@@ -1469,11 +1495,15 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         #     d=self.head_dim,
         # )
 
-        # query_states = qkv_states[..., : self.num_key_value_groups, :]
-        # query_states = rearrange(query_states, 'b q h gs d -> b q (h gs) d')
-        # key_states = qkv_states[..., -2, :]
-        # value_states = qkv_states[..., -1, :]
-        ### End Original
+        # _query_states = qkv_states[..., : self.num_key_value_groups, :]
+        # _query_states = rearrange(_query_states, 'b q h gs d -> b q (h gs) d')
+        # _key_states = qkv_states[..., -2, :]
+        # _value_states = qkv_states[..., -1, :]
+        
+        # # compute difference
+        # for key, value, _value in zip(['query', 'key', 'value'], [query_states, key_states, value_states], [_query_states, _key_states, _value_states]):
+        #     print(f"{key} diff: {(value - _value).abs().mean()}")
+        # ## End Original
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -1481,8 +1511,8 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
 
         q_len = query_states.shape[-2]
         kv_seq_len = key_states.shape[-2]
-        # if past_key_value is not None:
-        #     kv_seq_len += past_key_value[0].shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
 
         # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -1491,12 +1521,12 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         query_states = apply_rotary_pos_emb_ct(query_states, cos, sin, position_ids)
         key_states = apply_rotary_pos_emb_ct(key_states, cos, sin, encoder_position_ids)
 
-        # if past_key_value is not None:
-        #     # reuse k, v, self_attention
-        #     key_states = torch.cat([past_key_value[0], key_states], dim=2)
-        #     value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        if past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        # past_key_value = (key_states, value_states) if use_cache else None
+        past_key_value = (key_states, value_states) if use_cache else None
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -1511,7 +1541,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights, past_key_value
 
     def forward(self, *args, **kwargs):
         return self._forward(self, *args, **kwargs)
@@ -1694,14 +1724,21 @@ class InternLM2DecoderLayer(nn.Module):
         self.enable_shared_cross_attention = config.enable_shared_cross_attention
         self.local_attention_group_size = config.local_attention_group_size
 
-        self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
         if self.enable_cross_attention:
             if not self.enable_shared_cross_attention:
+                self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
                 self.cross_attention = INTERNLM2_CROSS_ATTENTION_CLASSES[config.attn_implementation](config=config)
                 self.cross_attention_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
                 self.cross_attn_attn_gate = torch.nn.Parameter(torch.zeros(1))
             else:
-                self.cross_attention_class = INTERNLM2_CROSS_ATTENTION_CLASSES[config.attn_implementation]
+                # use cross attention for both self and cross attention
+                self.attention = INTERNLM2_CROSS_ATTENTION_CLASSES[config.attn_implementation](config=config)
+                self.attention.is_causal = True
+        else:
+            # use cross attention for both self and cross attention
+            self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
+            
+        
             
         self.feed_forward = InternLM2MLP(config)
         self.attention_norm = InternLM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1716,7 +1753,6 @@ class InternLM2DecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         encoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_local_attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
@@ -1741,13 +1777,17 @@ class InternLM2DecoderLayer(nn.Module):
                 'Passing `padding_mask` is deprecated and will be removed in v4.37. '
                 'Please make sure use `attention_mask` instead.`'
             )
-            
-        if encoder_hidden_states is None:
+        
+        output_encoder_hidden_states = False
+        if encoder_hidden_states is None or not self.enable_cross_attention:
             residual = hidden_states
 
             hidden_states = self.attention_norm(hidden_states)
 
             # Self Attention
+            print(position_ids)
+            print(hidden_states.shape)
+            print(attention_mask)
             hidden_states, self_attn_weights, present_key_value = self.attention(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1792,59 +1832,89 @@ class InternLM2DecoderLayer(nn.Module):
                 )
                 hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
             else:
-                residual_encoder_hidden_states = encoder_hidden_states
-                encoder_hidden_states = self.attention_norm(encoder_hidden_states)
-                # local self attention for cross attention
-                kv_seq_len = encoder_hidden_states.size(1)
-                chunk_idxs = torch.arange(0, kv_seq_len, device=hidden_states.device)
-                chunk_idxs = torch.split(chunk_idxs, self.local_attention_group_size)
-                
-                local_self_attn_output = []
-                for local_idxs in chunk_idxs:
-                    local_encoder_hidden_states = encoder_hidden_states[:, local_idxs]
-                    local_encoder_position_ids = encoder_position_ids[:, local_idxs]
-                    if encoder_attention_mask is None:
-                        local_encoder_attention_mask = None
-                    elif encoder_local_attention_mask.dim() == 4:
-                        local_encoder_attention_mask = encoder_local_attention_mask[:, :, local_idxs, :][:, :, :, local_idxs]
-                    else:
-                        local_encoder_attention_mask = encoder_local_attention_mask[:, local_idxs]
-                    local_encoder_hidden_states, _, _ = self.attention(
-                        hidden_states=local_encoder_hidden_states,
-                        attention_mask=local_encoder_attention_mask,
-                        position_ids=local_encoder_position_ids,
-                        past_key_value=None,
-                        output_attentions=False,
-                        use_cache=False,
-                    )
-                    local_self_attn_output.append(local_encoder_hidden_states)
-                local_self_attn_output = torch.cat(local_self_attn_output, dim=1)
-                encoder_hidden_states = residual_encoder_hidden_states + local_self_attn_output
-                
-                # then cross attention with the 
+                # first norm
+                output_encoder_hidden_states = True
                 residual = hidden_states
+                residual_encoder = encoder_hidden_states
                 hidden_states = self.attention_norm(hidden_states)
-                # concatenate the encoder_hidden_states with the hidden_states
-                merged_kv_hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
-                merged_kv_position_ids = torch.cat([encoder_position_ids, position_ids], dim=1)
-                if encoder_attention_mask.dim() == 4:
-                    merged_kv_attention_mask = torch.cat([encoder_attention_mask, attention_mask], dim=3)
+                encoder_hidden_states = self.attention_norm(encoder_hidden_states)
+                
+                # first self attention using hidden_states as the query, and encoder_hidden_states as the key and value
+                if not use_cache or past_key_value is None:
+                    # we don't use the original encoder_hidden_states here as it keeps to be the orignal one without self attention
+                    # instead, we extract the encoder_hidden_states from the hidden_states of size [bsz, kv_seq_len+q_len, hidden_size]
+                    bsz, kv_seq_len, _ = encoder_hidden_states.size()
+                    merged_kv_hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
+                    merged_kv_position_ids = torch.cat([encoder_position_ids, position_ids], dim=1)
                 else:
-                    merged_kv_attention_mask = torch.cat([encoder_attention_mask, attention_mask], dim=1)
-                hidden_states, self_attn_weights, present_key_value = self.cross_attention_class._forward(
-                    self.attention,
+                    merged_kv_hidden_states = hidden_states
+                    merged_kv_position_ids = position_ids
+                
+                # then cross attention
+                hidden_states, self_attn_weights, present_key_value = self.attention(
                     hidden_states=hidden_states,
                     encoder_hidden_states=merged_kv_hidden_states,
                     attention_mask=attention_mask,
-                    encoder_attention_mask=merged_kv_attention_mask,
+                    encoder_attention_mask=attention_mask,
                     position_ids=position_ids,
                     encoder_position_ids=merged_kv_position_ids,
                     output_attentions=output_attentions,
-                    use_cache=False,
+                    use_cache=use_cache,
                     past_key_value=past_key_value,
                 )
+                
+                # locally self attention for the encoder_hidden_states
+                if not use_cache or past_key_value is None:
+                    # local self attention for cross attention
+                    kv_seq_len = encoder_hidden_states.size(1)
+                    chunk_idxs = torch.arange(0, kv_seq_len, device=hidden_states.device)
+                    chunk_idxs = torch.split(chunk_idxs, self.local_attention_group_size)
+                    
+                    local_self_attn_output = []
+                    encoder_local_attention_mask = encoder_attention_mask
+                    for local_idxs in chunk_idxs:
+                        local_encoder_hidden_states = encoder_hidden_states[:, local_idxs]
+                        local_encoder_position_ids = encoder_position_ids[:, local_idxs]
+                        if encoder_attention_mask is None:
+                            local_encoder_attention_mask = None
+                        elif encoder_local_attention_mask.dim() == 4:
+                            local_encoder_attention_mask = encoder_local_attention_mask[:, :, local_idxs, :][:, :, :, local_idxs]
+                        else:
+                            local_encoder_attention_mask = encoder_local_attention_mask[:, local_idxs]
+                        local_encoder_hidden_states, _, _ = self.attention(
+                            hidden_states=local_encoder_hidden_states,
+                            attention_mask=local_encoder_attention_mask,
+                            encoder_hidden_states=local_encoder_hidden_states,
+                            encoder_attention_mask=local_encoder_attention_mask,
+                            position_ids=local_encoder_position_ids,
+                            encoder_position_ids=local_encoder_position_ids,
+                            past_key_value=None,
+                            output_attentions=False,
+                            use_cache=False,
+                        )
+                        local_self_attn_output.append(local_encoder_hidden_states)
+                    encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
+                
+                    # # # DEBUG: compare difference, comment out this part when debugging
+                    # _residual = self.attention_norm(torch.cat([residual_encoder, residual], dim=1))
+                    # ori_hidden_states, _, _ = self.attention(
+                    #     hidden_states=_residual,
+                    #     encoder_hidden_states=_residual,
+                    #     attention_mask=None,
+                    #     encoder_attention_mask=None,
+                    #     position_ids=torch.cat([encoder_position_ids, position_ids], dim=1),
+                    #     encoder_position_ids=torch.cat([encoder_position_ids, position_ids], dim=1),
+                    #     output_attentions=output_attentions,
+                    #     use_cache=False,
+                    #     past_key_value=None,
+                    # )
+                    # print(f"encoder part diff: {(encoder_hidden_states - ori_hidden_states[:, :kv_seq_len]).abs().mean()}")
+                    # print(f"dense part diff: {(hidden_states - ori_hidden_states[:, kv_seq_len:]).abs().mean()}")
+                    # # # DEBUG: compare difference, comment out this part when debugging
+                
+                # add residual 
                 hidden_states = residual + hidden_states
-                present_key_value = None
+                encoder_hidden_states = residual_encoder + encoder_hidden_states
                     
         # Fully Connected
         residual = hidden_states
@@ -1859,7 +1929,9 @@ class InternLM2DecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
-
+            
+        if output_encoder_hidden_states:
+            outputs += (encoder_hidden_states,)
         return outputs
 
 
@@ -2100,6 +2172,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.tok_embeddings(input_ids)
 
+        # prepare attention mask
         encoder_attention_mask_expaned_for_normal_attention = False
         if self.config.attn_implementation == 'flash_attention_2':
             # 2d mask is passed through the layers
@@ -2110,29 +2183,16 @@ class InternLM2Model(InternLM2PreTrainedModel):
                 attention_mask = torch.ones(
                     (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
                 )
-            if attention_mask.dim() == 2:
-                attention_mask = self._prepare_decoder_attention_mask(
-                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-                )
-            else:
-                # attention_mask is already 3D(4D for attention heads)
-                attention_mask = attention_mask.to(inputs_embeds.device)
             if encoder_hidden_states is not None:
                 if encoder_attention_mask is None:
                     encoder_attention_mask = torch.ones(
                         (batch_size, encoder_hidden_states.shape[1]), dtype=torch.bool, device=inputs_embeds.device
                     )
-                if encoder_attention_mask.dim() == 2:
-                    encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=seq_length).to(
-                        inputs_embeds.device
-                    )
-                    encoder_attention_mask_expaned_for_normal_attention = True
-                else:
-                    # encoder_attention_mask is already 3D(4D for attention heads)
-                    encoder_attention_mask = encoder_attention_mask.to(inputs_embeds.device)
         
         encoder_local_attention_mask = None
-        if encoder_hidden_states is not None:
+        # prepare different attention masks if enable_shared_cross_attention is True
+        if self.config.enable_shared_cross_attention and encoder_hidden_states is not None:
+            # prepare encoder local attention mask, this is used for the local grouped self attention in the encoder kv states
             if encoder_attention_mask is None:
                 encoder_local_attention_mask = None
             # get group len of each encoder hidden states
@@ -2179,6 +2239,65 @@ class InternLM2Model(InternLM2PreTrainedModel):
                 encoder_local_attention_mask = create_causal_pattern_batched(encoder_attention_mask_min_q.squeeze(1).to(torch.int))
                 encoder_local_attention_mask = encoder_local_attention_mask.unsqueeze(1)
                 
+            # then attention mask with be of size [bsz, 1, q_len, q_len+kv_len]
+            # and encoder_attention_mask will be the encoder_local_attention_mask of size [bsz, 1, kv_len, kv_len] for local attention
+            batch_size, q_len, _ = inputs_embeds.size()
+            batch_size, kv_seq_len, _ = encoder_hidden_states.size()
+            if encoder_attention_mask is None:
+                if attention_mask is None:
+                    merged_kv_attention_mask = None
+                elif attention_mask.dim() == 4:
+                    merged_kv_attention_mask = torch.cat([
+                        torch.ones((batch_size, 1, q_len, kv_seq_len), device=attention_mask.device, dtype=attention_mask.dtype),
+                        attention_mask
+                    ], dim=3)
+                else:
+                    merged_kv_attention_mask = torch.cat([
+                        torch.ones((batch_size, q_len), device=attention_mask.device, dtype=attention_mask.dtype),
+                        attention_mask
+                    ], dim=1)
+            else:  
+                if encoder_attention_mask.dim() == 4:
+                    if attention_mask is None:
+                        merged_kv_attention_mask = torch.cat([
+                            encoder_attention_mask, 
+                            torch.ones((batch_size, 1, q_len, q_len), device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                        ], dim=3)
+                    else:
+                        merged_kv_attention_mask = torch.cat([encoder_attention_mask, attention_mask], dim=3)
+                else:
+                    # dim is 2
+                    if attention_mask is None:
+                        merged_kv_attention_mask = torch.cat([
+                            encoder_attention_mask, 
+                            torch.ones((batch_size, q_len), device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                        ], dim=1)
+                    else:  
+                        merged_kv_attention_mask = torch.cat([encoder_attention_mask, attention_mask], dim=1)
+            
+            attention_mask = merged_kv_attention_mask # [bsz, 1, q_len, kv_len+q_len] or [bsz, kv_len+q_len]
+            encoder_attention_mask = encoder_local_attention_mask # [bsz, 1, kv_len, kv_len] or [bsz, kv_len]
+            
+            position_ids += encoder_position_ids.max(-1).values.unsqueeze(0) # to debug
+        
+        # expand the attention mask if necessary    
+        if not self.config.attn_implementation == 'flash_attention_2':
+            if attention_mask.dim() == 2:
+                attention_mask = self._prepare_decoder_attention_mask(
+                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                )
+            else:
+                # attention_mask is already 3D(4D for attention heads)
+                attention_mask = attention_mask.to(inputs_embeds.device)
+            if encoder_attention_mask.dim() == 2:
+                encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=seq_length).to(
+                    inputs_embeds.device
+                )
+                encoder_attention_mask_expaned_for_normal_attention = True
+            else:
+                # encoder_attention_mask is already 3D(4D for attention heads)
+                encoder_attention_mask = encoder_attention_mask.to(inputs_embeds.device)
+
         # embed positions
         hidden_states = inputs_embeds
 
@@ -2271,7 +2390,6 @@ class InternLM2Model(InternLM2PreTrainedModel):
                     encoder_attention_mask,
                     position_ids,
                     encoder_position_ids,
-                    encoder_local_attention_mask,
                     None,
                 )
             else:
@@ -2282,7 +2400,6 @@ class InternLM2Model(InternLM2PreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     position_ids=position_ids,
                     encoder_position_ids=encoder_position_ids,
-                    encoder_local_attention_mask=encoder_local_attention_mask,
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
@@ -2295,6 +2412,10 @@ class InternLM2Model(InternLM2PreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
+            
+            if encoder_hidden_states is not None and self.config.enable_shared_cross_attention:
+                # update encoder_hidden_states
+                encoder_hidden_states = layer_outputs[-1]
 
         hidden_states = self.norm(hidden_states)
 
@@ -2564,8 +2685,7 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
+            past_length = past_key_values[0][0].shape[2] # get the layer 0's k value 's sequence length
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
                 remove_prefix_length = past_length
@@ -2579,12 +2699,6 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         encoder_hidden_states = kwargs.get('encoder_hidden_states', None)
         encoder_attention_mask = kwargs.get('encoder_attention_mask', None)
         encoder_position_ids = kwargs.get('encoder_position_ids', None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
         
         if encoder_hidden_states is not None and encoder_position_ids is None:
             if encoder_attention_mask is not None:
@@ -2596,6 +2710,15 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
                     encoder_hidden_states.shape[1], dtype=torch.long, device=encoder_hidden_states.device
                 )
                 encoder_position_ids = encoder_position_ids.unsqueeze(0)
+        
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            if self.config.enable_shared_cross_attention and encoder_hidden_states is not None:
+                position_ids += encoder_position_ids.max(-1).values.unsqueeze(0) # to debug
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:

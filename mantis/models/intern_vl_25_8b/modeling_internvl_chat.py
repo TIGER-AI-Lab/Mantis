@@ -103,7 +103,7 @@ class InternVLChatModel(PreTrainedModel):
         self.enable_cross_attention = config.enable_cross_attention
         use_flash_attn = use_flash_attn if has_flash_attn else False
         config.vision_config.use_flash_attn = True if use_flash_attn else False
-        if config._attn_implementation is not None and config._attn_implementation not in ['eager', 'flash_attention_2']:
+        if config._attn_implementation is not None and config._attn_implementation not in ['eager', 'flash_attention_2', 'sdpa']:
             config.llm_config.attn_implementation = config._attn_implementation
         if config._attn_implementation == 'eager':
             config.llm_config.attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
