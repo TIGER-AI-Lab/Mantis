@@ -101,6 +101,7 @@ class InternVLChatModel(PreTrainedModel):
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.ps_version
         self.enable_cross_attention = config.enable_cross_attention
+        self.enable_shared_cross_attention = config.enable_shared_cross_attention
         use_flash_attn = use_flash_attn if has_flash_attn else False
         config.vision_config.use_flash_attn = True if use_flash_attn else False
         if config._attn_implementation is not None and config._attn_implementation not in ['eager', 'flash_attention_2', 'sdpa']:
@@ -143,6 +144,9 @@ class InternVLChatModel(PreTrainedModel):
         )
 
         self.img_context_token_id = None
+        self.img_start_token_id = None
+        self.img_end_token_id = None
+        self.bos_token_id = None
         self.conv_template = get_conv_template(self.template)
         self.system_message = self.conv_template.system_message
         
@@ -276,7 +280,85 @@ class InternVLChatModel(PreTrainedModel):
                         packed_encoder_attention_mask.shape[-1] == encoder_attention_mask.shape[-1]:
                         raise ValueError(f'{packed_encoder_attention_mask.shape} != {encoder_attention_mask.shape}')
                     encoder_attention_mask = packed_encoder_attention_mask
-
+            
+            if self.enable_shared_cross_attention:
+                # select the vit part as the encoder hidden states
+                selected = (input_ids == self.img_context_token_id) | (input_ids == self.img_start_token_id) | (input_ids == self.img_end_token_id)
+                all_encoder_hidden_states = []
+                all_text_input_embeds = []
+                all_text_attention_mask = []
+                all_encoder_attention_mask = []
+                for idx in range(B):
+                    b_selected = selected[idx]
+                    encoder_hidden_states = input_embeds[idx][b_selected]
+                    text_input_embeds = input_embeds[idx][~b_selected]
+                    if attention_mask.dim() == 2:
+                        encoder_attention_mask = attention_mask[idx][b_selected]
+                        text_attention_mask = attention_mask[idx][~b_selected]
+                    elif attention_mask.dim() == 4:
+                        encoder_attention_mask = attention_mask[idx][:, ~b_selected][..., b_selected].reshape(1, len(text_input_embeds), len(encoder_hidden_states))
+                        text_attention_mask = attention_mask[idx][:, :, ~b_selected][..., ~b_selected].reshape(1, len(text_input_embeds), len(text_input_embeds))
+                    else:
+                        raise NotImplementedError(f'attention_mask.dim()={attention_mask.dim()}')
+                    all_encoder_hidden_states.append(encoder_hidden_states)
+                    all_text_input_embeds.append(text_input_embeds)
+                    all_text_attention_mask.append(text_attention_mask)
+                    all_encoder_attention_mask.append(encoder_attention_mask)
+                
+                # padding
+                max_q_len = max([len(text_input_embeds) for text_input_embeds in all_text_input_embeds])
+                max_k_len = max([len(encoder_hidden_states) for encoder_hidden_states in all_encoder_hidden_states])
+                for idx in range(B):
+                    all_encoder_hidden_states[idx] = torch.cat([
+                        all_encoder_hidden_states[idx],
+                        torch.zeros(max_k_len - len(all_encoder_hidden_states[idx]), C, device=encoder_hidden_states.device, dtype=encoder_hidden_states.dtype)
+                    ], dim=0) if len(all_encoder_hidden_states[idx]) < max_k_len else all_encoder_hidden_states[idx]
+                    all_text_input_embeds[idx] = torch.cat([
+                        all_text_input_embeds[idx],
+                        torch.zeros(max_q_len - len(all_text_input_embeds[idx]), C, device=text_input_embeds.device, dtype=text_input_embeds.dtype)
+                    ], dim=0) if len(all_text_input_embeds[idx]) < max_q_len else all_text_input_embeds[idx]
+                    if attention_mask.dim() == 2:
+                        all_encoder_attention_mask[idx] = torch.cat([
+                            all_encoder_attention_mask[idx],
+                            torch.zeros(max_k_len - len(all_encoder_attention_mask[idx]), device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                        ], dim=0) if len(all_encoder_attention_mask[idx]) < max_k_len else all_encoder_attention_mask[idx]
+                        all_text_attention_mask[idx] = torch.cat([
+                            all_text_attention_mask[idx],
+                            torch.zeros(max_q_len - len(all_text_attention_mask[idx]), device=text_attention_mask.device, dtype=text_attention_mask.dtype)
+                        ], dim=0) if len(all_text_attention_mask[idx]) < max_q_len else all_text_attention_mask[idx]
+                    elif attention_mask.dim() == 4:
+                        padding_size = all_encoder_attention_mask[idx].shape
+                        padding_size = (padding_size[0], max_q_len - padding_size[1], padding_size[2])
+                        all_encoder_attention_mask[idx] = torch.cat([
+                                all_encoder_attention_mask[idx],
+                                torch.zeros(padding_size, device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                            ], dim=1) if all_encoder_attention_mask[idx].shape[1] < max_k_len else all_encoder_attention_mask[idx]
+                        padding_size = all_encoder_attention_mask[idx].shape
+                        padding_size = (padding_size[0], padding_size[1], max_k_len - padding_size[2])
+                        all_encoder_attention_mask[idx] = torch.cat([
+                                all_encoder_attention_mask[idx],
+                                torch.zeros(padding_size, device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                            ], dim=2) if all_encoder_attention_mask[idx].shape[2] < max_k_len else all_encoder_attention_mask[idx]
+                        
+                        padding_size = all_text_attention_mask[idx].shape
+                        padding_size = (padding_size[0], max_q_len - padding_size[1], padding_size[2])
+                        all_text_attention_mask[idx] = torch.cat([
+                                all_text_attention_mask[idx],
+                                torch.zeros(padding_size, device=text_attention_mask.device, dtype=text_attention_mask.dtype)
+                            ], dim=1) if all_text_attention_mask[idx].shape[1] < max_q_len else all_text_attention_mask[idx]
+                        padding_size = all_text_attention_mask[idx].shape
+                        padding_size = (padding_size[0], padding_size[1], max_q_len - padding_size[2])
+                        all_text_attention_mask[idx] = torch.cat([
+                                all_text_attention_mask[idx],
+                                torch.zeros(padding_size, device=text_attention_mask.device, dtype=text_attention_mask.dtype)
+                            ], dim=2) if all_text_attention_mask[idx].shape[2] < max_q_len else all_text_attention_mask[idx]
+                    else:
+                        raise NotImplementedError(f'attention_mask.dim()={attention_mask.dim()}')
+                encoder_hidden_states = torch.stack(all_encoder_hidden_states, dim=0)
+                input_embeds = torch.stack(all_text_input_embeds, dim=0)
+                encoder_attention_mask = torch.stack(all_encoder_attention_mask, dim=0)
+                attention_mask = torch.stack(all_text_attention_mask, dim=0)
+                
             input_embeds = input_embeds.reshape(B, N, C)
             
         outputs = self.language_model(
@@ -501,6 +583,7 @@ class InternVLChatModel(PreTrainedModel):
                 input_embeds[selected] = vit_embeds.reshape(-1, C).to(input_embeds.device)
 
                 input_embeds = input_embeds.reshape(B, N, C)
+                input_ids = input_ids.reshape(B, N)
             else:
                 num_images, num_tokens_per_image, C = vit_embeds.shape
                 num_imgs_per_sample = input_ids.eq(self.img_context_token_id).sum(dim=1)
@@ -525,6 +608,85 @@ class InternVLChatModel(PreTrainedModel):
                 vit_embeds = torch.stack(vit_embeds_per_sample, dim=0)
                 encoder_hidden_states = vit_embeds.reshape(B, -1, C)
                 encoder_attention_mask = encoder_attention_mask.reshape(B, -1)
+            
+            if self.enable_shared_cross_attention:
+                # select the vit part as the encoder hidden states
+                selected = (input_ids == self.img_context_token_id) | (input_ids == self.img_start_token_id) | (input_ids == self.img_end_token_id) | (input_ids == self.bos_token_id)
+                all_encoder_hidden_states = []
+                all_text_input_embeds = []
+                all_text_attention_mask = []
+                all_encoder_attention_mask = []
+                for idx in range(B):
+                    b_selected = selected[idx]
+                    encoder_hidden_states = input_embeds[idx][b_selected]
+                    text_input_embeds = input_embeds[idx][~b_selected]
+                    if attention_mask.dim() == 2:
+                        encoder_attention_mask = attention_mask[idx][b_selected]
+                        text_attention_mask = attention_mask[idx][~b_selected]
+                    elif attention_mask.dim() == 4:
+                        encoder_attention_mask = attention_mask[idx][:, ~b_selected][..., b_selected].reshape(1, len(text_input_embeds), len(encoder_hidden_states))
+                        text_attention_mask = attention_mask[idx][:, :, ~b_selected][..., ~b_selected].reshape(1, len(text_input_embeds), len(text_input_embeds))
+                    else:
+                        raise NotImplementedError(f'attention_mask.dim()={attention_mask.dim()}')
+                    all_encoder_hidden_states.append(encoder_hidden_states)
+                    all_text_input_embeds.append(text_input_embeds)
+                    all_text_attention_mask.append(text_attention_mask)
+                    all_encoder_attention_mask.append(encoder_attention_mask)
+                
+                # padding
+                max_q_len = max([len(text_input_embeds) for text_input_embeds in all_text_input_embeds])
+                max_k_len = max([len(encoder_hidden_states) for encoder_hidden_states in all_encoder_hidden_states])
+                for idx in range(B):
+                    all_encoder_hidden_states[idx] = torch.cat([
+                        all_encoder_hidden_states[idx],
+                        torch.zeros(max_k_len - len(all_encoder_hidden_states[idx]), C, device=encoder_hidden_states.device, dtype=encoder_hidden_states.dtype)
+                    ], dim=0) if len(all_encoder_hidden_states[idx]) < max_k_len else all_encoder_hidden_states[idx]
+                    all_text_input_embeds[idx] = torch.cat([
+                        all_text_input_embeds[idx],
+                        torch.zeros(max_q_len - len(all_text_input_embeds[idx]), C, device=text_input_embeds.device, dtype=text_input_embeds.dtype)
+                    ], dim=0) if len(all_text_input_embeds[idx]) < max_q_len else all_text_input_embeds[idx]
+                    if attention_mask.dim() == 2:
+                        all_encoder_attention_mask[idx] = torch.cat([
+                            all_encoder_attention_mask[idx],
+                            torch.zeros(max_k_len - len(all_encoder_attention_mask[idx]), device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                        ], dim=0) if len(all_encoder_attention_mask[idx]) < max_k_len else all_encoder_attention_mask[idx]
+                        all_text_attention_mask[idx] = torch.cat([
+                            all_text_attention_mask[idx],
+                            torch.zeros(max_q_len - len(all_text_attention_mask[idx]), device=text_attention_mask.device, dtype=text_attention_mask.dtype)
+                        ], dim=0) if len(all_text_attention_mask[idx]) < max_q_len else all_text_attention_mask[idx]
+                    elif attention_mask.dim() == 4:
+                        padding_size = all_encoder_attention_mask[idx].shape
+                        padding_size = (padding_size[0], max_q_len - padding_size[1], padding_size[2])
+                        all_encoder_attention_mask[idx] = torch.cat([
+                                all_encoder_attention_mask[idx],
+                                torch.zeros(padding_size, device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                            ], dim=1) if all_encoder_attention_mask[idx].shape[1] < max_k_len else all_encoder_attention_mask[idx]
+                        padding_size = all_encoder_attention_mask[idx].shape
+                        padding_size = (padding_size[0], padding_size[1], max_k_len - padding_size[2])
+                        all_encoder_attention_mask[idx] = torch.cat([
+                                all_encoder_attention_mask[idx],
+                                torch.zeros(padding_size, device=encoder_attention_mask.device, dtype=encoder_attention_mask.dtype)
+                            ], dim=2) if all_encoder_attention_mask[idx].shape[2] < max_k_len else all_encoder_attention_mask[idx]
+                        
+                        padding_size = all_text_attention_mask[idx].shape
+                        padding_size = (padding_size[0], max_q_len - padding_size[1], padding_size[2])
+                        all_text_attention_mask[idx] = torch.cat([
+                                all_text_attention_mask[idx],
+                                torch.zeros(padding_size, device=text_attention_mask.device, dtype=text_attention_mask.dtype)
+                            ], dim=1) if all_text_attention_mask[idx].shape[1] < max_q_len else all_text_attention_mask[idx]
+                        padding_size = all_text_attention_mask[idx].shape
+                        padding_size = (padding_size[0], padding_size[1], max_q_len - padding_size[2])
+                        all_text_attention_mask[idx] = torch.cat([
+                                all_text_attention_mask[idx],
+                                torch.zeros(padding_size, device=text_attention_mask.device, dtype=text_attention_mask.dtype)
+                            ], dim=2) if all_text_attention_mask[idx].shape[2] < max_q_len else all_text_attention_mask[idx]
+                    else:
+                        raise NotImplementedError(f'attention_mask.dim()={attention_mask.dim()}')
+                encoder_hidden_states = torch.stack(all_encoder_hidden_states, dim=0)
+                input_embeds = torch.stack(all_text_input_embeds, dim=0)
+                encoder_attention_mask = torch.stack(all_encoder_attention_mask, dim=0)
+                attention_mask = torch.stack(all_text_attention_mask, dim=0)
+                
         else:
             input_embeds = self.language_model.get_input_embeddings()(input_ids)
 

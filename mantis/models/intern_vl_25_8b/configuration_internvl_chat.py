@@ -37,7 +37,7 @@ class InternVLChatConfig(PretrainedConfig):
             max_dynamic_patch=6,
             enable_cross_attention=False,
             enable_shared_cross_attention=False,
-            local_attention_group_size=256*8,
+            local_attention_group_size=258*8, # 258 =256 + 2, 2 for <img> and </img>, and 8 for the local group attention
             **kwargs):
         super().__init__(**kwargs)
 
@@ -68,11 +68,14 @@ class InternVLChatConfig(PretrainedConfig):
         self.min_dynamic_patch = min_dynamic_patch
         self.max_dynamic_patch = max_dynamic_patch
         self.enable_cross_attention = enable_cross_attention
+        local_attention_group_size = local_attention_group_size + 258 if use_thumbnail else local_attention_group_size
         self.local_attention_group_size = local_attention_group_size
         self.enable_shared_cross_attention = enable_shared_cross_attention
         self.llm_config.enable_cross_attention = enable_cross_attention
         self.llm_config.local_attention_group_size = local_attention_group_size
         self.llm_config.enable_shared_cross_attention = enable_shared_cross_attention
+        assert [x==True for x in [self.enable_cross_attention, self.enable_shared_cross_attention]].count(True) <= 1, \
+            "Only one of enable_cross_attention and enable_shared_cross_attention can be True."
 
         logger.info(f'vision_select_layer: {self.select_layer}')
         logger.info(f'ps_version: {self.ps_version}')

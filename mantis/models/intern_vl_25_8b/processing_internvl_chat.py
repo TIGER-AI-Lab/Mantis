@@ -180,6 +180,7 @@ class InternVLChatProcessor(ProcessorMixin):
         video_num_segments=32,
         max_frame_num_patches=1,
         enable_cross_attention=False,
+        enable_shared_cross_attention=False,
         IMAGENET_MEAN=(0.485, 0.456, 0.406),
         IMAGENET_STD=(0.229, 0.224, 0.225),
         IMG_START_TOKEN='<img>', 
@@ -189,6 +190,7 @@ class InternVLChatProcessor(ProcessorMixin):
         ):
         self.num_image_token = num_image_token
         self.enable_cross_attention = enable_cross_attention
+        self.enable_shared_cross_attention = enable_shared_cross_attention
         self.input_size = input_size
         self.max_num_patches = max_num_patches
         self.max_frame_num_patches = max_frame_num_patches
@@ -204,6 +206,11 @@ class InternVLChatProcessor(ProcessorMixin):
         
         img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
         self.img_context_token_id = img_context_token_id
+        img_start_token_id = tokenizer.convert_tokens_to_ids(IMG_START_TOKEN)
+        self.img_start_token_id = img_start_token_id
+        img_end_token_id = tokenizer.convert_tokens_to_ids(IMG_END_TOKEN)
+        self.img_end_token_id = img_end_token_id
+        self.bos_token_id = tokenizer.bos_token_id
         super().__init__(tokenizer)
 
     def __call__(
@@ -311,8 +318,24 @@ class InternVLChatProcessor(ProcessorMixin):
                     video_idx += 1
                 else:
                     raise ValueError(f"Invalid placeholder: {placeholder}")
+            
+            if self.enable_shared_cross_attention:
+                # put all the <image> and <video> placeholders to the starting of each text
+                for i in range(len(texts)):
+                    cur_text = texts[i]
+                    text_prefix = ""
+                    image_placeholder_idxs = find_all_str_indices(cur_text, "<image>")
+                    video_placeholder_idxs = find_all_str_indices(cur_text, "<video>")
+                    place_holder_idxs = sorted([(idx, "<image>") for idx in image_placeholder_idxs] + [(idx, "<video>") for idx in video_placeholder_idxs], key=lambda x: x[0])
+                    for j, (idx, placeholder) in enumerate(place_holder_idxs):
+                        text_prefix += placeholder + "\n"
+                    texts[i] = text_prefix + cur_text.replace("<image>", "").replace("<video>", "")
         else:
             merged_pixel_values = None
+        
+        
+            
+        
         if merged_pixel_values:
             merged_pixel_values = torch.cat(merged_pixel_values)
         
