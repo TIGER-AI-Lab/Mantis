@@ -561,9 +561,22 @@ class InternVLChatModel(PreTrainedModel):
             visual_features: Optional[torch.FloatTensor] = None,
             generation_config: Optional[GenerationConfig] = None,
             output_hidden_states: Optional[bool] = None,
+            benchmark_efficiency: Optional[bool] = False,
             **generate_kwargs,
     ) -> torch.LongTensor:
+        
+        if benchmark_efficiency:
+            import time
+            efficiency_metrics = {
+                "total_vit_forward_time": 0.0,
+                "total_prefill_time": 0.0,
+                "total_decoding_time": 0.0,
+                "vit_forward_time_per_image": 0.0,
+                "prefill_time_per_token": 0.0,
+                "decoding_time_per_token": 0.0,
+            }
 
+            start = time.time()
         assert self.img_context_token_id is not None
         encoder_hidden_states = None
         encoder_attention_mask = None
@@ -689,7 +702,11 @@ class InternVLChatModel(PreTrainedModel):
                 
         else:
             input_embeds = self.language_model.get_input_embeddings()(input_ids)
-
+        if benchmark_efficiency:
+            end = time.time()
+            efficiency_metrics["total_prefill_time"] += end - start
+            efficiency_metrics["vit_forward_time_per_image"] = (end - start) / pixel_values.shape[0]
+        
         outputs = self.language_model.generate(
             inputs_embeds=input_embeds,
             attention_mask=attention_mask,
