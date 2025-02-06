@@ -3,13 +3,14 @@ import fire
 # If you want to load a model using multiple GPUs, please refer to the `Multiple GPUs` section.
 from mantis.models.intern_vl_25_8b import InternVLChatModel, InternVLChatConfig, InternVLChatProcessor, InternLM2Tokenizer
 from tqdm import tqdm
+from collections import defaultdict
 
 def main(
     model_path: str='OpenGVLab/InternVL2_5-8B',
     use_flash_attn: bool=True,
     enable_shared_cross_attention: bool=True,
-    local_attention_group_size: int=258*4,
-    run_times=100,
+    local_attention_group_size: int=258*32,
+    run_times=5,
 ):
     
     tokenizer = InternLM2Tokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
@@ -49,11 +50,23 @@ def main(
     
     print('Start benchmarking...')
     start = torch.cuda.Event(enable_timing=True)
-    for _ in tqdm(range(run_times), desc='Running...'):
-        responses = model.generate(**model_inputs, **generation_config)
     end = torch.cuda.Event(enable_timing=True)
+    start.record()  
+    print("Number of tokens", model_inputs['input_ids'].shape[1])
+    print("Number of frames", model_inputs['pixel_values'].shape[0])
+    metrics = defaultdict(float)
+    for _ in tqdm(range(run_times), desc='Running...'):
+        responses, _metrics = model.generate(**model_inputs, **generation_config, benchmark_efficiency=True)
+        for key, value in _metrics.items():
+            metrics[key] += value
+    for key in metrics:
+        metrics[key] /= run_times
+    end.record()
     torch.cuda.synchronize()
-    print(f'Average time: {(end.elapsed_time(start) / run_times):.2f}ms')
+    print(f'Average time: {(start.elapsed_time(end) / run_times):.2f}ms')
+    print(f"Metrics:")
+    for key, value in metrics.items():
+        print(f"  {key}: {value:.2f}")
     response = processor.decode(responses[0])
     print(response)
     

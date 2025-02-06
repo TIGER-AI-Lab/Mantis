@@ -953,7 +953,7 @@ class InternLM2CrossAttention(nn.Module):
         # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        cos, sin = self.rotary_emb(value_states, seq_len=max(kv_seq_len, q_len))
+        cos, sin = self.rotary_emb(value_states, seq_len=max(position_ids.max() + 1, encoder_position_ids.max()) + 1)
         query_states = apply_rotary_pos_emb_ct(query_states, cos, sin, position_ids)
         key_states = apply_rotary_pos_emb_ct(key_states, cos, sin, encoder_position_ids)
         
@@ -1775,13 +1775,17 @@ class InternLM2DecoderLayer(nn.Module):
                 'Please make sure use `attention_mask` instead.`'
             )
         
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
         output_encoder_hidden_states = False
         if encoder_hidden_states is None or (not self.enable_cross_attention and not self.enable_shared_cross_attention):
+            # print("Normal Decoder Layer")
             residual = hidden_states
 
             hidden_states = self.attention_norm(hidden_states)
 
             # Self Attention
+            start.record()
             hidden_states, self_attn_weights, present_key_value = self.attention(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1791,6 +1795,9 @@ class InternLM2DecoderLayer(nn.Module):
                 use_cache=use_cache,
                 **kwargs,
             )
+            end.record()
+            torch.cuda.synchronize()
+            # print(f"Self Attention Time: {start.elapsed_time(end)}")
             hidden_states = residual + hidden_states
         # Cross Attention
         elif encoder_hidden_states is not None:
@@ -1826,6 +1833,7 @@ class InternLM2DecoderLayer(nn.Module):
                 )
                 hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
             elif self.enable_shared_cross_attention:
+                # print("Shared Cross Attention")
                 # first norm
                 output_encoder_hidden_states = True
                 residual = hidden_states
@@ -1843,6 +1851,7 @@ class InternLM2DecoderLayer(nn.Module):
                     merged_kv_hidden_states = hidden_states
                     merged_kv_position_ids = position_ids
                 
+                start.record()
                 # then cross attention
                 hidden_states, self_attn_weights, present_key_value = self.attention(
                     hidden_states=hidden_states,
@@ -1855,6 +1864,10 @@ class InternLM2DecoderLayer(nn.Module):
                     use_cache=use_cache,
                     past_key_value=past_key_value,
                 )
+                end.record()
+                torch.cuda.synchronize()
+                # print(f"Text to kv self attention Time: {start.elapsed_time(end)}")
+                start.record()
                 
                 # locally self attention for the encoder_hidden_states
                 if not use_cache or past_key_value is None:
@@ -1862,8 +1875,47 @@ class InternLM2DecoderLayer(nn.Module):
                     kv_seq_len = encoder_hidden_states.size(1)
                     chunk_idxs = torch.arange(1, kv_seq_len, device=hidden_states.device) # 0 is bos token
                     chunk_idxs = torch.split(chunk_idxs, self.local_attention_group_size)
+                    assert len(chunk_idxs[-1]) == self.local_attention_group_size, \
+                        f"last chunk size: {len(chunk_idxs[-1])} not equal to {self.local_attention_group_size}, please adjust the local_attention_group_size"
                     
+                    # ### sequential version
+                    # local_self_attn_output = []
+                    # encoder_local_attention_mask = encoder_attention_mask
+                    # previous_sparse_attn_idxs = [0]
+                    # for i, local_idxs in enumerate(chunk_idxs):
+                    #     local_idxs = torch.cat([torch.tensor(previous_sparse_attn_idxs, device=hidden_states.device), local_idxs]) # add bos to the group for attending
+                    #     local_encoder_hidden_states = encoder_hidden_states[:, local_idxs]
+                    #     local_encoder_position_ids = encoder_position_ids[:, local_idxs]
+                    #     if encoder_attention_mask is None:
+                    #         local_encoder_attention_mask = None
+                    #     elif encoder_local_attention_mask.dim() == 4:
+                    #         local_encoder_attention_mask = encoder_local_attention_mask[:, :, local_idxs, :][:, :, :, local_idxs]
+                    #     else:
+                    #         local_encoder_attention_mask = encoder_local_attention_mask[:, local_idxs]
+                    #     local_encoder_hidden_states, _, _ = self.attention(
+                    #         hidden_states=local_encoder_hidden_states,
+                    #         attention_mask=local_encoder_attention_mask,
+                    #         encoder_hidden_states=local_encoder_hidden_states,
+                    #         encoder_attention_mask=local_encoder_attention_mask,
+                    #         position_ids=local_encoder_position_ids,
+                    #         encoder_position_ids=local_encoder_position_ids,
+                    #         past_key_value=None,
+                    #         output_attentions=False,
+                    #         use_cache=False,
+                    #     )
+                    #     if i == 0:
+                    #         local_self_attn_output.append(local_encoder_hidden_states)
+                    #     else:
+                    #         local_self_attn_output.append(local_encoder_hidden_states[:, len(previous_sparse_attn_idxs):])
+                    #     # previous_sparse_attn_idxs.extend(chunk_idxs[i].reshape(-1, 258)[:, [0, -1]].flatten().tolist()) # 258 is the magic number: 256 + 2. 256 is the num tokens per grid
+                    # ### sequential version
+                    
+                    ### batch_version
                     local_self_attn_output = []
+                    all_local_encoder_hidden_states = []
+                    all_local_encoder_position_ids = []
+                    all_local_encoder_attention_mask = []
+                    all_local_seq_len = []
                     encoder_local_attention_mask = encoder_attention_mask
                     previous_sparse_attn_idxs = [0]
                     for i, local_idxs in enumerate(chunk_idxs):
@@ -1876,23 +1928,43 @@ class InternLM2DecoderLayer(nn.Module):
                             local_encoder_attention_mask = encoder_local_attention_mask[:, :, local_idxs, :][:, :, :, local_idxs]
                         else:
                             local_encoder_attention_mask = encoder_local_attention_mask[:, local_idxs]
-                        local_encoder_hidden_states, _, _ = self.attention(
-                            hidden_states=local_encoder_hidden_states,
-                            attention_mask=local_encoder_attention_mask,
-                            encoder_hidden_states=local_encoder_hidden_states,
-                            encoder_attention_mask=local_encoder_attention_mask,
-                            position_ids=local_encoder_position_ids,
-                            encoder_position_ids=local_encoder_position_ids,
-                            past_key_value=None,
-                            output_attentions=False,
-                            use_cache=False,
-                        )
+                        all_local_encoder_hidden_states.append(local_encoder_hidden_states)
+                        all_local_encoder_position_ids.append(local_encoder_position_ids)
+                        all_local_encoder_attention_mask.append(local_encoder_attention_mask)
+                        all_local_seq_len.append(local_encoder_hidden_states.size(1))
+                    
+                    # concat all local hidden states
+                    batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
+                    batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
+                    batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
+                    
+                    
+                    end.record()
+                    torch.cuda.synchronize()
+                    # print("Prepare KV Local Self Attention Time: ", start.elapsed_time(end))
+                    start.record()
+                    all_encoder_local_hidden_states, _, _ = self.attention(
+                        hidden_states=batch_local_encoder_hidden_states,
+                        attention_mask=batch_local_encoder_attention_mask,
+                        encoder_hidden_states=batch_local_encoder_hidden_states,
+                        encoder_attention_mask=batch_local_encoder_attention_mask,
+                        position_ids=batch_local_encoder_position_ids,
+                        encoder_position_ids=batch_local_encoder_position_ids,
+                        past_key_value=None,
+                        output_attentions=False,
+                        use_cache=False,
+                    )
+                    # split back to each group
+                    all_encoder_local_hidden_states = all_encoder_local_hidden_states.view(bsz, len(chunk_idxs), -1, self.hidden_size)
+                    for i, local_seq_len in enumerate(all_local_seq_len):
                         if i == 0:
-                            local_self_attn_output.append(local_encoder_hidden_states)
+                            local_self_attn_output.append(all_encoder_local_hidden_states[:, i, :local_seq_len])
                         else:
-                            local_self_attn_output.append(local_encoder_hidden_states[:, len(previous_sparse_attn_idxs):])
-                        # previous_sparse_attn_idxs.extend(chunk_idxs[i].reshape(-1, 258)[:, [0, -1]].flatten().tolist()) # 258 is the magic number: 256 + 2. 256 is the num tokens per grid
+                            local_self_attn_output.append(all_encoder_local_hidden_states[:, i, len(previous_sparse_attn_idxs):local_seq_len])
+                    ### batch_version
+                    
                     encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
+                    end.record()
                 
                     # # # DEBUG: compare difference, comment out this part when debugging
                     # _residual = self.attention_norm(torch.cat([residual_encoder, residual], dim=1))
@@ -1917,13 +1989,17 @@ class InternLM2DecoderLayer(nn.Module):
                     encoder_hidden_states = self.ffn_norm(encoder_hidden_states)
                     encoder_hidden_states = self.feed_forward(encoder_hidden_states)
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
+                else:
+                    end.record()
+                torch.cuda.synchronize()
+                # print("KV Local Self Attention Time: ", start.elapsed_time(end))
                 
                 # add residual 
                 hidden_states = residual + hidden_states
             else:
                 raise ValueError("Cross attention is not enabled")
         else:
-            raise ValueError("Cross attention is not enabled but encoder_hidden_states is not None")
+            raise ValueError("Cross attention is not enabled but encoder_hidden_states is not None")   
                     
         # Fully Connected
         residual = hidden_states
@@ -2286,24 +2362,45 @@ class InternLM2Model(InternLM2PreTrainedModel):
             
             attention_mask = merged_kv_attention_mask # [bsz, 1, q_len, kv_len+q_len] or [bsz, kv_len+q_len]
             encoder_attention_mask = encoder_local_attention_mask # [bsz, 1, kv_len, kv_len] or [bsz, kv_len]
-        
-        # expand the attention mask if necessary    
-        if not self.config.attn_implementation == 'flash_attention_2':
-            if attention_mask.dim() == 2:
-                attention_mask = self._prepare_decoder_attention_mask(
-                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-                )
-            else:
-                # attention_mask is already 3D(4D for attention heads)
-                attention_mask = attention_mask.to(inputs_embeds.device)
-            if encoder_attention_mask.dim() == 2:
-                encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=seq_length).to(
-                    inputs_embeds.device
-                )
-                encoder_attention_mask_expaned_for_normal_attention = True
-            else:
-                # encoder_attention_mask is already 3D(4D for attention heads)
-                encoder_attention_mask = encoder_attention_mask.to(inputs_embeds.device)
+
+            # expand the attention mask if necessary    
+            if not self.config.attn_implementation == 'flash_attention_2':
+                if attention_mask.dim() == 2:
+                    attention_mask = torch.cat([
+                        _expand_mask(attention_mask[:, :kv_seq_len], inputs_embeds.dtype, tgt_len=q_len).to(inputs_embeds.device),
+                        self._prepare_decoder_attention_mask(
+                            attention_mask[:, kv_seq_len:], (batch_size, seq_length), inputs_embeds, past_key_values_length
+                        )], dim=-1)
+                else:
+                    # attention_mask is already 3D(4D for attention heads)
+                    attention_mask = attention_mask.to(inputs_embeds.device)
+                if encoder_attention_mask.dim() == 2:
+                    encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=kv_seq_len).to(
+                        inputs_embeds.device
+                    )
+                    encoder_attention_mask_expaned_for_normal_attention = True
+                else:
+                    # encoder_attention_mask is already 3D(4D for attention heads)
+                    encoder_attention_mask = encoder_attention_mask.to(inputs_embeds.device)
+        else:
+            # expand the attention mask if necessary    
+            if not self.config.attn_implementation == 'flash_attention_2':
+                if attention_mask.dim() == 2:
+                    attention_mask = self._prepare_decoder_attention_mask(
+                        attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                    )
+                else:
+                    # attention_mask is already 3D(4D for attention heads)
+                    attention_mask = attention_mask.to(inputs_embeds.device)
+                if encoder_attention_mask:
+                    if encoder_attention_mask.dim() == 2:
+                        encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=seq_length).to(
+                            inputs_embeds.device
+                        )
+                        encoder_attention_mask_expaned_for_normal_attention = True
+                    else:
+                        # encoder_attention_mask is already 3D(4D for attention heads)
+                        encoder_attention_mask = encoder_attention_mask.to(inputs_embeds.device)
 
         # embed positions
         hidden_states = inputs_embeds

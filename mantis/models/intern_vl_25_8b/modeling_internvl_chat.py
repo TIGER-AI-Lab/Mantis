@@ -106,7 +106,7 @@ class InternVLChatModel(PreTrainedModel):
         config.vision_config.use_flash_attn = True if use_flash_attn else False
         if config._attn_implementation is not None and config._attn_implementation not in ['eager', 'flash_attention_2', 'sdpa']:
             config.llm_config.attn_implementation = config._attn_implementation
-        if config._attn_implementation == 'eager':
+        else:
             config.llm_config.attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
         print(f"LLM Using {config.llm_config.attn_implementation} attention implementation")
         self.use_flash_attn = use_flash_attn
@@ -566,7 +566,6 @@ class InternVLChatModel(PreTrainedModel):
     ) -> torch.LongTensor:
         
         if benchmark_efficiency:
-            import time
             efficiency_metrics = {
                 "total_vit_forward_time": 0.0,
                 "total_prefill_time": 0.0,
@@ -575,8 +574,9 @@ class InternVLChatModel(PreTrainedModel):
                 "prefill_time_per_token": 0.0,
                 "decoding_time_per_token": 0.0,
             }
-
-            start = time.time()
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
         assert self.img_context_token_id is not None
         encoder_hidden_states = None
         encoder_attention_mask = None
@@ -703,9 +703,12 @@ class InternVLChatModel(PreTrainedModel):
         else:
             input_embeds = self.language_model.get_input_embeddings()(input_ids)
         if benchmark_efficiency:
-            end = time.time()
-            efficiency_metrics["total_prefill_time"] += end - start
-            efficiency_metrics["vit_forward_time_per_image"] = (end - start) / pixel_values.shape[0]
+            end.record()
+            end.synchronize()
+            total_time = start.elapsed_time(end)
+            efficiency_metrics["total_vit_forward_time"] += total_time
+            efficiency_metrics["vit_forward_time_per_image"] = total_time / pixel_values.shape[0]
+            start.record()
         
         outputs = self.language_model.generate(
             inputs_embeds=input_embeds,
@@ -717,5 +720,13 @@ class InternVLChatModel(PreTrainedModel):
             use_cache=True,
             **generate_kwargs,
         )
-
-        return outputs
+        
+        if benchmark_efficiency:
+            end.record()
+            end.synchronize()
+            total_time = start.elapsed_time(end)
+            efficiency_metrics["total_prefill_time"] += total_time
+            efficiency_metrics["prefill_time_per_token"] = total_time / input_ids.shape[1]
+            start.record()
+            return outputs, efficiency_metrics
+        return outputs,
