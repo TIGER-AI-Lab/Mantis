@@ -9,7 +9,7 @@ def main(
     model_path: str='OpenGVLab/InternVL2_5-8B',
     use_flash_attn: bool=True,
     enable_shared_cross_attention: bool=True,
-    local_attention_group_size: int=258*32,
+    local_attention_group_size: int=258*4,
     run_times=5,
 ):
     

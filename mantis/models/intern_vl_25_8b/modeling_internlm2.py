@@ -1721,6 +1721,7 @@ class InternLM2DecoderLayer(nn.Module):
         self.enable_cross_attention = config.enable_cross_attention
         self.enable_shared_cross_attention = config.enable_shared_cross_attention
         self.local_attention_group_size = config.local_attention_group_size
+        self.attn_implementation = config.attn_implementation
 
         if self.enable_cross_attention:
             self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
@@ -1933,10 +1934,51 @@ class InternLM2DecoderLayer(nn.Module):
                         all_local_encoder_attention_mask.append(local_encoder_attention_mask)
                         all_local_seq_len.append(local_encoder_hidden_states.size(1))
                     
-                    # concat all local hidden states
-                    batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
-                    batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
-                    batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
+                    # packing instead of batching
+                    max_seq_len = max([x.size(1) for x in all_local_encoder_hidden_states])
+                    for i in range(len(all_local_encoder_hidden_states)):
+                        padding_len = max_seq_len - all_local_encoder_hidden_states[i].size(1)
+                        all_local_encoder_hidden_states[i] = F.pad(all_local_encoder_hidden_states[i], (0, 0, 0, padding_len), value=0)
+                        all_local_encoder_position_ids[i] = F.pad(all_local_encoder_position_ids[i], (0, padding_len), value=0)
+                        if all_local_encoder_attention_mask[i] is not None:
+                            # if 2d, then change to 4d
+                            if all_local_encoder_attention_mask[i].dim() == 2:
+                                # flash attention
+                                all_local_encoder_attention_mask[i] = (all_local_encoder_attention_mask[i].unsqueeze(-1) * all_local_encoder_attention_mask[i].unsqueeze(-2)).unsqueeze(1)
+                            if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
+                                all_local_encoder_attention_mask[i] = F.pad(all_local_encoder_attention_mask[i], (0, padding_len, 0, padding_len), value=0)
+                            else:
+                                padding_value = torch.finfo(all_local_encoder_attention_mask[i].dtype).min
+                                all_local_encoder_attention_mask[i] = F.pad(all_local_encoder_attention_mask[i], (0, padding_len, 0, padding_len), value=padding_value)
+                        else:
+                            if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
+                                all_local_encoder_attention_mask[i] = torch.zeros((bsz, 1, max_seq_len, max_seq_len), device=hidden_states.device)
+                                all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 1
+                            else:
+                                all_local_encoder_attention_mask[i] = torch.full((bsz, 1, max_seq_len, max_seq_len), torch.finfo(torch.float32).min, device=hidden_states.device)
+                                all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 0
+                    
+                    batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=1)
+                    batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=1)
+                    packing_len = batch_local_encoder_hidden_states.size(1)
+                    if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
+                        batch_local_encoder_attention_mask = torch.zeros((bsz, 1, packing_len, packing_len), device=hidden_states.device, dtype=all_local_encoder_attention_mask[0].dtype)
+                        for i in range(len(all_local_encoder_attention_mask)):
+                            batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
+                    else:
+                        batch_local_encoder_attention_mask = torch.full((bsz, 1, packing_len, packing_len), torch.finfo(torch.float32).min, device=hidden_states.device)
+                        for i in range(len(all_local_encoder_attention_mask)):
+                            batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
+                    
+                    # # batching version concat all local hidden states
+                    # batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
+                    # batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
+                    # batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
+                    
+                    # print("batch_local_encoder_hidden_states: ", batch_local_encoder_hidden_states.size())
+                    # print("batch_local_encoder_position_ids: ", batch_local_encoder_position_ids.size())
+                    # print("batch_local_encoder_attention_mask: ", batch_local_encoder_attention_mask.size() if batch_local_encoder_attention_mask is not None else None)
+                    
                     
                     
                     end.record()
