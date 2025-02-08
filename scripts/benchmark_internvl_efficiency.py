@@ -9,7 +9,7 @@ def main(
     model_path: str='OpenGVLab/InternVL2_5-8B',
     use_flash_attn: bool=True,
     enable_shared_cross_attention: bool=True,
-    local_attention_group_size: int=258*128,
+    local_attention_group_size: int=258*4,
     run_times=1,
 ):
     
@@ -20,7 +20,7 @@ def main(
     config.llm_config.enable_shared_cross_attention = config.enable_shared_cross_attention
     model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='auto').eval()
 
-    processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention, max_num_patches=1, video_num_segments=128)
+    processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention, max_num_patches=1, video_num_segments=1024)
 
     model.img_context_token_id = processor.img_context_token_id
     model.img_start_token_id = processor.img_start_token_id

@@ -1998,9 +1998,9 @@ class InternLM2DecoderLayer(nn.Module):
                         all_local_seq_len.append(local_encoder_hidden_states.size(1))
                     
                     # packing instead of batching
-                    max_seq_len = max([x.size(1) for x in all_local_encoder_hidden_states])
+                    max_local_seq_len = max([x.size(1) for x in all_local_encoder_hidden_states])
                     for i in range(len(all_local_encoder_hidden_states)):
-                        padding_len = max_seq_len - all_local_encoder_hidden_states[i].size(1)
+                        padding_len = max_local_seq_len - all_local_encoder_hidden_states[i].size(1)
                         all_local_encoder_hidden_states[i] = F.pad(all_local_encoder_hidden_states[i], (0, 0, 0, padding_len), value=0)
                         all_local_encoder_position_ids[i] = F.pad(all_local_encoder_position_ids[i], (0, padding_len), value=0)
                         if all_local_encoder_attention_mask[i] is not None:
@@ -2016,10 +2016,10 @@ class InternLM2DecoderLayer(nn.Module):
                         else:
                             pass
                             # if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
-                            #     all_local_encoder_attention_mask[i] = torch.zeros((bsz, 1, max_seq_len, max_seq_len), device=hidden_states.device)
+                            #     all_local_encoder_attention_mask[i] = torch.zeros((bsz, 1, max_local_seq_len, max_local_seq_len), device=hidden_states.device)
                             #     all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 1
                             # else:
-                            #     all_local_encoder_attention_mask[i] = torch.full((bsz, 1, max_seq_len, max_seq_len), torch.finfo(torch.float32).min, device=hidden_states.device)
+                            #     all_local_encoder_attention_mask[i] = torch.full((bsz, 1, max_local_seq_len, max_local_seq_len), torch.finfo(torch.float32).min, device=hidden_states.device)
                             #     all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 0
                     
                     # batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=1)
@@ -2028,17 +2028,17 @@ class InternLM2DecoderLayer(nn.Module):
                     # if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
                     #     batch_local_encoder_attention_mask = torch.zeros((bsz, 1, packing_len, packing_len), device=hidden_states.device, dtype=all_local_encoder_attention_mask[0].dtype)
                     #     for i in range(len(all_local_encoder_attention_mask)):
-                    #         batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
+                    #         batch_local_encoder_attention_mask[:, :, i*max_local_seq_len:(i+1)*max_local_seq_len, i*max_local_seq_len:(i+1)*max_local_seq_len] = all_local_encoder_attention_mask[i]
                     # else:
                     #     batch_local_encoder_attention_mask = torch.full((bsz, 1, packing_len, packing_len), torch.finfo(torch.float32).min, device=hidden_states.device)
                     #     for i in range(len(all_local_encoder_attention_mask)):
-                    #         batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
+                    #         batch_local_encoder_attention_mask[:, :, i*max_local_seq_len:(i+1)*max_local_seq_len, i*max_local_seq_len:(i+1)*max_local_seq_len] = all_local_encoder_attention_mask[i]
                     
                     # # batching version concat all local hidden states
                     batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
                     batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
                     batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
-                    
+
                     print("batch_local_encoder_hidden_states: ", batch_local_encoder_hidden_states.size())
                     print("batch_local_encoder_position_ids: ", batch_local_encoder_position_ids.size())
                     print("batch_local_encoder_attention_mask: ", batch_local_encoder_attention_mask.size() if batch_local_encoder_attention_mask is not None else None)
@@ -2051,6 +2051,26 @@ class InternLM2DecoderLayer(nn.Module):
                     start.record()
                     print("KV Local Self Attention")
                     
+                    # max_batch_size = 1 * max_local_seq_len
+                    # all_encoder_local_hidden_states = []
+                    # for i in range(0, batch_local_encoder_hidden_states.size(0), max_batch_size):
+                    #     encoder_local_hidden_states = batch_local_encoder_hidden_states[i:i+max_batch_size]
+                    #     encoder_local_position_ids = batch_local_encoder_position_ids[i:i+max_batch_size]
+                    #     encoder_local_attention_mask = batch_local_encoder_attention_mask[i:i+max_batch_size] if batch_local_encoder_attention_mask is not None else None
+                    #     encoder_local_hidden_states, _, _ = self.attention(
+                    #         hidden_states=encoder_local_hidden_states,
+                    #         attention_mask=encoder_local_attention_mask,
+                    #         encoder_hidden_states=encoder_local_hidden_states,
+                    #         encoder_attention_mask=encoder_local_attention_mask,
+                    #         position_ids=encoder_local_position_ids,
+                    #         encoder_position_ids=encoder_local_position_ids,
+                    #         past_key_value=None,
+                    #         output_attentions=False,
+                    #         use_cache=False,
+                    #     )
+                    #     all_encoder_local_hidden_states.append(encoder_local_hidden_states)
+                    # all_encoder_local_hidden_states = torch.cat(all_encoder_local_hidden_states, dim=0)
+                    #
                     all_encoder_local_hidden_states, _, _ = self.attention(
                         hidden_states=batch_local_encoder_hidden_states,
                         attention_mask=batch_local_encoder_attention_mask,
@@ -2098,6 +2118,11 @@ class InternLM2DecoderLayer(nn.Module):
                     # ffn here for encoder_hidden_states
                     residual_encoder = encoder_hidden_states
                     encoder_hidden_states = self.ffn_norm(encoder_hidden_states)
+                    # max_batch_size = 1
+                    # all_encoder_hidden_states = []
+                    # for i in range(0, bsz, max_batch_size):
+                    #     all_encoder_hidden_states.append(self.feed_forward(encoder_hidden_states[i:i+max_batch_size]))
+                    # encoder_hidden_states = torch.cat(all_encoder_hidden_states, dim=0)
                     encoder_hidden_states = self.feed_forward(encoder_hidden_states)
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                 else:
