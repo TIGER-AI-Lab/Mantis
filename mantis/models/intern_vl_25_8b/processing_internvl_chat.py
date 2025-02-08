@@ -119,6 +119,8 @@ def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
         start, end = -100000, 100000
     start_idx = max(first_idx, round(start * fps))
     end_idx = min(round(end * fps), max_frame)
+    if not num_segments:
+        num_segments = end_idx - start_idx
     seg_size = float(end_idx - start_idx) / num_segments
     frame_indices = np.array([
         int(start_idx + (seg_size / 2) + np.round(seg_size * idx))

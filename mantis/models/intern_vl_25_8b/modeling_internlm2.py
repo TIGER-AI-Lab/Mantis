@@ -268,7 +268,7 @@ def _get_unpad_data(attention_mask):
     )
     
 def find_next_example(mask_slice):
-    """Given a matrix M (m, n), find the point (i, j) where M[:i][:j] all zero and M[:i][j:] all zero
+    """Given a matrix M (m, n), find the point (i, j) where M[i:][:j] all zero and M[:i][j:] all zero
         assuming M[:i][:j] is either 
         - (casual mask) left-bottom 1s and right-top 0s
         - (no mask) full 1s
@@ -1456,6 +1456,8 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
         # InternLM2FlashAttention2 attention does not support output_attentions
         if 'padding_mask' in kwargs:
             warnings.warn(
@@ -1474,6 +1476,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         encoder_bsz, encoder_q_len, _ = encoder_hidden_states.size()
         assert bsz == encoder_bsz, f"Batch size of query and key must be the same. Got {bsz} and {encoder_bsz}"
         
+        start.record()
         q_w, kv_w, q_bias, kv_bias = self.get_q_kv_weights()
         
         query_states = F.linear(hidden_states, q_w, q_bias)
@@ -1511,13 +1514,19 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
+        end.record()
+        torch.cuda.synchronize()
+        print("Q,K,V transformation Time taken: ", start.elapsed_time(end))
 
         # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
+        start.record()
         cos, sin = self.rotary_emb(value_states, seq_len=max(position_ids.max().item() + 1, encoder_position_ids.max().item() + 1))
         query_states = apply_rotary_pos_emb_ct(query_states, cos, sin, position_ids)
         key_states = apply_rotary_pos_emb_ct(key_states, cos, sin, encoder_position_ids)
+        end.record()
+        torch.cuda.synchronize()
+        print("Rotary emb Time taken: ", start.elapsed_time(end))
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -1530,12 +1539,21 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
+        
+        start.record()
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, encoder_attention_mask, q_len
         )
+        end.record()
+        torch.cuda.synchronize()
+        print("_flash_attention_forward Time taken: ", start.elapsed_time(end))
+        
+        start.record()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.wo(attn_output)
-
+        end.record()
+        torch.cuda.synchronize()
+        print("wo Time taken: ", start.elapsed_time(end))
         if not output_attentions:
             attn_weights = None
 
@@ -1570,10 +1588,16 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         causal = self.is_causal and query_length != 1
         if attention_mask is not None or encoder_attention_mask is not None:
             batch_size = query_states.shape[0]
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
             if attention_mask is not None and attention_mask.dim() != 2:
+                start.record()
                 query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_packing_input(
                     query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length
                 )
+                end.record()
+                torch.cuda.synchronize()
+                print("**_unpad_packing_input** Time taken: ", start.elapsed_time(end))
             else:
                 query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
                     query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length
@@ -1582,6 +1606,16 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
             
+            print("query_states.shape", query_states.shape)
+            print("key_states.shape", key_states.shape)
+            print("value_states.shape", value_states.shape)
+            print("len(cu_seqlens_q)", len(cu_seqlens_q))
+            print("len(cu_seqlens_k)", len(cu_seqlens_k))
+            # print("cu_seqlens_q", cu_seqlens_q)
+            # print("cu_seqlens_k", cu_seqlens_k)
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
             attn_output_unpad = self.class_flash_attn_varlen_func(
                 query_states,
                 key_states,
@@ -1594,6 +1628,9 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
                 softmax_scale=softmax_scale,
                 causal=causal,
             )
+            end.record()
+            torch.cuda.synchronize()
+            print("**flash_attn_varlen_func** Time taken: ", start.elapsed_time(end))
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
@@ -1604,6 +1641,8 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         return attn_output
 
     def _unpad_packing_input(self, query_layer, key_layer, value_layer, attention_mask, encoder_attention_mask, query_length):
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)  
         # packing attention mask should be 4d (batch_size, num_heads, query_length, key_length)
         bsz, q_len, _, _ = query_layer.size()
         bsz, kv_seq_len, _, _ = key_layer.size()
@@ -1620,18 +1659,37 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, 1, query_length, query_length), device=query_layer.device)
+        
+        print('-----------------')
+        start.record()
+        print("unpad_packing_input")
         # The -q_len: slice assumes left padding.
         query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, seqlens_q = unpad_packing_input(query_layer, attention_mask, return_seq_len=True)
+        end.record()
+        torch.cuda.synchronize()
+        print("unpad_packing_input Time taken: ", start.elapsed_time(end))
         
+        # print('-----------------')
+        start.record()
+        print("_get_unpad_packing_data_for_ct")
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q, seqlens_q)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
+        end.record()
+        torch.cuda.synchronize()
+        print("_get_unpad_packing_data_for_ct Time taken: ", start.elapsed_time(end))
 
+        # print('-----------------')
+        start.record()
+        print("index_first_axis")
         key_layer = index_first_axis(
             key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
         value_layer = index_first_axis(
             value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
+        end.record()
+        torch.cuda.synchronize()
+        print("index_first_axis Time taken: ", start.elapsed_time(end))
             
         return (
             query_layer,
@@ -1853,7 +1911,9 @@ class InternLM2DecoderLayer(nn.Module):
                     merged_kv_position_ids = position_ids
                 
                 start.record()
-                # then cross attention
+                # # then cross attention
+                print('-------------------')
+                print("Text to kv self attention")
                 hidden_states, self_attn_weights, present_key_value = self.attention(
                     hidden_states=hidden_states,
                     encoder_hidden_states=merged_kv_hidden_states,
@@ -1867,7 +1927,10 @@ class InternLM2DecoderLayer(nn.Module):
                 )
                 end.record()
                 torch.cuda.synchronize()
-                # print(f"Text to kv self attention Time: {start.elapsed_time(end)}")
+                print(f"Text to kv self attention Time: {start.elapsed_time(end)}")
+                
+                print('-------------------')
+                print("Prepare KV Local Self Attention")
                 start.record()
                 
                 # locally self attention for the encoder_hidden_states
@@ -1951,40 +2014,43 @@ class InternLM2DecoderLayer(nn.Module):
                                 padding_value = torch.finfo(all_local_encoder_attention_mask[i].dtype).min
                                 all_local_encoder_attention_mask[i] = F.pad(all_local_encoder_attention_mask[i], (0, padding_len, 0, padding_len), value=padding_value)
                         else:
-                            if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
-                                all_local_encoder_attention_mask[i] = torch.zeros((bsz, 1, max_seq_len, max_seq_len), device=hidden_states.device)
-                                all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 1
-                            else:
-                                all_local_encoder_attention_mask[i] = torch.full((bsz, 1, max_seq_len, max_seq_len), torch.finfo(torch.float32).min, device=hidden_states.device)
-                                all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 0
+                            pass
+                            # if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
+                            #     all_local_encoder_attention_mask[i] = torch.zeros((bsz, 1, max_seq_len, max_seq_len), device=hidden_states.device)
+                            #     all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 1
+                            # else:
+                            #     all_local_encoder_attention_mask[i] = torch.full((bsz, 1, max_seq_len, max_seq_len), torch.finfo(torch.float32).min, device=hidden_states.device)
+                            #     all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 0
                     
-                    batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=1)
-                    batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=1)
-                    packing_len = batch_local_encoder_hidden_states.size(1)
-                    if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
-                        batch_local_encoder_attention_mask = torch.zeros((bsz, 1, packing_len, packing_len), device=hidden_states.device, dtype=all_local_encoder_attention_mask[0].dtype)
-                        for i in range(len(all_local_encoder_attention_mask)):
-                            batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
-                    else:
-                        batch_local_encoder_attention_mask = torch.full((bsz, 1, packing_len, packing_len), torch.finfo(torch.float32).min, device=hidden_states.device)
-                        for i in range(len(all_local_encoder_attention_mask)):
-                            batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
+                    # batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=1)
+                    # batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=1)
+                    # packing_len = batch_local_encoder_hidden_states.size(1)
+                    # if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
+                    #     batch_local_encoder_attention_mask = torch.zeros((bsz, 1, packing_len, packing_len), device=hidden_states.device, dtype=all_local_encoder_attention_mask[0].dtype)
+                    #     for i in range(len(all_local_encoder_attention_mask)):
+                    #         batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
+                    # else:
+                    #     batch_local_encoder_attention_mask = torch.full((bsz, 1, packing_len, packing_len), torch.finfo(torch.float32).min, device=hidden_states.device)
+                    #     for i in range(len(all_local_encoder_attention_mask)):
+                    #         batch_local_encoder_attention_mask[:, :, i*max_seq_len:(i+1)*max_seq_len, i*max_seq_len:(i+1)*max_seq_len] = all_local_encoder_attention_mask[i]
                     
                     # # batching version concat all local hidden states
-                    # batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
-                    # batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
-                    # batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
+                    batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
+                    batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
+                    batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
                     
-                    # print("batch_local_encoder_hidden_states: ", batch_local_encoder_hidden_states.size())
-                    # print("batch_local_encoder_position_ids: ", batch_local_encoder_position_ids.size())
-                    # print("batch_local_encoder_attention_mask: ", batch_local_encoder_attention_mask.size() if batch_local_encoder_attention_mask is not None else None)
-                    
-                    
-                    
+                    print("batch_local_encoder_hidden_states: ", batch_local_encoder_hidden_states.size())
+                    print("batch_local_encoder_position_ids: ", batch_local_encoder_position_ids.size())
+                    print("batch_local_encoder_attention_mask: ", batch_local_encoder_attention_mask.size() if batch_local_encoder_attention_mask is not None else None)
                     end.record()
                     torch.cuda.synchronize()
-                    # print("Prepare KV Local Self Attention Time: ", start.elapsed_time(end))
+                    print("Prepare KV Local Self Attention Time: ", start.elapsed_time(end))
+                    
+                    
+                    print('-------------------')
                     start.record()
+                    print("KV Local Self Attention")
+                    
                     all_encoder_local_hidden_states, _, _ = self.attention(
                         hidden_states=batch_local_encoder_hidden_states,
                         attention_mask=batch_local_encoder_attention_mask,
@@ -1996,6 +2062,9 @@ class InternLM2DecoderLayer(nn.Module):
                         output_attentions=False,
                         use_cache=False,
                     )
+                    end.record()
+                    torch.cuda.synchronize()
+                    print("KV Local Self Attention Time: ", start.elapsed_time(end))
                     # split back to each group
                     all_encoder_local_hidden_states = all_encoder_local_hidden_states.view(bsz, len(chunk_idxs), -1, self.hidden_size)
                     for i, local_seq_len in enumerate(all_local_seq_len):
@@ -2034,7 +2103,6 @@ class InternLM2DecoderLayer(nn.Module):
                 else:
                     end.record()
                 torch.cuda.synchronize()
-                # print("KV Local Self Attention Time: ", start.elapsed_time(end))
                 
                 # add residual 
                 hidden_states = residual + hidden_states
