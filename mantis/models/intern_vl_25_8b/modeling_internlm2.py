@@ -1515,7 +1515,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         end.record()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         print("Q,K,V transformation Time taken: ", start.elapsed_time(end))
 
         # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
@@ -1525,7 +1525,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         query_states = apply_rotary_pos_emb_ct(query_states, cos, sin, position_ids)
         key_states = apply_rotary_pos_emb_ct(key_states, cos, sin, encoder_position_ids)
         end.record()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         print("Rotary emb Time taken: ", start.elapsed_time(end))
 
         if past_key_value is not None:
@@ -1545,14 +1545,14 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             query_states, key_states, value_states, attention_mask, encoder_attention_mask, q_len
         )
         end.record()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         print("_flash_attention_forward Time taken: ", start.elapsed_time(end))
         
         start.record()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.wo(attn_output)
         end.record()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         print("wo Time taken: ", start.elapsed_time(end))
         if not output_attentions:
             attn_weights = None
@@ -1596,7 +1596,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
                     query_states, key_states, value_states, attention_mask, encoder_attention_mask, query_length
                 )
                 end.record()
-                torch.cuda.synchronize()
+                # torch.cuda.synchronize()
                 print("**_unpad_packing_input** Time taken: ", start.elapsed_time(end))
             else:
                 query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._unpad_input(
@@ -1629,7 +1629,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
                 causal=causal,
             )
             end.record()
-            torch.cuda.synchronize()
+            # torch.cuda.synchronize()
             print("**flash_attn_varlen_func** Time taken: ", start.elapsed_time(end))
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
@@ -1666,7 +1666,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         # The -q_len: slice assumes left padding.
         query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, seqlens_q = unpad_packing_input(query_layer, attention_mask, return_seq_len=True)
         end.record()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         print("unpad_packing_input Time taken: ", start.elapsed_time(end))
         
         # print('-----------------')
@@ -1675,7 +1675,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_packing_data_for_ct(encoder_attention_mask, cu_seqlens_q, seqlens_q)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
         end.record()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         print("_get_unpad_packing_data_for_ct Time taken: ", start.elapsed_time(end))
 
         # print('-----------------')
@@ -1688,7 +1688,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
         end.record()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         print("index_first_axis Time taken: ", start.elapsed_time(end))
             
         return (
@@ -1855,7 +1855,7 @@ class InternLM2DecoderLayer(nn.Module):
                 **kwargs,
             )
             end.record()
-            torch.cuda.synchronize()
+            # torch.cuda.synchronize()
             # print(f"Self Attention Time: {start.elapsed_time(end)}")
             hidden_states = residual + hidden_states
         # Cross Attention
@@ -1926,7 +1926,7 @@ class InternLM2DecoderLayer(nn.Module):
                     past_key_value=past_key_value,
                 )
                 end.record()
-                torch.cuda.synchronize()
+                # torch.cuda.synchronize()
                 print(f"Text to kv self attention Time: {start.elapsed_time(end)}")
                 
                 print('-------------------')
@@ -2043,7 +2043,7 @@ class InternLM2DecoderLayer(nn.Module):
                     print("batch_local_encoder_position_ids: ", batch_local_encoder_position_ids.size())
                     print("batch_local_encoder_attention_mask: ", batch_local_encoder_attention_mask.size() if batch_local_encoder_attention_mask is not None else None)
                     end.record()
-                    torch.cuda.synchronize()
+                    # torch.cuda.synchronize()
                     print("Prepare KV Local Self Attention Time: ", start.elapsed_time(end))
                     
                     
@@ -2083,8 +2083,11 @@ class InternLM2DecoderLayer(nn.Module):
                         use_cache=False,
                     )
                     end.record()
-                    torch.cuda.synchronize()
+                    # torch.cuda.synchronize()
                     print("KV Local Self Attention Time: ", start.elapsed_time(end))
+                    
+                    print('-------------------')
+                    start.record()
                     # split back to each group
                     all_encoder_local_hidden_states = all_encoder_local_hidden_states.view(bsz, len(chunk_idxs), -1, self.hidden_size)
                     for i, local_seq_len in enumerate(all_local_seq_len):
@@ -2096,6 +2099,8 @@ class InternLM2DecoderLayer(nn.Module):
                     
                     encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
                     end.record()
+                    # torch.cuda.synchronize()
+                    print("Split back to each group Time: ", start.elapsed_time(end))
                 
                     # # # DEBUG: compare difference, comment out this part when debugging
                     # _residual = self.attention_norm(torch.cat([residual_encoder, residual], dim=1))
@@ -2114,6 +2119,8 @@ class InternLM2DecoderLayer(nn.Module):
                     # print(f"dense part diff: {(hidden_states - ori_hidden_states[:, kv_seq_len:]).abs().mean()}")
                     # # # DEBUG: compare difference, comment out this part when debugging
                     
+                    print('-------------------')
+                    start.record()
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                     # ffn here for encoder_hidden_states
                     residual_encoder = encoder_hidden_states
@@ -2125,9 +2132,12 @@ class InternLM2DecoderLayer(nn.Module):
                     # encoder_hidden_states = torch.cat(all_encoder_hidden_states, dim=0)
                     encoder_hidden_states = self.feed_forward(encoder_hidden_states)
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
+                    end.record()
+                    # torch.cuda.synchronize()
+                    print("FFN for encoder_hidden_states Time: ", start.elapsed_time(end))
                 else:
                     end.record()
-                torch.cuda.synchronize()
+                # torch.cuda.synchronize()
                 
                 # add residual 
                 hidden_states = residual + hidden_states
@@ -2137,10 +2147,15 @@ class InternLM2DecoderLayer(nn.Module):
             raise ValueError("Cross attention is not enabled but encoder_hidden_states is not None")   
                     
         # Fully Connected
+        print('-------------------')
+        start.record()
         residual = hidden_states
         hidden_states = self.ffn_norm(hidden_states)
         hidden_states = self.feed_forward(hidden_states)
         hidden_states = residual + hidden_states
+        end.record()
+        # torch.cuda.synchronize()
+        print("Query FFN Time: ", start.elapsed_time(end))
 
         outputs = (hidden_states,)
 
