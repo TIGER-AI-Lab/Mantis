@@ -217,7 +217,7 @@ class cli:
     def benchmark_fix_group_size_vary_frames(
         self,
         group_sizes = [8],
-        total_frames_list=[16, 32, 64, 128, 512]
+        total_frames_list=[16, 32, 64, 128, 256]
     ):
         model = self.model
         generation_config = self.generation_config
