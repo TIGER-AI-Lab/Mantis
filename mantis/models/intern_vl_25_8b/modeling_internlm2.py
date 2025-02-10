@@ -74,9 +74,14 @@ from collections import defaultdict
 all_events_times = defaultdict(list)
 event_records = {}
 previous_recorded_event = []
-
+detect_operation_memory_usage_key = None
+peak_memory_usage = 0
+# detect_operation_memory_usage_key = "FFN for encoder_hidden_states" # KV Local Self Attention
 def start_record(message:str, level=0):
-    global previous_recorded_event, event_records
+    global previous_recorded_event, event_records, peak_memory_usage
+    if detect_operation_memory_usage_key:
+        torch.cuda.reset_peak_memory_stats()
+        print(f"Current memory: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
     start = torch.cuda.Event(enable_timing=True)
     start.record()
     last_event = event_records[previous_recorded_event[-1]] if previous_recorded_event else None
@@ -107,7 +112,10 @@ def start_record(message:str, level=0):
     return start
 
 def end_record(start, message:str, flush_records=False, do_print=False):
-    global previous_recorded_event, event_records
+    global previous_recorded_event, event_records, peak_memory_usage
+    peak_memory_usage = max(torch.cuda.max_memory_allocated() / 1024**2, peak_memory_usage)
+    if detect_operation_memory_usage_key:
+        print(f"Peak memory: {torch.cuda.max_memory_allocated() / 1024**2:.2f} MB")
     end = torch.cuda.Event(enable_timing=True)
     end.record()
     event_records[start]["end"] = end
@@ -141,8 +149,11 @@ def end_record(start, message:str, flush_records=False, do_print=False):
     return end
 
 def clear_all_events_times():
-    global all_events_times
+    global all_events_times, peak_memory_usage
     all_events_times.clear()
+    torch.cuda.reset_peak_memory_stats()
+    peak_memory_usage = 0
+
 
 def _import_flash_attn():
     global flash_attn_func, flash_attn_varlen_func
@@ -2099,6 +2110,7 @@ class InternLM2DecoderLayer(nn.Module):
                     #     all_encoder_local_hidden_states.append(encoder_local_hidden_states)
                     # all_encoder_local_hidden_states = torch.cat(all_encoder_local_hidden_states, dim=0)
                     #
+                    
                     all_encoder_local_hidden_states, _, _ = self.attention(
                         hidden_states=batch_local_encoder_hidden_states,
                         attention_mask=batch_local_encoder_attention_mask,
@@ -2110,6 +2122,7 @@ class InternLM2DecoderLayer(nn.Module):
                         output_attentions=False,
                         use_cache=False,
                     )
+                    
                     end = end_record(start, "KV Local Self Attention")
                     
                     start = start_record("Split back to each group", level=2)
@@ -2147,12 +2160,12 @@ class InternLM2DecoderLayer(nn.Module):
                     # ffn here for encoder_hidden_states
                     residual_encoder = encoder_hidden_states
                     encoder_hidden_states = self.ffn_norm(encoder_hidden_states)
-                    # max_batch_size = 1
-                    # all_encoder_hidden_states = []
-                    # for i in range(0, bsz, max_batch_size):
-                    #     all_encoder_hidden_states.append(self.feed_forward(encoder_hidden_states[i:i+max_batch_size]))
-                    # encoder_hidden_states = torch.cat(all_encoder_hidden_states, dim=0)
-                    encoder_hidden_states = self.feed_forward(encoder_hidden_states)
+                    max_batch_size = 128
+                    all_encoder_hidden_states = []
+                    for i in range(0, bsz, max_batch_size):
+                        all_encoder_hidden_states.append(self.feed_forward(encoder_hidden_states[i:i+max_batch_size]))
+                    encoder_hidden_states = torch.cat(all_encoder_hidden_states, dim=0)
+                    # encoder_hidden_states = self.feed_forward(encoder_hidden_states)
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                     end = end_record(start, "FFN for encoder_hidden_states")
                 
@@ -2636,6 +2649,8 @@ class InternLM2Model(InternLM2PreTrainedModel):
         start = start_record("Decoder layers", level=1)
         for idx, decoder_layer in enumerate(self.layers):
             # print(f"Decoder layer {idx}")
+            # print(f"Current memory: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+            # print(f"Peak memory: {torch.cuda.max_memory_allocated() / 1024**2:.2f} MB")
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -3004,7 +3019,8 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
             {
                 'position_ids': position_ids,
                 'past_key_values': past_key_values,
-                'use_cache': kwargs.get('use_cache'),
+                # 'use_cache': kwargs.get('use_cache'),
+                'use_cache': False, # for debugging prefilling
                 'attention_mask': attention_mask,
                 'encoder_hidden_states': encoder_hidden_states,
                 'encoder_attention_mask': encoder_attention_mask,

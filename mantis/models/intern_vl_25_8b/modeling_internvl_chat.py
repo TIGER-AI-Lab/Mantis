@@ -562,6 +562,7 @@ class InternVLChatModel(PreTrainedModel):
             generation_config: Optional[GenerationConfig] = None,
             output_hidden_states: Optional[bool] = None,
             benchmark_efficiency: Optional[bool] = False,
+            use_cache: Optional[bool] = True,
             **generate_kwargs,
     ) -> torch.LongTensor:
         
@@ -709,7 +710,6 @@ class InternVLChatModel(PreTrainedModel):
             efficiency_metrics["total_vit_forward_time"] += total_time
             efficiency_metrics["vit_forward_time_per_image"] = total_time / pixel_values.shape[0]
             start.record()
-        
         outputs = self.language_model.generate(
             inputs_embeds=input_embeds,
             attention_mask=attention_mask,
@@ -717,7 +717,7 @@ class InternVLChatModel(PreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             generation_config=generation_config,
             output_hidden_states=output_hidden_states,
-            use_cache=True,
+            use_cache=use_cache,
             **generate_kwargs,
         )
         

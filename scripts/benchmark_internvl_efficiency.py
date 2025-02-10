@@ -2,7 +2,7 @@ import torch
 import fire
 # If you want to load a model using multiple GPUs, please refer to the `Multiple GPUs` section.
 from mantis.models.intern_vl_25_8b import InternVLChatModel, InternVLChatConfig, InternVLChatProcessor, InternLM2Tokenizer
-from mantis.models.intern_vl_25_8b.modeling_internlm2 import all_events_times, clear_all_events_times
+from mantis.models.intern_vl_25_8b.modeling_internlm2 import all_events_times, clear_all_events_times, peak_memory_usage
 from tqdm import tqdm
 from collections import defaultdict
 import matplotlib.pyplot as plt
@@ -18,7 +18,7 @@ def run_benchmark(model, model_inputs, generation_config, processor, run_times):
     print("Number of frames", model_inputs['pixel_values'].shape[0])
     metrics = defaultdict(float)
     for _ in tqdm(range(run_times), desc='Running...'):
-        responses, _metrics = model.generate(**model_inputs, **generation_config, benchmark_efficiency=True)
+        responses, _metrics = model.generate(**model_inputs, **generation_config, benchmark_efficiency=True, use_cache=False)
         for key, value in _metrics.items():
             metrics[key] += value
     for key in metrics:
@@ -46,6 +46,7 @@ def run_benchmark(model, model_inputs, generation_config, processor, run_times):
         results[key] = {'average_time': average_time, 'num_called': num_called, 'percentage': percentage, 'message': message, 'level': level, 'total_time_per_run': total_time/run_times}
     results['total_prefill_time_per_run'] = metrics['total_prefill_time']
     results['total_prefill_time'] = prefill_total_time
+    results['peak_memory_usage'] = peak_memory_usage()
     response = processor.decode(responses[0])
     print(response)
     print('Done benchmarking!')
@@ -150,6 +151,8 @@ class cli:
         group_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256],
         total_frames=256
     ):
+        if isinstance(group_sizes, int):
+            group_sizes = [group_sizes]
         model = self.model
         generation_config = self.generation_config
         processor = self.processor
@@ -212,13 +215,17 @@ class cli:
 
         # Show the plot
         plt.show()
-        plt.savefig('benchmark.png') 
+        plt.savefig(f'benchmark_vary_group_size_fix_frames_{total_frames}.png')
         
     def benchmark_fix_group_size_vary_frames(
         self,
         group_sizes = [8],
-        total_frames_list=[16, 32, 64, 128, 256]
+        total_frames_list=[16, 32, 64, 128, 256, 512, 1024]
     ):
+        if isinstance(group_sizes, int):
+            group_sizes = [group_sizes]
+        if isinstance(total_frames_list, int):
+            total_frames_list = [total_frames_list]
         model = self.model
         generation_config = self.generation_config
         processor = self.processor
@@ -320,9 +327,9 @@ class cli:
 
         # Customize the plot
         plt.grid(True, which="both", ls="-", alpha=0.2)
-        plt.xlabel('Local Group Size', fontsize=12)
+        plt.xlabel('Total Frames', fontsize=12)
         plt.ylabel('Time (ms)', fontsize=12)
-        plt.title(f'Performance Metrics vs Group Size (Avg run times: {run_times}, Total frames: {total_frames})', fontsize=14, pad=20)
+        plt.title(f'Performance Metrics vs Total Frames (Avg run times: {run_times}, g=group size)', fontsize=14, pad=20)
 
         # Add legend
         plt.legend(fontsize=10, bbox_to_anchor=(1.02, 1), loc='upper left')
@@ -332,55 +339,13 @@ class cli:
 
         # Show the plot
         plt.show()
-        plt.savefig('benchmark.png') 
-        
-
-def main(
-    model_path: str='OpenGVLab/InternVL2_5-8B',
-    use_flash_attn: bool=True,
-    enable_shared_cross_attention: bool=True,
-    group_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256],
-    run_times=1,
-    total_frames=256
-):
-    
-    local_attention_group_size = 258 * group_sizes[0]
-    tokenizer = InternLM2Tokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-    config = InternVLChatConfig.from_pretrained(model_path, enable_shared_cross_attention=enable_shared_cross_attention, local_attention_group_size=local_attention_group_size)
-    config.llm_config.enable_cross_attention = config.enable_cross_attention
-    config.llm_config.local_attention_group_size = config.local_attention_group_size
-    config.llm_config.enable_shared_cross_attention = config.enable_shared_cross_attention
-    model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='auto').eval()
-
-    processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention, max_num_patches=1, video_num_segments=total_frames)
-
-    model.img_context_token_id = processor.img_context_token_id
-    model.img_start_token_id = processor.img_start_token_id
-    model.img_end_token_id = processor.img_end_token_id
-    model.bos_token_id = processor.bos_token_id
-    
-
-    from mantis.models.conversation import conv_templates
-
-    conv = conv_templates['internvl2_5'].copy()
-    conv.append_message(conv.roles[0], 'Please describe the video in detail.')
-    conv.append_message(conv.roles[1], None)
-    query = conv.get_prompt()
-    query = "<video>\n" + query
-    model_inputs = processor(query, videos='./mochi.mp4')
-
-    model_inputs['pixel_values'] = model_inputs['pixel_values'].to(torch.bfloat16)
-    for key in model_inputs:
-        if isinstance(model_inputs[key], torch.Tensor):
-            model_inputs[key] = model_inputs[key].to(model.device)
-
-    # print(model_inputs)
-    eos_token_id = tokenizer.convert_tokens_to_ids(conv.sep.strip())
-    generation_config = dict(max_new_tokens=1, do_sample=False, eos_token_id=eos_token_id)
-    
-    benchmark_vary_group_size_fix_frames(model, model_inputs, generation_config, processor, run_times, group_sizes, enable_shared_cross_attention, use_flash_attn, total_frames)
-    
-    
+        plt.savefig(f'benchmark_fix_group_size_vary_frames_total_frames_{",".join(map(str, total_frames_list))}.png')
     
 if __name__ == '__main__':
     fire.Fire(cli)
+    
+"""
+python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
+python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in case of segmentation memory error
+"""
