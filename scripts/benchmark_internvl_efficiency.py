@@ -7,7 +7,32 @@ from tqdm import tqdm
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LogNorm
+from pathlib import Path
 
+def plot_heatmap(attn: torch.Tensor, save_path="./fig.png", title="Attention Heatmap"):
+    # Convert mean attention tensor to numpy array
+    attention_data = attn.numpy()
+
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    # Create heatmap with log scaling
+    heatmap = ax.imshow(attention_data, cmap='viridis', aspect='auto', norm=LogNorm())
+
+    # Add colorbar
+    cbar = fig.colorbar(heatmap, ax=ax)
+    cbar.set_label('Attention Weight (Log Scale)')
+
+    # Set labels and title
+    ax.set_xlabel('Source Tokens')
+    ax.set_ylabel('Target Tokens')
+    ax.set_title('Attention Heatmap')
+
+    # Save the plot
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.close()
+    
 def run_benchmark(model, model_inputs, generation_config, processor, run_times):
     clear_all_events_times()
     print('Start benchmarking...')
@@ -381,6 +406,51 @@ class cli:
         print(response)
         return response
     
+    def plot_attention(
+        self,
+        group_size = 8,
+        total_frames=128
+    ):
+        model = self.model
+        generation_config = self.generation_config
+        generation_config['max_new_tokens'] = 512
+        processor = self.processor
+        run_times = self.run_times
+        enable_shared_cross_attention = self.enable_shared_cross_attention
+        use_flash_attn = self.use_flash_attn
+        
+        model_inputs = processor(self.query, videos='./mochi.mp4', video_num_segments=total_frames)
+
+        model_inputs['pixel_values'] = model_inputs['pixel_values'].to(torch.bfloat16)
+        for key in model_inputs:
+            if isinstance(model_inputs[key], torch.Tensor):
+                model_inputs[key] = model_inputs[key].to(model.device)
+        
+        local_attention_group_size = 258 * group_size
+        model.config.local_attention_group_size = local_attention_group_size
+        for decoder_layer in model.language_model.model.layers:
+            decoder_layer.local_attention_group_size = local_attention_group_size
+        
+        print(f"Input_ids shape: {model_inputs['input_ids'].shape}")
+        print(f"Group size: {group_size}")
+        print(f"Local attention group size: {local_attention_group_size}")
+        print(f"Enable shared cross attention: {enable_shared_cross_attention}")
+        print(f"Use Flash Attention: {use_flash_attn}")
+        print(f"Running {run_times} times")
+        print("Number of tokens", model_inputs['input_ids'].shape[1])
+        print("Number of frames", model_inputs['pixel_values'].shape[0])
+        
+        with torch.no_grad():
+            outputs = model(**model_inputs, output_attentions=True, use_cache=False)
+        attentions = outputs['attentions']
+        
+        save_dir = Path('attention_plots')
+        save_dir.mkdir(exist_ok=True)
+        for i, attention in enumerate(attentions):
+            attention = attention[0].cpu()
+            plot_heatmap(attention, save_path=save_dir / f'attention_layer_{i}.png', title=f'Attention Layer {i}')
+        
+    
     
 if __name__ == '__main__':
     fire.Fire(cli)
@@ -390,4 +460,5 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in ca
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
+python benchmark_internvl_efficiency.py plot_attention --group_size 32 --total_frames 128
 """

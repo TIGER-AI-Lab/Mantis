@@ -358,8 +358,12 @@ class InternVLChatModel(PreTrainedModel):
                 input_embeds = torch.stack(all_text_input_embeds, dim=0)
                 encoder_attention_mask = torch.stack(all_encoder_attention_mask, dim=0)
                 attention_mask = torch.stack(all_text_attention_mask, dim=0)
-                
-            input_embeds = input_embeds.reshape(B, N, C)
+                print(f"encoder_hidden_states.shape: {encoder_hidden_states.shape}")
+                print(f"input_embeds.shape: {input_embeds.shape}")
+                print(f"encoder_attention_mask.shape: {encoder_attention_mask.shape}")
+                print(f"attention_mask.shape: {attention_mask.shape}")
+            else:
+                input_embeds = input_embeds.reshape(B, N, C)
             
         outputs = self.language_model(
             inputs_embeds=input_embeds,
