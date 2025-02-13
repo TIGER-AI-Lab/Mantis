@@ -245,6 +245,8 @@ class InternVLChatModel(PreTrainedModel):
                         f'vit_embeds.shape={vit_embeds.shape}')
                     n_token = selected.sum()
                     input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds[:n_token]
+                input_embeds = input_embeds.reshape(B, N, C)
+                input_ids = input_ids.reshape(B, N)
             else:
                 num_images, num_tokens_per_image, C = vit_embeds.shape
                 num_imgs_per_sample = input_ids.eq(self.img_context_token_id).sum(dim=1)
@@ -283,7 +285,7 @@ class InternVLChatModel(PreTrainedModel):
             
             if self.enable_shared_cross_attention:
                 # select the vit part as the encoder hidden states
-                selected = (input_ids == self.img_context_token_id) | (input_ids == self.img_start_token_id) | (input_ids == self.img_end_token_id)
+                selected = (input_ids == self.img_context_token_id) | (input_ids == self.img_start_token_id) | (input_ids == self.img_end_token_id) | (input_ids == self.bos_token_id)
                 all_encoder_hidden_states = []
                 all_text_input_embeds = []
                 all_text_attention_mask = []
@@ -358,12 +360,6 @@ class InternVLChatModel(PreTrainedModel):
                 input_embeds = torch.stack(all_text_input_embeds, dim=0)
                 encoder_attention_mask = torch.stack(all_encoder_attention_mask, dim=0)
                 attention_mask = torch.stack(all_text_attention_mask, dim=0)
-                print(f"encoder_hidden_states.shape: {encoder_hidden_states.shape}")
-                print(f"input_embeds.shape: {input_embeds.shape}")
-                print(f"encoder_attention_mask.shape: {encoder_attention_mask.shape}")
-                print(f"attention_mask.shape: {attention_mask.shape}")
-            else:
-                input_embeds = input_embeds.reshape(B, N, C)
             
         outputs = self.language_model(
             inputs_embeds=input_embeds,
@@ -704,7 +700,6 @@ class InternVLChatModel(PreTrainedModel):
                 input_embeds = torch.stack(all_text_input_embeds, dim=0)
                 encoder_attention_mask = torch.stack(all_encoder_attention_mask, dim=0)
                 attention_mask = torch.stack(all_text_attention_mask, dim=0)
-                
         else:
             input_embeds = self.language_model.get_input_embeddings()(input_ids)
         if benchmark_efficiency:

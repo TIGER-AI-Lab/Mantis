@@ -409,7 +409,7 @@ class cli:
     def plot_attention(
         self,
         group_size = 8,
-        total_frames=128
+        total_frames=128,
     ):
         model = self.model
         generation_config = self.generation_config
@@ -443,7 +443,12 @@ class cli:
         with torch.no_grad():
             outputs = model(**model_inputs, output_attentions=True, use_cache=False)
         attentions = outputs['attentions']
+        print(f"Number of attentions: {len(attentions)}")
+        print(f"len(attentions[0]): {len(attentions[0])}")
+        print(f"attentions[0][0].shape: {attentions[0][0].shape}")
+        print(f"attentions[0][1].shape: {attentions[0][1].shape}")
         
+        exit(1)
         save_dir = Path('attention_plots')
         save_dir.mkdir(exist_ok=True)
         for i, attention in enumerate(attentions):
@@ -460,5 +465,5 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in ca
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
-python benchmark_internvl_efficiency.py plot_attention --group_size 32 --total_frames 128
+python benchmark_internvl_efficiency.py plot_attention --group_size 32 --total_frames 128 --use_flash_attn False
 """

@@ -1909,6 +1909,7 @@ class InternLM2DecoderLayer(nn.Module):
             )
             end = end_record(start, "Self Attention")
             hidden_states = residual + hidden_states
+            attn_weights = self_attn_weights
         # Cross Attention
         elif encoder_hidden_states is not None:
             if self.enable_cross_attention:
@@ -1942,6 +1943,8 @@ class InternLM2DecoderLayer(nn.Module):
                     **kwargs,
                 )
                 hidden_states = residual + self.cross_attn_attn_gate.tanh() * hidden_states
+                if output_attentions:
+                    attn_weights = (self_attn_weights, cross_attn_weights)
             elif self.enable_shared_cross_attention:
                 # print("Shared Cross Attention")
                 # first norm
@@ -1962,7 +1965,7 @@ class InternLM2DecoderLayer(nn.Module):
                     merged_kv_position_ids = position_ids
                 
                 start = start_record("Text to kv cross attention", level=2)
-                hidden_states, self_attn_weights, present_key_value = self.attention(
+                hidden_states, text_to_kv_attn_weights, present_key_value = self.attention(
                     hidden_states=hidden_states,
                     encoder_hidden_states=merged_kv_hidden_states,
                     attention_mask=attention_mask,
@@ -2111,7 +2114,7 @@ class InternLM2DecoderLayer(nn.Module):
                     # all_encoder_local_hidden_states = torch.cat(all_encoder_local_hidden_states, dim=0)
                     #
                     
-                    all_encoder_local_hidden_states, _, _ = self.attention(
+                    all_encoder_local_hidden_states, local_self_attn_weights, _ = self.attention(
                         hidden_states=batch_local_encoder_hidden_states,
                         attention_mask=batch_local_encoder_attention_mask,
                         encoder_hidden_states=batch_local_encoder_hidden_states,
@@ -2119,7 +2122,7 @@ class InternLM2DecoderLayer(nn.Module):
                         position_ids=batch_local_encoder_position_ids,
                         encoder_position_ids=batch_local_encoder_position_ids,
                         past_key_value=None,
-                        output_attentions=False,
+                        output_attentions=output_attentions,
                         use_cache=False,
                     )
                     
@@ -2168,9 +2171,12 @@ class InternLM2DecoderLayer(nn.Module):
                     # encoder_hidden_states = self.feed_forward(encoder_hidden_states)
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                     end = end_record(start, "FFN for encoder_hidden_states")
-                
+                    
                 # add residual 
                 hidden_states = residual + hidden_states
+                print(f"text_to_kv_attn_weights: {text_to_kv_attn_weights[0].size()}")
+                if output_attentions:
+                    attn_weights = (local_self_attn_weights, text_to_kv_attn_weights)
             else:
                 raise ValueError("Cross attention is not enabled")
         else:
@@ -2187,7 +2193,7 @@ class InternLM2DecoderLayer(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
+            outputs += (attn_weights,)
 
         if use_cache:
             outputs += (present_key_value,)
