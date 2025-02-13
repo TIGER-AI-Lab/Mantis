@@ -340,12 +340,54 @@ class cli:
         # Show the plot
         plt.show()
         plt.savefig(f'benchmark_fix_group_size_vary_frames_total_frames_{",".join(map(str, total_frames_list))}.png')
+        
+    def generate(
+        self,
+        group_size = 8,
+        total_frames=128
+    ):
+        model = self.model
+        generation_config = self.generation_config
+        generation_config['max_new_tokens'] = 512
+        processor = self.processor
+        run_times = self.run_times
+        enable_shared_cross_attention = self.enable_shared_cross_attention
+        use_flash_attn = self.use_flash_attn
+        
+        model_inputs = processor(self.query, videos='./mochi.mp4', video_num_segments=total_frames)
+
+        model_inputs['pixel_values'] = model_inputs['pixel_values'].to(torch.bfloat16)
+        for key in model_inputs:
+            if isinstance(model_inputs[key], torch.Tensor):
+                model_inputs[key] = model_inputs[key].to(model.device)
+        
+        local_attention_group_size = 258 * group_size
+        model.config.local_attention_group_size = local_attention_group_size
+        for decoder_layer in model.language_model.model.layers:
+            decoder_layer.local_attention_group_size = local_attention_group_size
+        
+        print(f"Input_ids shape: {model_inputs['input_ids'].shape}")
+        print(f"Group size: {group_size}")
+        print(f"Local attention group size: {local_attention_group_size}")
+        print(f"Enable shared cross attention: {enable_shared_cross_attention}")
+        print(f"Use Flash Attention: {use_flash_attn}")
+        print(f"Running {run_times} times")
+        print("Number of tokens", model_inputs['input_ids'].shape[1])
+        print("Number of frames", model_inputs['pixel_values'].shape[0])
+        metrics = defaultdict(float)
+        for _ in tqdm(range(run_times), desc='Running...'):
+            responses = model.generate(**model_inputs, **generation_config)
+        response = processor.decode(responses[0])
+        print(response)
+        return response
+    
     
 if __name__ == '__main__':
     fire.Fire(cli)
     
 """
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in case of segmentation memory error
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in case of segmentation memory error
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
 """

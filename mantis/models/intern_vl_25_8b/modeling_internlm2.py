@@ -3019,8 +3019,8 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
             {
                 'position_ids': position_ids,
                 'past_key_values': past_key_values,
-                # 'use_cache': kwargs.get('use_cache'),
-                'use_cache': False, # for debugging prefilling
+                'use_cache': kwargs.get('use_cache'),
+                # 'use_cache': False, # for debugging prefilling
                 'attention_mask': attention_mask,
                 'encoder_hidden_states': encoder_hidden_states,
                 'encoder_attention_mask': encoder_attention_mask,

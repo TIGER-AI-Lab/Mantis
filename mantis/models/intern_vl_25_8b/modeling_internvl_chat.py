@@ -729,4 +729,4 @@ class InternVLChatModel(PreTrainedModel):
             efficiency_metrics["prefill_time_per_token"] = total_time / input_ids.shape[1]
             start.record()
             return outputs, efficiency_metrics
-        return outputs,
+        return outputs
