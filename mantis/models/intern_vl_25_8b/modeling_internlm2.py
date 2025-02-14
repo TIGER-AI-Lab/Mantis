@@ -2193,6 +2193,7 @@ class InternLM2DecoderLayer(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
+            attn_weights = tuple(x.cpu() for x in attn_weights) if isinstance(attn_weights, tuple) else attn_weights.cpu()
             outputs += (attn_weights,)
 
         if use_cache:

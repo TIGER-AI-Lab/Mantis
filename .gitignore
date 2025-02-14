@@ -188,4 +188,5 @@ cython_debug/
 /*.mp4
 /mantis/models/NeuFlow
 /mantis/models/perceiver
-/scripts/*.png
+/scripts/**/*.png
+/scripts/*.pt
