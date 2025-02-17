@@ -111,7 +111,7 @@ class cli:
     def __init__(
         self,
         model_path: str='OpenGVLab/InternVL2_5-8B',
-        use_flash_attn: bool=True,
+        use_flash_attn: bool=False,
         enable_shared_cross_attention: bool=True,
         run_times=1,
     ):
@@ -121,7 +121,7 @@ class cli:
         config.llm_config.enable_cross_attention = config.enable_cross_attention
         config.llm_config.local_attention_group_size = config.local_attention_group_size
         config.llm_config.enable_shared_cross_attention = config.enable_shared_cross_attention
-        model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='auto').eval()
+        model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='cuda:3').eval()
 
         processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention, max_num_patches=1)
 
@@ -149,6 +149,7 @@ class cli:
         self.run_times = run_times
         self.enable_shared_cross_attention = enable_shared_cross_attention
         self.use_flash_attn = use_flash_attn
+        # self.get_attention(group_size=8, total_frames=8)
 
     def benchmark_vary_group_size_fix_frames(
         self,
@@ -434,6 +435,10 @@ class cli:
         print(f"Saving attention to {save_file}")
         torch.save(attentions, save_file)
         print(f"Saved attention to {save_file}")
+        input_ids_save_file = save_file.replace('attention', 'input_ids')
+        print(f"Saving input_ids to {input_ids_save_file}")
+        torch.save(model_inputs['input_ids'], input_ids_save_file)
+        print(f"Saved input_ids to {input_ids_save_file}")  
         return        
     
     
@@ -445,5 +450,5 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in ca
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
-python benchmark_internvl_efficiency.py get_attention --group_size 8 --total_frames 8 --use_flash_attn False
+python benchmark_internvl_efficiency.py get_attention --group_size 4 --total_frames 8 --use_flash_attn False
 """

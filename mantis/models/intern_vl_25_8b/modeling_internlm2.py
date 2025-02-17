@@ -2174,7 +2174,6 @@ class InternLM2DecoderLayer(nn.Module):
                     
                 # add residual 
                 hidden_states = residual + hidden_states
-                print(f"text_to_kv_attn_weights: {text_to_kv_attn_weights[0].size()}")
                 if output_attentions:
                     attn_weights = (local_self_attn_weights, text_to_kv_attn_weights)
             else:
@@ -2442,7 +2441,6 @@ class InternLM2Model(InternLM2PreTrainedModel):
             inputs_embeds = self.tok_embeddings(input_ids)
 
         # prepare attention mask
-        encoder_attention_mask_expaned_for_normal_attention = False
         if self.config.attn_implementation == 'flash_attention_2':
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
@@ -2468,10 +2466,7 @@ class InternLM2Model(InternLM2PreTrainedModel):
             elif encoder_attention_mask.dim() == 2:
                 encoder_local_attention_mask = encoder_attention_mask
             else:
-                if encoder_attention_mask_expaned_for_normal_attention:
-                    _encoder_attention_mask = 1 - encoder_attention_mask
-                else:
-                    _encoder_attention_mask = encoder_attention_mask
+                _encoder_attention_mask = encoder_attention_mask
                 # [bsz, 1, q_len, kv_len]
                 # encoder_attention_mask_min_q = _encoder_attention_mask.min(dim=-2).values
                 encoder_attention_mask_max_q = _encoder_attention_mask.max(dim=-2).values
@@ -2553,19 +2548,24 @@ class InternLM2Model(InternLM2PreTrainedModel):
                     attention_mask = torch.cat([
                         _expand_mask(attention_mask[:, :kv_seq_len], inputs_embeds.dtype, tgt_len=q_len).to(inputs_embeds.device),
                         self._prepare_decoder_attention_mask(
-                            attention_mask[:, kv_seq_len:], (batch_size, seq_length), inputs_embeds, past_key_values_length
+                            attention_mask[:, kv_seq_len:], (batch_size, seq_length), inputs_embeds, max(0, past_key_values_length-kv_seq_len)
                         )], dim=-1)
                 else:
                     # attention_mask is already 3D(4D for attention heads)
                     attention_mask = attention_mask.to(inputs_embeds.device)
                 if encoder_attention_mask.dim() == 2:
-                    encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=kv_seq_len).to(
-                        inputs_embeds.device
+                    encoder_attention_mask = self._prepare_decoder_attention_mask(
+                        encoder_attention_mask, (batch_size, kv_seq_len), encoder_hidden_states, 0
                     )
-                    encoder_attention_mask_expaned_for_normal_attention = True
                 else:
                     # encoder_attention_mask is already 3D(4D for attention heads)
                     encoder_attention_mask = encoder_attention_mask.to(inputs_embeds.device)
+                    
+                # save the attention into image
+                attention_mask_img = attention_mask.float().cpu().numpy()
+                encoder_attention_mask_img = encoder_attention_mask.float().cpu().numpy()
+                attention_mask_img = attention_mask_img[0, 0]
+                encoder_attention_mask_img = encoder_attention_mask_img[0, 0]
         else:
             # expand the attention mask if necessary    
             if not self.config.attn_implementation == 'flash_attention_2':

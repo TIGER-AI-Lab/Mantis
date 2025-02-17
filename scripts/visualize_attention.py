@@ -13,9 +13,13 @@ def plot_heatmap(attn: torch.Tensor, save_path="./fig.png", title="Attention Hea
     # Convert mean attention tensor to numpy array
     attention_data = attn.float().cpu().numpy()
     print(f"attention_data.shape: {attention_data.shape}")
-
+    q_len, k_len = attention_data.shape
+    
+    q_size = max(int(q_len // 100), 1)
+    k_size = max(int(k_len // 100), 1)
     # Create figure and axis
-    fig, ax = plt.subplots(figsize=(12, 10))
+    fig, ax = plt.subplots(figsize=(k_size, q_size))
+    print(f"figsize: {fig.get_size_inches()}")
 
     # Create heatmap with log scaling
     heatmap = ax.imshow(attention_data, cmap='viridis', aspect='auto', norm=LogNorm())
@@ -25,9 +29,9 @@ def plot_heatmap(attn: torch.Tensor, save_path="./fig.png", title="Attention Hea
     cbar.set_label('Attention Weight (Log Scale)')
 
     # Set labels and title
-    ax.set_xlabel('Source Tokens')
-    ax.set_ylabel('Target Tokens')
-    ax.set_title('Attention Heatmap')
+    ax.set_xlabel('KV Tokens')
+    ax.set_ylabel('Query Tokens')
+    ax.set_title(title)
 
     # Save the plot
     plt.savefig(save_path, bbox_inches='tight')
@@ -56,7 +60,7 @@ def main(
         print(f"text_to_kv_attn[0].shape: {text_to_kv_attn[0].shape}")
     else:
         raise ValueError(f"Invalid mode: {mode}")
-    save_dir = Path(save_dir) / mode
+    save_dir = Path(save_dir) / Path(attention_file).stem / mode
     save_dir.mkdir(parents=True, exist_ok=True)
     for i, attention in tqdm(enumerate(local_self_attn), total=len(local_self_attn), desc="Plotting Local Self Attention"):
         save_path = save_dir / f"local_self_attn_l{i}.png"
@@ -71,4 +75,5 @@ if __name__ == "__main__":
 
 """
 python visualize_attention.py --attention_file ./attention_mochi_g8_f8.pt --save_dir ./attention_plots
+python visualize_attention.py --attention_file ./attention_mochi_g4_f8.pt --save_dir ./attention_plots
 """
