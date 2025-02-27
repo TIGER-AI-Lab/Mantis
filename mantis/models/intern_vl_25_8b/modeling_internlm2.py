@@ -2171,6 +2171,8 @@ class InternLM2DecoderLayer(nn.Module):
                     # encoder_hidden_states = self.feed_forward(encoder_hidden_states)
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                     end = end_record(start, "FFN for encoder_hidden_states")
+                else:
+                    local_self_attn_weights = None
                     
                 # add residual 
                 hidden_states = residual + hidden_states
@@ -2192,7 +2194,7 @@ class InternLM2DecoderLayer(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            attn_weights = tuple(x.cpu() for x in attn_weights) if isinstance(attn_weights, tuple) else attn_weights.cpu()
+            attn_weights = tuple(x.cpu() if x is not None else None for x in attn_weights) if isinstance(attn_weights, tuple) else attn_weights.cpu()
             outputs += (attn_weights,)
 
         if use_cache:

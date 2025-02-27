@@ -3,11 +3,11 @@ import fire
 # If you want to load a model using multiple GPUs, please refer to the `Multiple GPUs` section.
 from mantis.models.intern_vl_25_8b import InternVLChatModel, InternVLChatConfig, InternVLChatProcessor, InternLM2Tokenizer
 from mantis.models.intern_vl_25_8b.modeling_internlm2 import all_events_times, clear_all_events_times, peak_memory_usage
+from mantis.models.conversation import conv_templates
 from tqdm import tqdm
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LogNorm
 from pathlib import Path
 from tqdm import tqdm
 from pathlib import Path
@@ -121,7 +121,7 @@ class cli:
         config.llm_config.enable_cross_attention = config.enable_cross_attention
         config.llm_config.local_attention_group_size = config.local_attention_group_size
         config.llm_config.enable_shared_cross_attention = config.enable_shared_cross_attention
-        model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='cuda:3').eval()
+        model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='auto').eval()
 
         processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention, max_num_patches=1)
 
@@ -130,9 +130,6 @@ class cli:
         model.img_end_token_id = processor.img_end_token_id
         model.bos_token_id = processor.bos_token_id
         
-
-        from mantis.models.conversation import conv_templates
-
         conv = conv_templates['internvl2_5'].copy()
         conv.append_message(conv.roles[0], 'Please describe the video in detail.')
         conv.append_message(conv.roles[1], None)
@@ -398,6 +395,7 @@ class cli:
             save_file = f'attention_{video_name}_g{group_size}_f{total_frames}.pt'
         model = self.model
         generation_config = self.generation_config
+        generation_config['max_new_tokens'] = 512
         processor = self.processor
         run_times = self.run_times
         enable_shared_cross_attention = self.enable_shared_cross_attention
@@ -424,9 +422,30 @@ class cli:
         print("Number of tokens", model_inputs['input_ids'].shape[1])
         print("Number of frames", model_inputs['pixel_values'].shape[0])
         
+        conv = conv_templates['internvl2_5'].copy()
+        conv.append_message(conv.roles[0], 'Please describe the video in detail.')
+        conv.append_message(conv.roles[1], None)
+        query = conv.get_prompt()
+        query = "<video>\n" + query
+        for key in model_inputs:
+            print(f"{key}: {model_inputs[key].shape}")
         with torch.no_grad():
-            outputs = model(**model_inputs, output_attentions=True, use_cache=False)
+            print("Generating...")
+            outputs = model.generate(**model_inputs, **generation_config, use_cache=True)
+            print("Generated")
+            model_inputs['input_ids'] = torch.cat([model_inputs['input_ids'], outputs], dim=1)
+            model_inputs['attention_mask'] = torch.cat([model_inputs['attention_mask'], torch.ones((1, outputs.shape[1]), dtype=torch.long, device=model_inputs['attention_mask'].device)], dim=1)
+            print("Number of tokens", model_inputs['input_ids'].shape[1])
+            print("Forward to create attention map")
+            outputs = model(**model_inputs, use_cache=True, output_attentions=True)
+        print(outputs.keys())
+        print(f"len(attentions): {len(outputs['attentions'])}")
+        print(f"len(attentions[0]): {len(outputs['attentions'][0])}")
+        print(f"len(attentions[0][0]): {len(outputs['attentions'][0][0])}")
         attentions = outputs['attentions']
+        past_key_values = outputs['past_key_values']
+        print(f"inputs_ids.shape: {model_inputs['input_ids'].shape}")
+        print(f"len(past_key_values): {len(outputs['past_key_values'])}")
         print(f"Number of attentions: {len(attentions)}")
         print(f"len(attentions[0]): {len(attentions[0])}")
         print(f"attentions[0][0].shape: {attentions[0][0].shape}")
@@ -435,10 +454,16 @@ class cli:
         print(f"Saving attention to {save_file}")
         torch.save(attentions, save_file)
         print(f"Saved attention to {save_file}")
+        
         input_ids_save_file = save_file.replace('attention', 'input_ids')
         print(f"Saving input_ids to {input_ids_save_file}")
         torch.save(model_inputs['input_ids'], input_ids_save_file)
         print(f"Saved input_ids to {input_ids_save_file}")  
+        
+        past_key_values_save_file = save_file.replace('attention', 'past_key_values')
+        print(f"Saving past_key_values to {past_key_values_save_file}")
+        torch.save(past_key_values, past_key_values_save_file)
+        print(f"Saved past_key_values to {past_key_values_save_file}")
         return        
     
     
@@ -450,5 +475,5 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in ca
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
-python benchmark_internvl_efficiency.py get_attention --group_size 4 --total_frames 8 --use_flash_attn False
+python benchmark_internvl_efficiency.py get_attention --group_size 8 --total_frames 8 --use_flash_attn False
 """
