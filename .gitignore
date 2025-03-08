@@ -190,3 +190,4 @@ cython_debug/
 /mantis/models/perceiver
 /scripts/**/*.png
 /scripts/*.pt
+/plots_attention_weights_error
