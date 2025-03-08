@@ -103,13 +103,13 @@ def main(
         raise ValueError(f"Invalid mode: {mode}")
     save_dir = Path(save_dir) / Path(attention_file).stem / mode
     save_dir.mkdir(parents=True, exist_ok=True)
-    # for i, attention in tqdm(enumerate(local_self_attn), total=len(local_self_attn), desc="Plotting Local Self Attention"):
-    #     save_path = save_dir / f"local_self_attn_l{i}.png"
-    #     plot_attention_heatmap(attention, save_path=save_path, title=f"Local Self Attention Layer {i}")
+    for i, attention in tqdm(enumerate(local_self_attn), total=len(local_self_attn), desc="Plotting Local Self Attention"):
+        save_path = save_dir / f"local_self_attn_l{i}.png"
+        plot_attention_heatmap(attention, save_path=save_path, title=f"Local Self Attention Layer {i}")
     
-    # for i, attention in tqdm(enumerate(text_to_kv_attn), total=len(text_to_kv_attn), desc="Plotting Text to Key-Value Attention"):
-    #     save_path = save_dir / f"text_to_kv_attn_l{i}.png"
-    #     plot_attention_heatmap(attention, save_path=save_path, title=f"Text to Key-Value Attention Layer {i}")
+    for i, attention in tqdm(enumerate(text_to_kv_attn), total=len(text_to_kv_attn), desc="Plotting Text to Key-Value Attention"):
+        save_path = save_dir / f"text_to_kv_attn_l{i}.png"
+        plot_attention_heatmap(attention, save_path=save_path, title=f"Text to Key-Value Attention Layer {i}")
         
     if past_key_values_file is not None:
         print("Plotting vector norms heatmap")

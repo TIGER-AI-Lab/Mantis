@@ -437,7 +437,7 @@ class cli:
             model_inputs['attention_mask'] = torch.cat([model_inputs['attention_mask'], torch.ones((1, outputs.shape[1]), dtype=torch.long, device=model_inputs['attention_mask'].device)], dim=1)
             print("Number of tokens", model_inputs['input_ids'].shape[1])
             print("Forward to create attention map")
-            outputs = model(**model_inputs, use_cache=True, output_attentions=True)
+            outputs = model(**model_inputs, use_cache=True, output_attentions=True, output_hidden_states=False)
         print(outputs.keys())
         print(f"len(attentions): {len(outputs['attentions'])}")
         print(f"len(attentions[0]): {len(outputs['attentions'][0])}")
