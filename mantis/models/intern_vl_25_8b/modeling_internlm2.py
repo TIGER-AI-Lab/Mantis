@@ -882,6 +882,187 @@ class InternLM2Attention(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
+
+import random
+import torch.nn.functional as F
+def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, predict_type="attention_weights"):
+    """
+    Args:
+        attn_weights: (bz, 1, Q_len, K_len)
+        keys: (bz, num_heads, Q_len, C)
+        values: (bz, num_heads, K_len, C)
+        outputs: (bz, Q_len, C)
+    Returns:
+        top_k_mask: (bz, K_len)
+    """
+    random.seed(0)
+    bz, _, k_len, _ = values.shape
+    bz_top_k_idxs = []
+    for bz_i in range(bz):
+        attn_weights_i = attn_weights[bz_i].mean(0) if attn_weights is not None else None
+        keys_i = keys[bz_i]
+        values_i = values[bz_i]
+        outputs_i = outputs[bz_i]
+        if predict_type == "salient_tokens":
+            slident_value = []
+            for i in range(len(attn_weights_i)):
+                weights = attn_weights_i[i:, i]
+                slident_value.append(weights.std().item() + weights.mean().item())
+            top_k_idxs = sorted(range(len(slident_value)), key=lambda x: slident_value[x], reverse=True)[:top_k]
+        elif predict_type == "attention_weights":
+            mean_weights = []
+            for i in range(len(attn_weights_i)):
+                weights = attn_weights_i[i:, i]
+                mean_weights.append(weights.mean().item())
+            top_k_idxs = sorted(range(len(mean_weights)), key=lambda x: mean_weights[x], reverse=True)[:top_k]
+        elif predict_type == "attention_weights_sum":
+            sum_weights = []
+            for i in range(len(attn_weights_i)):
+                weights = attn_weights_i[i:, i]
+                sum_weights.append(weights.sum().item())
+            top_k_idxs = sorted(range(len(sum_weights)), key=lambda x: sum_weights[x], reverse=True)[:top_k]
+        elif predict_type == "attention_weights_sum_head_tail":
+            sum_weights = []
+            for i in range(len(attn_weights_i)):
+                weights = attn_weights_i[i:, i]
+                sum_weights.append(weights.sum().item())
+            top_k_idxs = sorted(range(len(sum_weights)), key=lambda x: sum_weights[x], reverse=True)
+            top_k_idxs = top_k_idxs[:top_k//2] + top_k_idxs[-top_k//2:]
+        elif predict_type == "attention_weights_sum_per_image":
+            sum_weights = []
+            for i in range(len(attn_weights_i)):
+                weights = attn_weights_i[i:i+258, i] # 258 is the number of tokens in an image
+                sum_weights.append(weights.sum().item())
+            top_k_idxs = sorted(range(len(sum_weights)), key=lambda x: sum_weights[x], reverse=True)[:top_k]
+        elif predict_type == "attention_weights_sum_with_random":
+            sum_weights = []
+            for i in range(len(attn_weights_i)):
+                weights = attn_weights_i[i:, i]
+                sum_weights.append(weights.sum().item())
+            top_k_idxs = sorted(range(len(sum_weights)), key=lambda x: sum_weights[x], reverse=True)
+            top_k_idxs = top_k_idxs[:top_k//2]
+            random_top_k_idxs = list(set(list(range(len(sum_weights)))) - set(top_k_idxs))
+            random_top_k_idxs = random.sample(random_top_k_idxs, min(top_k//2, len(random_top_k_idxs)))
+            top_k_idxs.extend(random_top_k_idxs)
+        elif predict_type == "attention_weights_deduplication":
+            # pivot:retained tokens = 1:32
+            num_pivot_tokens = (top_k - 1) // 2 + 1
+            sum_weights = []
+            for i in range(len(attn_weights_i)):
+                weights = attn_weights_i[i:, i]
+                sum_weights.append(weights.sum().item())
+            top_k_idxs = sorted(range(len(sum_weights)), key=lambda x: sum_weights[x], reverse=True)
+            top_k_idxs, other_top_k_idxs = top_k_idxs[:num_pivot_tokens], top_k_idxs[num_pivot_tokens:]
+            # select num_other_tokens from other_top_k_idxs by the lowest cosine similarity
+            cur_layer_value_vectors = values_i.transpose(0, 1).flatten(1, 2)
+            local_self_attn_value_vectors = cur_layer_value_vectors[:attn_weights_i.shape[0]]
+            pivot_tokens_values = local_self_attn_value_vectors[top_k_idxs] # (P, C)
+            other_tokens_values = local_self_attn_value_vectors[other_top_k_idxs] # (O, C)
+            # Step 1: Normalize both sets of vectors
+            pivot_tokens_normalized = F.normalize(pivot_tokens_values, p=2, dim=1)  # Normalize along embedding dimension
+            other_tokens_normalized = F.normalize(other_tokens_values, p=2, dim=1)  # Normalize along embedding dimension
+
+            # Step 2: Compute the cosine similarity matrix
+            # This performs a matrix multiplication: (P, C) × (C, O) = (P, O)
+            cosine_similarity_matrix = torch.matmul(pivot_tokens_normalized, other_tokens_normalized.transpose(0, 1))
+            top_k_idxs.extend([other_top_k_idxs[j] for j in cosine_similarity_matrix.mean(dim=0).argsort()[:top_k - num_pivot_tokens]])
+
+            # # select the num_pick_tokens from other_top_k_idxs for each pivot token
+            # for i in range(len(top_k_idxs)):
+            #     pivot_cosine_similarity = cosine_similarity_matrix[i]
+            #     top_k_idxs.extend([other_top_k_idxs[j] for j in pivot_cosine_similarity.argsort()[:num_pivot_tokens]])
+            top_k_idxs = list(set(top_k_idxs))
+        elif predict_type == "vector_norms":
+            cur_layer_value_vectors = values_i.transpose(0, 1).flatten(1, 2)
+            vector_norms = cur_layer_value_vectors.norm(2, dim=-1)
+            top_k_idxs = vector_norms.argsort(descending=True)[:top_k].tolist()
+        elif predict_type == "key_norms":
+            cur_layer_key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
+            key_norms = cur_layer_key_vectors.norm(2, dim=-1)
+            top_k_idxs = key_norms.argsort(descending=True)[:top_k].tolist()
+        elif predict_type == "output_norms":
+            outputs_norms = outputs_i.norm(2, dim=-1)
+            top_k_idxs = outputs_norms.argsort(descending=True)[:top_k].tolist()
+        elif predict_type == "weighted_norms":
+            weights = attn_weights_i # (Q_len, K_len)
+            cur_layer_value_vectors = values_i.transpose(0, 1).flatten(1, 2) # (K_len, C)
+            all_weighted_norms = []
+            for q_i in range(len(weights)):
+                cur_weights = weights[q_i]
+                weighted_vectors = cur_weights.unsqueeze(-1) * cur_layer_value_vectors
+                weighted_norms = weighted_vectors.norm(2, dim=-1)
+                all_weighted_norms.append(weighted_norms)
+            all_weighted_norms = torch.stack(all_weighted_norms, dim=0).mean(dim=0)
+            top_k_idxs = all_weighted_norms.argsort(descending=True)[:top_k].tolist()
+        else:
+            raise ValueError(f"Unknown predict type: {predict_type}")
+        bz_top_k_idxs.append(top_k_idxs)
+    bz_top_k_idxs = torch.tensor(bz_top_k_idxs, device=values.device)
+    top_k_select_mask = torch.zeros(bz, k_len, dtype=torch.bool, device=values.device)
+    top_k_select_mask.scatter_(1, bz_top_k_idxs, 1)    
+    return top_k_select_mask
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from pathlib import Path
+
+plot_all_top_k_idxs = []
+plot_total_num_tokens = 0
+plotted = False
+plot_predict_type = None
+plot_top_k = None
+def plot_top_k_heatmap(
+    title="Top K Tokens", save_dir="top_k_plots"
+):
+    global plot_all_top_k_idxs, plot_total_num_tokens, plotted, plot_predict_type, plot_top_k
+    all_top_k_idxs = plot_all_top_k_idxs
+    total_num_tokens = plot_total_num_tokens
+    if plotted or not all_top_k_idxs:
+        return 
+    plt.style.use('seaborn-v0_8-whitegrid')
+    sns.set_context("notebook", font_scale=1.2)
+    
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(10, 10))
+    
+    heatmap = np.zeros((len(all_top_k_idxs), total_num_tokens))
+    
+    
+    for i, top_k_idxs in enumerate(all_top_k_idxs):
+        # Create a heatmap with the top k tokens
+        heatmap[i, top_k_idxs.cpu()] = 1
+        
+    
+    ax.imshow(heatmap, cmap='viridis', aspect='auto', vmin=0, vmax=1)
+    ax.set_xlabel("Tokens")
+    ax.set_ylabel("Top K Tokens")
+    ax.set_title(title)
+    # y ticks from 0 to len(all_top_k_idxs), major 5, minor 1
+    y_ticks = [f"Layer {i}" for i in range(len(all_top_k_idxs))]
+    ax.set_yticks(np.arange(0, len(y_ticks), 5))
+    ax.set_yticks(np.arange(0, len(y_ticks), 1), minor=True)
+    ax.set_yticklabels([f"{y_ticks[i]}" for i in range(0, len(y_ticks), 5)])
+    # x ticks from 0 to total_num_tokens, major 500, minor 100
+    ax.set_xticks(np.arange(0, total_num_tokens, 500))
+    ax.set_xticks(np.arange(0, total_num_tokens, 100), minor=True)
+    ax.set_xticklabels(np.arange(0, total_num_tokens, 500))
+    
+    # Add grid for better readability
+    ax.grid(axis='y', which='minor', linestyle='--', alpha=0.7)
+        
+    # Set labels and title for the entire figure
+    fig.suptitle(title, fontsize=16, fontweight='bold', y=1.05)
+    
+    # save the plot
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    save_path = save_dir / f"top_k_tokens_pred={plot_predict_type}_top_k={plot_top_k}_total_tokens={total_num_tokens}.png"
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Saved top k tokens of each layer figure to {save_path}")
+    plotted = True
+    
 class InternLM2CrossAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -895,6 +1076,8 @@ class InternLM2CrossAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.is_causal = False
+        self.top_k = getattr(config, "top_k", -1)
+        self.predict_type = getattr(config, "predict_type", "attention_weights")
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -987,6 +1170,7 @@ class InternLM2CrossAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        return_top_k_mask: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if 'padding_mask' in kwargs:
@@ -1044,8 +1228,20 @@ class InternLM2CrossAttention(nn.Module):
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
-        past_key_value = (key_states, value_states) if use_cache else None
+            if self.top_k > 0 and len(past_key_value) > 2:
+                attention_mask_k_len = attention_mask.size(-1)
+                prev_top_k_mask = torch.cat([
+                    past_key_value[2],
+                    torch.ones(attention_mask_k_len - len(past_key_value[2]), dtype=torch.bool, device=past_key_value[2].device)
+                ])
+                attn_idxs = prev_top_k_mask.nonzero(as_tuple=False).squeeze(-1)
+                attention_mask = attention_mask[:, :, :, attn_idxs]
+            else:
+                prev_top_k_mask = None
+        if self.top_k > 0 and past_key_value and len(past_key_value) > 2:
+            past_key_value = (key_states, value_states, prev_top_k_mask) if use_cache else None
+        else:
+            past_key_value = (key_states, value_states) if use_cache else None
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -1078,12 +1274,20 @@ class InternLM2CrossAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
+        if self.top_k > 0 and return_top_k_mask:
+            top_k_mask = get_top_k_mask_to_predict(attn_weights, key_states, value_states, attn_output,
+                top_k=self.top_k, predict_type=self.predict_type)
+        else:
+            top_k_mask = None
+            
         attn_output = self.wo(attn_output)
 
         if not output_attentions:
             attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
+        if return_top_k_mask:
+            return attn_output, attn_weights, past_key_value, top_k_mask
+        else:
+            return attn_output, attn_weights, past_key_value
     
     def forward(self, *args, **kwargs):
         return self._forward(self, *args, **kwargs)
@@ -1537,6 +1741,8 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        return_top_k_mask: bool = False,
+        compute_attn_weights: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # InternLM2FlashAttention2 attention does not support output_attentions
@@ -1609,13 +1815,49 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            if self.top_k > 0 and len(past_key_value) > 2 and attention_mask is not None:
+                attention_mask_k_len = attention_mask.size(-1)
+                prev_top_k_mask = torch.cat([
+                    past_key_value[2],
+                    torch.ones(attention_mask_k_len - len(past_key_value[2]), dtype=torch.bool, device=past_key_value[2].device)
+                ])
+                attn_idxs = prev_top_k_mask.nonzero(as_tuple=False).squeeze(-1)
+                attention_mask = attention_mask[:, :, :, attn_idxs]
+            else:
+                prev_top_k_mask = None
+        if self.top_k > 0 and past_key_value and len(past_key_value) > 2:
+            past_key_value = (key_states, value_states, prev_top_k_mask) if use_cache else None
+        else:
+            past_key_value = (key_states, value_states) if use_cache else None
 
-        past_key_value = (key_states, value_states) if use_cache else None
-
+        
+        if compute_attn_weights:
+            _key_states = repeat_kv(key_states, self.num_key_value_groups)
+            attn_weights = torch.matmul(query_states, _key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+            if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
+                raise ValueError(
+                    f'Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is'
+                    f' {attn_weights.size()}'
+                )
+            if attention_mask is not None:
+                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                    raise ValueError(
+                        f'Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}'
+                    )
+                attn_weights = attn_weights + attention_mask
+            else:
+                pass
+                # if self.is_causal:
+                #     attn_weights = attn_weights + torch.triu(
+                #         torch.full((bsz, 1, q_len, kv_seq_len), float('-inf'), device=attn_weights.device, dtype=attn_weights.dtype), 
+                #         diagonal=kv_seq_len - q_len + 1)
+            # upcast attention to fp32
+            # attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        else:
+            attn_weights = None
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
-
         
         start = start_record("_flash_attention_forward", level=3)
         attn_output = self._flash_attention_forward(
@@ -1625,12 +1867,22 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         
         start = start_record("wo", level=3)
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        
+        if self.top_k > 0 and return_top_k_mask:
+            top_k_mask = get_top_k_mask_to_predict(attn_weights, key_states.transpose(1, 2), value_states.transpose(1, 2), attn_output,
+                top_k=self.top_k, predict_type=self.predict_type)
+        else:
+            top_k_mask = None
+            
         attn_output = self.wo(attn_output)
         end = end_record(start, "wo")
         if not output_attentions:
-            attn_weights = None
+            attn_weights = attn_weights if compute_attn_weights else None
 
-        return attn_output, attn_weights, past_key_value
+        if return_top_k_mask:
+            return attn_output, attn_weights, past_key_value, top_k_mask
+        else:
+            return attn_output, attn_weights, past_key_value
 
     def forward(self, *args, **kwargs):
         return self._forward(self, *args, **kwargs)
@@ -1951,7 +2203,7 @@ class InternLM2DecoderLayer(nn.Module):
                 output_encoder_hidden_states = True
                 residual = hidden_states
                 hidden_states = self.attention_norm(hidden_states)
-                bsz, kv_seq_len, _ = encoder_hidden_states.size()
+                bsz = hidden_states.size(0)
                 # first self attention using hidden_states as the query, and encoder_hidden_states as the key and value
                 if not use_cache or past_key_value is None:
                     # we don't use the original encoder_hidden_states here as it keeps to be the orignal one without self attention
@@ -2114,7 +2366,7 @@ class InternLM2DecoderLayer(nn.Module):
                     # all_encoder_local_hidden_states = torch.cat(all_encoder_local_hidden_states, dim=0)
                     #
                     
-                    all_encoder_local_hidden_states, local_self_attn_weights, _ = self.attention(
+                    all_encoder_local_hidden_states, local_self_attn_weights, _, top_k_mask = self.attention(
                         hidden_states=batch_local_encoder_hidden_states,
                         attention_mask=batch_local_encoder_attention_mask,
                         encoder_hidden_states=batch_local_encoder_hidden_states,
@@ -2124,20 +2376,48 @@ class InternLM2DecoderLayer(nn.Module):
                         past_key_value=None,
                         output_attentions=output_attentions,
                         use_cache=False,
+                        return_top_k_mask=True,
+                        compute_attn_weights=True,
                     )
+                    
+                    
                     
                     end = end_record(start, "KV Local Self Attention")
                     
                     start = start_record("Split back to each group", level=2)
                     # split back to each group
                     all_encoder_local_hidden_states = all_encoder_local_hidden_states.view(bsz, len(chunk_idxs), -1, self.hidden_size)
+                    kv_select_mask = []
                     for i, local_seq_len in enumerate(all_local_seq_len):
                         if i == 0:
                             local_self_attn_output.append(all_encoder_local_hidden_states[:, i, :local_seq_len])
+                            if top_k_mask is not None:
+                                # top_k_mask: (bz, local_seq_len), bool
+                                top_k_mask_i = top_k_mask[i, :local_seq_len]
+                                kv_select_mask.append(top_k_mask_i)
                         else:
                             local_self_attn_output.append(all_encoder_local_hidden_states[:, i, len(previous_sparse_attn_idxs):local_seq_len])
-                    ### batch_version
-                    
+                            if top_k_mask is not None:
+                                top_k_mask_i = top_k_mask[i, len(previous_sparse_attn_idxs):local_seq_len]
+                                kv_select_mask.append(top_k_mask_i)
+                    # append the text part mask, we don't mask out any text part
+                    kv_select_mask.append(torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask_i.device))
+                    kv_select_mask = torch.cat(kv_select_mask, dim=0)
+                    # # select top k keys and values (bz, num_heads, seq_len, head_dim)
+                    key_states = present_key_value[0]
+                    value_states = present_key_value[1]
+                    kv_select_idxs = kv_select_mask.nonzero(as_tuple=False).squeeze(-1)
+                    ## For visualization
+                    global plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k
+                    plot_all_top_k_idxs.append(kv_select_idxs)
+                    plot_total_num_tokens = kv_select_mask.size(0)
+                    plot_predict_type = self.attention.predict_type
+                    plot_top_k = self.attention.top_k
+                    ## For visualization
+                    top_k_key_states = key_states[:, :, kv_select_idxs]
+                    top_k_value_states = value_states[:, :, kv_select_idxs]
+                    present_key_value = (top_k_key_states, top_k_value_states, kv_select_mask) if use_cache else None
+                    print(f"Reduce kv size from {key_states.size()} to {top_k_key_states.size()}")
                     encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
                     end = end_record(start, "Split back to each group")
                 
@@ -2981,6 +3261,8 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
+        print("decoded one token")
+        plot_top_k_heatmap()
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2] # get the layer 0's k value 's sequence length
             # Some generation methods already pass only the last input ID
@@ -2991,13 +3273,16 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             # input_ids = input_ids[:, remove_prefix_length:]
-            input_ids = input_ids[:, -1:]
+            input_ids = input_ids[:, -1:] # we don't use past_key_values to determine the length of the input_ids, we assume there is always one token to be newly decoded
+        
 
         position_ids = kwargs.get('position_ids', None)
         encoder_hidden_states = kwargs.get('encoder_hidden_states', None)
         encoder_attention_mask = kwargs.get('encoder_attention_mask', None)
         encoder_position_ids = kwargs.get('encoder_position_ids', None)
-        
+        if past_key_values is not None and self.config.enable_shared_cross_attention:
+            encoder_hidden_states = encoder_hidden_states[:, :, -1:] # won't be used in the future, simply set it in the one dimension
+            
         if encoder_hidden_states is not None and encoder_position_ids is None:
             if encoder_attention_mask is not None:
                 encoder_position_ids = encoder_attention_mask.long().cumsum(-1) - 1

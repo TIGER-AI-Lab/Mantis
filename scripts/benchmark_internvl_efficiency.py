@@ -1,3 +1,5 @@
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'
 import torch
 import fire
 # If you want to load a model using multiple GPUs, please refer to the `Multiple GPUs` section.
@@ -111,7 +113,7 @@ class cli:
     def __init__(
         self,
         model_path: str='OpenGVLab/InternVL2_5-8B',
-        use_flash_attn: bool=False,
+        use_flash_attn: bool=True,
         enable_shared_cross_attention: bool=True,
         run_times=1,
     ):
@@ -147,6 +149,7 @@ class cli:
         self.enable_shared_cross_attention = enable_shared_cross_attention
         self.use_flash_attn = use_flash_attn
         # self.get_attention(group_size=8, total_frames=8)
+        # self.generate(group_size=8, total_frames=128, top_k=100, predict_type='attention_weights_sum', max_new_tokens=12)
 
     def benchmark_vary_group_size_fix_frames(
         self,
@@ -346,17 +349,46 @@ class cli:
     def generate(
         self,
         group_size = 8,
-        total_frames=128
+        total_frames=128,
+        top_k=-1,
+        predict_type='attention_weights_sum',
+        max_new_tokens=128,
+        query=None,
+        top_k_starting_layer=0,
     ):
+        """
+        Args:
+            group_size: int
+            total_frames: int
+            top_k: int, whether to use select top_k for past_key_values
+            predict_type: one of ["salient_tokens", "attention_weights", "attention_weights_sum", "attention_weights_sum_head_tail",
+                     "attention_weights_sum_per_image", "attention_weights_sum_with_random", "attention_weights_deduplication",
+                     "vector_norms", "key_norms", "output_norms", "weighted_norms"]
+        """
         model = self.model
         generation_config = self.generation_config
-        generation_config['max_new_tokens'] = 512
+        generation_config['max_new_tokens'] = max_new_tokens
         processor = self.processor
         run_times = self.run_times
         enable_shared_cross_attention = self.enable_shared_cross_attention
         use_flash_attn = self.use_flash_attn
+        for i, decoder_layer in enumerate(model.language_model.model.layers):
+            if i >= top_k_starting_layer:
+                decoder_layer.attention.top_k = top_k
+            else:
+                decoder_layer.attention.top_k = -1
+            decoder_layer.attention.predict_type = predict_type
+            
+        if query is not None:
+            conv = conv_templates['internvl2_5'].copy()
+            conv.append_message(conv.roles[0], query)
+            conv.append_message(conv.roles[1], None)
+            query = conv.get_prompt()
+            query = "<video>\n" + query
+        else:
+            query = self.query
         
-        model_inputs = processor(self.query, videos='./mochi.mp4', video_num_segments=total_frames)
+        model_inputs = processor(query, videos='./mochi.mp4', video_num_segments=total_frames)
 
         model_inputs['pixel_values'] = model_inputs['pixel_values'].to(torch.bfloat16)
         for key in model_inputs:
@@ -474,6 +506,24 @@ if __name__ == '__main__':
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in case of segmentation memory error
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
-python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
+
+
 python benchmark_internvl_efficiency.py get_attention --group_size 8 --total_frames 8 --use_flash_attn False
+
+
+### Generation
+predict_type: one of ["salient_tokens", "attention_weights", "attention_weights_sum", "attention_weights_sum_head_tail",
+                     "attention_weights_sum_per_image", "attention_weights_sum_with_random", "attention_weights_deduplication",
+                     "vector_norms", "key_norms", "output_norms", "weighted_norms"]
+                     
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
+python benchmark_internvl_efficiency.py generate --group_size 8 --total_frames 128 --top_k 100 --predict_type 'attention_weights_sum' --max_new_tokens 12
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 1000 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 20 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 20 --predict_type 'attention_weights' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 20 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 50 --predict_type 'attention_weights_sum_head_tail' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
+python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 512 --top_k 20 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
+python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 512 --top_k 500 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
+python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 128 --top_k 501 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?" --start_layer 3
 """
