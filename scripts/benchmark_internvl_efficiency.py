@@ -525,5 +525,5 @@ python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 50 --predict_type 'attention_weights_sum_head_tail' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
 python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 512 --top_k 20 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
 python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 512 --top_k 500 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
-python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 128 --top_k 501 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?" --start_layer 3
+python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 128 --top_k 501 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?" --top_k_starting_layer 3
 """
