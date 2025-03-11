@@ -1024,7 +1024,7 @@ def plot_top_k_heatmap(
     sns.set_context("notebook", font_scale=1.2)
     
     # Create figure and axis
-    fig, ax = plt.subplots(figsize=(10, 10))
+    fig, ax = plt.subplots(figsize=(max(10, total_num_tokens/500), 15))
     
     heatmap = np.zeros((len(all_top_k_idxs), total_num_tokens))
     
@@ -1050,6 +1050,7 @@ def plot_top_k_heatmap(
     
     # Add grid for better readability
     ax.grid(axis='y', which='minor', linestyle='--', alpha=0.7)
+    ax.grid(axis='x', which='major', linestyle='--', alpha=0.7)
         
     # Set labels and title for the entire figure
     fig.suptitle(title, fontsize=16, fontweight='bold', y=1.05)
@@ -1274,7 +1275,7 @@ class InternLM2CrossAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
-        if self.top_k > 0 and return_top_k_mask:
+        if return_top_k_mask:
             top_k_mask = get_top_k_mask_to_predict(attn_weights, key_states, value_states, attn_output,
                 top_k=self.top_k, predict_type=self.predict_type)
         else:
@@ -1846,13 +1847,12 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
                     )
                 attn_weights = attn_weights + attention_mask
             else:
-                pass
-                # if self.is_causal:
-                #     attn_weights = attn_weights + torch.triu(
-                #         torch.full((bsz, 1, q_len, kv_seq_len), float('-inf'), device=attn_weights.device, dtype=attn_weights.dtype), 
-                #         diagonal=kv_seq_len - q_len + 1)
+                if self.is_causal:
+                    attn_weights = attn_weights + torch.triu(
+                        torch.full((bsz, 1, q_len, kv_seq_len), float('-inf'), device=attn_weights.device, dtype=attn_weights.dtype), 
+                        diagonal=kv_seq_len - q_len + 1)
             # upcast attention to fp32
-            # attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1)
         else:
             attn_weights = None
         query_states = query_states.transpose(1, 2)
@@ -1868,7 +1868,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         start = start_record("wo", level=3)
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         
-        if self.top_k > 0 and return_top_k_mask:
+        if return_top_k_mask:
             top_k_mask = get_top_k_mask_to_predict(attn_weights, key_states.transpose(1, 2), value_states.transpose(1, 2), attn_output,
                 top_k=self.top_k, predict_type=self.predict_type)
         else:
@@ -2418,6 +2418,7 @@ class InternLM2DecoderLayer(nn.Module):
                     top_k_value_states = value_states[:, :, kv_select_idxs]
                     present_key_value = (top_k_key_states, top_k_value_states, kv_select_mask) if use_cache else None
                     print(f"Reduce kv size from {key_states.size()} to {top_k_key_states.size()}")
+                    print(kv_select_idxs)
                     encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
                     end = end_record(start, "Split back to each group")
                 
