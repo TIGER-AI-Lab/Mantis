@@ -1,5 +1,4 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2'
 import torch
 import fire
 # If you want to load a model using multiple GPUs, please refer to the `Multiple GPUs` section.
@@ -14,6 +13,8 @@ from pathlib import Path
 from tqdm import tqdm
 from pathlib import Path
 
+PER_IMAGE_NUM_TOKENS = 263 # 258 + 5
+
 def run_benchmark(model, model_inputs, generation_config, processor, run_times):
     clear_all_events_times()
     print('Start benchmarking...')
@@ -24,7 +25,7 @@ def run_benchmark(model, model_inputs, generation_config, processor, run_times):
     print("Number of frames", model_inputs['pixel_values'].shape[0])
     metrics = defaultdict(float)
     for _ in tqdm(range(run_times), desc='Running...'):
-        responses, _metrics = model.generate(**model_inputs, **generation_config, benchmark_efficiency=True, use_cache=False)
+        responses, _metrics = model.generate(**model_inputs, **generation_config, benchmark_efficiency=True, use_cache=True)
         for key, value in _metrics.items():
             metrics[key] += value
     for key in metrics:
@@ -52,62 +53,11 @@ def run_benchmark(model, model_inputs, generation_config, processor, run_times):
         results[key] = {'average_time': average_time, 'num_called': num_called, 'percentage': percentage, 'message': message, 'level': level, 'total_time_per_run': total_time/run_times}
     results['total_prefill_time_per_run'] = metrics['total_prefill_time']
     results['total_prefill_time'] = prefill_total_time
-    results['peak_memory_usage'] = peak_memory_usage()
+    results['peak_memory_usage'] = torch.cuda.max_memory_allocated() / 1024**2
     response = processor.decode(responses[0])
     print(response)
     print('Done benchmarking!')
     return results
-
-def benchmark_vary_group_size_fix_frames(model, model_inputs, generation_config, processor, run_times, group_sizes, enable_shared_cross_attention, use_flash_attn, total_frames):
-    all_results_dict = {}
-    for group_size in group_sizes:
-        local_attention_group_size = 258 * group_size
-        model.config.local_attention_group_size = local_attention_group_size
-        for decoder_layer in model.language_model.model.layers:
-            decoder_layer.local_attention_group_size = local_attention_group_size
-        
-        print(f"Input_ids shape: {model_inputs['input_ids'].shape}")
-        print(f"Group size: {group_size}")
-        print(f"Local attention group size: {local_attention_group_size}")
-        print(f"Enable shared cross attention: {enable_shared_cross_attention}")
-        print(f"Use Flash Attention: {use_flash_attn}")
-        print(f"Running {run_times} times")
-        results = run_benchmark(model, model_inputs, generation_config, processor, run_times)
-        all_results_dict[group_size] = results
-    
-    # plot results
-    time_key = "total_time_per_run"
-    pure_local_kv_flash_attention_times = [x['1.1.3.3.1'][time_key] for x in all_results_dict.values()] # flash_attn_varlen_func
-    mlp_keys = ["1.1.1.1", "1.1.1.4", "1.1.3.1", "1.1.3.4", "1.1.5", "1.1.6"]
-    mlp_times = [sum([x[key][time_key] for key in mlp_keys]) for x in all_results_dict.values()]
-    total_prefill_times = [x['total_prefill_time_per_run'] for x in all_results_dict.values()]
-    
-    # Create figure and axis with a specific size
-    plt.figure(figsize=(12, 8))
-
-    # Plot lines with different styles and markers
-    plt.plot(group_sizes, pure_local_kv_flash_attention_times, 'o-', label='Flash Attention', linewidth=2, markersize=8)
-    plt.plot(group_sizes, mlp_times, 's-', label='MLP Times', linewidth=2, markersize=8)
-    plt.plot(group_sizes, total_prefill_times, '^-', label='Total Prefill', linewidth=2, markersize=8)
-
-    # Set x-axis to logarithmic scale since group sizes grow exponentially
-    plt.xscale('log', base=2)
-
-    # Customize the plot
-    plt.grid(True, which="both", ls="-", alpha=0.2)
-    plt.xlabel('Local Group Size', fontsize=12)
-    plt.ylabel('Time (ms)', fontsize=12)
-    plt.title(f'Performance Metrics vs Group Size (Avg run times: {run_times}, Total frames: {total_frames})', fontsize=14, pad=20)
-
-    # Add legend
-    plt.legend(fontsize=10, bbox_to_anchor=(1.02, 1), loc='upper left')
-
-    # Adjust layout to prevent label cutoff
-    plt.tight_layout()
-
-    # Show the plot
-    plt.show()
-    plt.savefig('benchmark.png') 
     
 class cli:
     def __init__(
@@ -115,9 +65,13 @@ class cli:
         model_path: str='OpenGVLab/InternVL2_5-8B',
         use_flash_attn: bool=True,
         enable_shared_cross_attention: bool=True,
+        top_k=-1,
+        predict_type='key_norms_small',
+        top_k_starting_layer=0,
         run_times=1,
+        max_new_tokens=1
     ):
-        local_attention_group_size = 258 * 1
+        local_attention_group_size = PER_IMAGE_NUM_TOKENS * 1
         tokenizer = InternLM2Tokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
         config = InternVLChatConfig.from_pretrained(model_path, enable_shared_cross_attention=enable_shared_cross_attention, local_attention_group_size=local_attention_group_size)
         config.llm_config.enable_cross_attention = config.enable_cross_attention
@@ -132,6 +86,13 @@ class cli:
         model.img_end_token_id = processor.img_end_token_id
         model.bos_token_id = processor.bos_token_id
         
+        for i, decoder_layer in enumerate(model.language_model.model.layers):
+            if i >= top_k_starting_layer:
+                decoder_layer.attention.top_k = top_k
+            else:
+                decoder_layer.attention.top_k = -1
+            decoder_layer.attention.predict_type = predict_type
+            
         conv = conv_templates['internvl2_5'].copy()
         conv.append_message(conv.roles[0], 'Please describe the video in detail.')
         conv.append_message(conv.roles[1], None)
@@ -141,15 +102,19 @@ class cli:
 
         # print(model_inputs)
         eos_token_id = tokenizer.convert_tokens_to_ids(conv.sep.strip())
-        generation_config = dict(max_new_tokens=1, do_sample=False, eos_token_id=eos_token_id)
+        generation_config = dict(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=eos_token_id)
         self.model = model
         self.generation_config = generation_config
         self.processor = processor
         self.run_times = run_times
         self.enable_shared_cross_attention = enable_shared_cross_attention
         self.use_flash_attn = use_flash_attn
+        self.top_k = top_k
+        self.predict_type = predict_type
+        self.top_k_starting_layer = top_k_starting_layer
+        self.max_new_tokens = max_new_tokens
         # self.get_attention(group_size=8, total_frames=8)
-        # self.generate(group_size=8, total_frames=128, top_k=100, predict_type='attention_weights_sum', max_new_tokens=12)
+        # self.generate(group_size=16, total_frames=16, top_k=-1, predict_type='attention_weights_sum', max_new_tokens=512)
 
     def benchmark_vary_group_size_fix_frames(
         self,
@@ -174,7 +139,7 @@ class cli:
         all_results_dict = {}
         
         for group_size in group_sizes:
-            local_attention_group_size = 258 * group_size
+            local_attention_group_size = PER_IMAGE_NUM_TOKENS * group_size
             model.config.local_attention_group_size = local_attention_group_size
             for decoder_layer in model.language_model.model.layers:
                 decoder_layer.local_attention_group_size = local_attention_group_size
@@ -194,26 +159,39 @@ class cli:
         mlp_keys = ["1.1.1.1", "1.1.1.4", "1.1.3.1", "1.1.3.4", "1.1.5", "1.1.6"]
         mlp_times = [sum([x[key][time_key] for key in mlp_keys]) for x in all_results_dict.values()]
         total_prefill_times = [x['total_prefill_time_per_run'] for x in all_results_dict.values()]
+        peak_memory_usages = [x['peak_memory_usage'] for x in all_results_dict.values()]
         
         # Create figure and axis with a specific size
-        plt.figure(figsize=(12, 8))
+        # plt.figure(figsize=(12, 8))
+        fig, ax1 = plt.subplots(figsize=(12, 8))
 
         # Plot lines with different styles and markers
-        plt.plot(group_sizes, pure_local_kv_flash_attention_times, 'o-', label='Flash Attention', linewidth=2, markersize=8)
-        plt.plot(group_sizes, mlp_times, 's-', label='MLP Times', linewidth=2, markersize=8)
-        plt.plot(group_sizes, total_prefill_times, '^-', label='Total Prefill', linewidth=2, markersize=8)
+        ax1.plot(group_sizes, pure_local_kv_flash_attention_times, 'o-', label='Flash Attention', linewidth=2, markersize=8)
+        ax1.plot(group_sizes, mlp_times, 's-', label='MLP Times', linewidth=2, markersize=8)
+        ax1.plot(group_sizes, total_prefill_times, '^-', label='Total Prefill', linewidth=2, markersize=8)
+        ax1.plot(group_sizes, [sum(x) for x in zip(pure_local_kv_flash_attention_times, mlp_times)], 'v-', label='Flash Attention + MLP Times', linewidth=2, markersize=8)
 
         # Set x-axis to logarithmic scale since group sizes grow exponentially
-        plt.xscale('log', base=2)
+        ax1.set_xscale('log', base=2)
 
         # Customize the plot
-        plt.grid(True, which="both", ls="-", alpha=0.2)
-        plt.xlabel('Local Group Size', fontsize=12)
-        plt.ylabel('Time (ms)', fontsize=12)
-        plt.title(f'Performance Metrics vs Group Size (Avg run times: {run_times}, Total frames: {total_frames})', fontsize=14, pad=20)
+        ax1.grid(True, which="both", ls="-", alpha=0.2)
+        ax1.tick_params(axis='y', labelcolor='black')
+        ax1.set_xlabel('Local Group Size', fontsize=12)
+        ax1.set_ylabel('Time (ms)', fontsize=12)
+        
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('Memory Usage (MB)', fontsize=12)
+        ax2.tick_params(axis='y', labelcolor='black')
+        ax2.plot(group_sizes, peak_memory_usages, 'x-', label='Peak Memory Usage', linewidth=2, markersize=8)
+        
+        plt.title(f'Performance Metrics vs Group Size (Avg run times: {run_times}, Total frames: {total_frames}, Top K: {self.top_k}, Predict Type: {self.predict_type}, Max New Tokens: {self.max_new_tokens}, Use Flash Attn: {self.use_flash_attn})', fontsize=14, pad=20)
 
         # Add legend
-        plt.legend(fontsize=10, bbox_to_anchor=(1.02, 1), loc='upper left')
+        # plt.legend(fontsize=10, bbox_to_anchor=(1.02, 1), loc='upper left')
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=10, bbox_to_anchor=(1.15, 1), loc='upper left')
 
         # Adjust layout to prevent label cutoff
         plt.tight_layout()
@@ -255,7 +233,7 @@ class cli:
                 _group_sizes = group_sizes
             
             for group_size in _group_sizes:
-                local_attention_group_size = 258 * group_size
+                local_attention_group_size = PER_IMAGE_NUM_TOKENS * group_size
                 model.config.local_attention_group_size = local_attention_group_size
                 for decoder_layer in model.language_model.model.layers:
                     decoder_layer.local_attention_group_size = local_attention_group_size
@@ -285,9 +263,11 @@ class cli:
             pure_local_kv_flash_attention_times = [x['1.1.3.3.1'][time_key] for x in group_size_all_results_dict.values()] # flash_attn_varlen_func
             mlp_times = [sum([x[key][time_key] for key in mlp_keys]) for x in group_size_all_results_dict.values()]
             total_prefill_times = [x['total_prefill_time_per_run'] for x in group_size_all_results_dict.values()]
+            peak_memory_usages = [x['peak_memory_usage'] for x in group_size_all_results_dict.values()]
             ys[f'Flash Attention (g={group_size})'] = pure_local_kv_flash_attention_times
             ys[f'MLP Times (g={group_size})'] = mlp_times
             ys[f'Total Prefill (g={group_size})'] = total_prefill_times
+            ys[f'Peak Memory Usage (g={group_size})'] = peak_memory_usages
 
             
         # # Create figure and axis with a specific size
@@ -297,7 +277,7 @@ class cli:
         
         # Create figure and axis with a specific size
         # plt.style.use('seaborn')  # Use seaborn style for better looking plots
-        plt.figure(figsize=(12, 8))
+        fig, ax1 = plt.subplots(figsize=(12, 8))
 
         _group_sizes = group_sizes + ['full']
         
@@ -305,6 +285,7 @@ class cli:
         colors1 = ['#FF9999', '#FF0000']  # Light red to dark red
         colors2 = ['#99FF99', '#00FF00']  # Light green to dark green
         colors3 = ['#9999FF', '#0000FF']  # Light blue to dark blue
+        colors4 = ['#FFCC99', '#FF9900']  # Light orange to dark orange for memory
         
         # # Use professional color schemes from matplotlib
         # colors1 = plt.cm.viridis(np.linspace(0.3, 0.9, len(_group_sizes)))  # Viridis colormap
@@ -319,25 +300,47 @@ class cli:
         for i, group_size in enumerate(_group_sizes):
             key = f'Flash Attention (g={group_size})'
             color = plt.matplotlib.colors.to_rgba(colors1[1], (i+1)/len(_group_sizes))
-            plt.plot(x, ys[key], 'o-', label=key, linewidth=2, markersize=8, color=color)
+            ax1.plot(x, ys[key], 'o-', label=key, linewidth=2, markersize=8, color=color)
             key = f'MLP Times (g={group_size})'
             color = plt.matplotlib.colors.to_rgba(colors2[1], (i+1)/len(_group_sizes))
-            plt.plot(x, ys[key], 's-', label=key, linewidth=2, markersize=8, color=color)
+            ax1.plot(x, ys[key], 's-', label=key, linewidth=2, markersize=8, color=color)
             key = f'Total Prefill (g={group_size})'
             color = plt.matplotlib.colors.to_rgba(colors3[1], (i+1)/len(_group_sizes))
-            plt.plot(x, ys[key], '^-', label=key, linewidth=2, markersize=8, color=color)
+            ax1.plot(x, ys[key], '^-', label=key, linewidth=2, markersize=8, color=color)
 
         # Set x-axis to logarithmic scale since group sizes grow exponentially
-        plt.xscale('log', base=2)
+        ax1.set_xscale('log', base=2)
 
         # Customize the plot
-        plt.grid(True, which="both", ls="-", alpha=0.2)
-        plt.xlabel('Total Frames', fontsize=12)
-        plt.ylabel('Time (ms)', fontsize=12)
-        plt.title(f'Performance Metrics vs Total Frames (Avg run times: {run_times}, g=group size)', fontsize=14, pad=20)
+        ax1.grid(True, which="both", ls="-", alpha=0.2)
+        ax1.tick_params(axis='y', labelcolor='black')
+        ax1.set_xlabel('Total Frames', fontsize=12)
+        ax1.set_ylabel('Time (ms)', fontsize=12)
+        
+        # Create secondary y-axis (right side) for memory usage
+        ax2 = ax1.twinx()
+
+        # Plot memory usage data on the secondary y-axis
+        for i, group_size in enumerate(_group_sizes):
+            key = f'Peak Memory Usage (g={group_size})'
+            if key in ys:
+                color = plt.matplotlib.colors.to_rgba(colors4[1], (i+1)/len(_group_sizes))
+                line = ax2.plot(x, ys[key], 'x-', label=key, linewidth=2, markersize=8, color=color)
+                # Prefix the label to indicate it's on the right axis
+                line[0].set_label(f"{key} (right axis)")
+
+        # Configure secondary y-axis
+        ax2.set_ylabel('Memory Usage (MB)', fontsize=12, color=colors4[1])
+        ax2.tick_params(axis='y', labelcolor=colors4[1])
+
+        plt.title(f'Performance Metrics vs Total Frames (Avg run times: {run_times}, g={",".join(map(str, group_sizes))}, Top K: {self.top_k}, Predict Type: {self.predict_type}, Max New Tokens: {self.max_new_tokens}, Use Flash Attn: {self.use_flash_attn})', fontsize=14, pad=20)
 
         # Add legend
-        plt.legend(fontsize=10, bbox_to_anchor=(1.02, 1), loc='upper left')
+        # Combine legends from both axes
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=10, bbox_to_anchor=(1.15, 1), loc='upper left')
+        # plt.legend(fontsize=10, bbox_to_anchor=(1.02, 1), loc='upper left')
 
         # Adjust layout to prevent label cutoff
         plt.tight_layout()
@@ -350,11 +353,7 @@ class cli:
         self,
         group_size = 8,
         total_frames=128,
-        top_k=-1,
-        predict_type='attention_weights_sum',
-        max_new_tokens=128,
         query=None,
-        top_k_starting_layer=0,
     ):
         """
         Args:
@@ -367,17 +366,11 @@ class cli:
         """
         model = self.model
         generation_config = self.generation_config
-        generation_config['max_new_tokens'] = max_new_tokens
         processor = self.processor
         run_times = self.run_times
         enable_shared_cross_attention = self.enable_shared_cross_attention
         use_flash_attn = self.use_flash_attn
-        for i, decoder_layer in enumerate(model.language_model.model.layers):
-            if i >= top_k_starting_layer:
-                decoder_layer.attention.top_k = top_k
-            else:
-                decoder_layer.attention.top_k = -1
-            decoder_layer.attention.predict_type = predict_type
+        
             
         if query is not None:
             conv = conv_templates['internvl2_5'].copy()
@@ -395,7 +388,7 @@ class cli:
             if isinstance(model_inputs[key], torch.Tensor):
                 model_inputs[key] = model_inputs[key].to(model.device)
         
-        local_attention_group_size = 258 * group_size
+        local_attention_group_size = PER_IMAGE_NUM_TOKENS * group_size
         model.config.local_attention_group_size = local_attention_group_size
         for decoder_layer in model.language_model.model.layers:
             decoder_layer.local_attention_group_size = local_attention_group_size
@@ -413,7 +406,7 @@ class cli:
             responses = model.generate(**model_inputs, **generation_config)
         response = processor.decode(responses[0])
         print(response)
-        return response
+        # return response
     
     def get_attention(
         self,
@@ -440,7 +433,7 @@ class cli:
             if isinstance(model_inputs[key], torch.Tensor):
                 model_inputs[key] = model_inputs[key].to(model.device)
         
-        local_attention_group_size = 258 * group_size
+        local_attention_group_size = PER_IMAGE_NUM_TOKENS * group_size
         model.config.local_attention_group_size = local_attention_group_size
         for decoder_layer in model.language_model.model.layers:
             decoder_layer.local_attention_group_size = local_attention_group_size
@@ -507,9 +500,13 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True # for large memory in ca
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 1024 --group_sizes "1,2,4,8,16,32,64,128,256,512,1024" --run_times 1
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256,512,1024" --group_sizes "8" --run_times 1
 
+python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256" --group_sizes "8" --run_times 1 --top_k 100 --predict_type 'key_norms_small' --max_new_tokens 1 --use_flash_attn True
+python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 256 --group_sizes "1,2,4,8,16,32,64,128" --run_times 1 --top_k -1 --predict_type 'key_norms_small' --max_new_tokens 1 --use_flash_attn True
+
 
 python benchmark_internvl_efficiency.py get_attention --group_size 8 --total_frames 8 --use_flash_attn False
 
+python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256" --group_sizes "4" --run_times 1 --top_k 100 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True
 
 ### Generation
 predict_type: one of ["salient_tokens", "attention_weights", "attention_weights_sum", "attention_weights_sum_head_tail",
@@ -517,8 +514,20 @@ predict_type: one of ["salient_tokens", "attention_weights", "attention_weights_
                      "vector_norms", "key_norms", "output_norms", "weighted_norms"]
                      
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 128
-python benchmark_internvl_efficiency.py generate --group_size 8 --total_frames 128 --top_k 100 --predict_type 'attention_weights_sum' --max_new_tokens 12
-python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 1000 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True
+python benchmark_internvl_efficiency.py generate --group_size 8 --total_frames 64 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 128
+python benchmark_internvl_efficiency.py generate --group_size 4 --total_frames 256 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True
+
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 300 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 3
+
+
+# comparison between the original implementation and my implementation
+python benchmark_internvl_efficiency.py generate --group_size 1 --total_frames 16 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True
+python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 16 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True
+python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 16 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True
+python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 16 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True --enable_shared_cross_attention False
+
+python benchmark_internvl_efficiency.py generate --group_size 256 --total_frames 256 --top_k -1 --predict_type 'vector_norms' --max_new_tokens 512 --use_flash_attn True # this one should be same as the original one, but it seems my implementation is more memory efficient compared to the original one.
+python benchmark_internvl_efficiency.py generate --group_size 4 --total_frames 256 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True --enable_shared_cross_attention False
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 20 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 20 --predict_type 'attention_weights' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 20 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?"
@@ -528,4 +537,6 @@ python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 
 python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 128 --top_k 501 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?" --top_k_starting_layer 3
 python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 64 --top_k 300 --predict_type 'attention_weights_sum' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?" --top_k_starting_layer 3
 python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 64 --top_k 300 --predict_type 'attention_weights' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?" --top_k_starting_layer 3
+
+# which token did eos attend to analyze why local group attention can cause the repetition of the generation
 """

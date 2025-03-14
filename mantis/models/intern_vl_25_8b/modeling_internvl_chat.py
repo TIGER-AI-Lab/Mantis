@@ -626,6 +626,8 @@ class InternVLChatModel(PreTrainedModel):
             if self.enable_shared_cross_attention:
                 # select the vit part as the encoder hidden states
                 selected = (input_ids == self.img_context_token_id) | (input_ids == self.img_start_token_id) | (input_ids == self.img_end_token_id) | (input_ids == self.bos_token_id)
+                last_selected_idx = torch.where(selected)[1][-1].item()
+                selected[:, :last_selected_idx] = True # <bos>Frame1:  <img>...</img> \nFrame2:  <img>...</img> \nFrame3:  <img>...</img>
                 all_encoder_hidden_states = []
                 all_text_input_embeds = []
                 all_text_attention_mask = []

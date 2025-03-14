@@ -895,6 +895,8 @@ def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, pr
     Returns:
         top_k_mask: (bz, K_len)
     """
+    if top_k <= 0:
+        return None
     random.seed(0)
     bz, _, k_len, _ = values.shape
     bz_top_k_idxs = []
@@ -976,10 +978,18 @@ def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, pr
             cur_layer_value_vectors = values_i.transpose(0, 1).flatten(1, 2)
             vector_norms = cur_layer_value_vectors.norm(2, dim=-1)
             top_k_idxs = vector_norms.argsort(descending=True)[:top_k].tolist()
+        elif predict_type == "vector_norms_small":
+            cur_layer_value_vectors = values_i.transpose(0, 1).flatten(1, 2)
+            vector_norms = cur_layer_value_vectors.norm(2, dim=-1)
+            top_k_idxs = vector_norms.argsort(descending=False)[:top_k].tolist()
         elif predict_type == "key_norms":
             cur_layer_key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
             key_norms = cur_layer_key_vectors.norm(2, dim=-1)
             top_k_idxs = key_norms.argsort(descending=True)[:top_k].tolist()
+        elif predict_type == "key_norms_small":
+            cur_layer_key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
+            key_norms = cur_layer_key_vectors.norm(2, dim=-1)
+            top_k_idxs = key_norms.argsort(descending=False)[:top_k].tolist()
         elif predict_type == "output_norms":
             outputs_norms = outputs_i.norm(2, dim=-1)
             top_k_idxs = outputs_norms.argsort(descending=True)[:top_k].tolist()
@@ -1012,6 +1022,7 @@ plot_total_num_tokens = 0
 plotted = False
 plot_predict_type = None
 plot_top_k = None
+plot_group_size = None
 def plot_top_k_heatmap(
     title="Top K Tokens", save_dir="top_k_plots"
 ):
@@ -1058,7 +1069,7 @@ def plot_top_k_heatmap(
     # save the plot
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
-    save_path = save_dir / f"top_k_tokens_pred={plot_predict_type}_top_k={plot_top_k}_total_tokens={total_num_tokens}.png"
+    save_path = save_dir / f"top_k_tokens_pred={plot_predict_type}_top_k={plot_top_k}_total_tokens={total_num_tokens}_group_size={plot_group_size}.png"
     plt.savefig(save_path)
     plt.close()
     print(f"Saved top k tokens of each layer figure to {save_path}")
@@ -2235,7 +2246,7 @@ class InternLM2DecoderLayer(nn.Module):
                     start = start_record("Prepare local kv self attention", level=2)
                     # local self attention for cross attention
                     kv_seq_len = encoder_hidden_states.size(1)
-                    chunk_idxs = torch.arange(1, kv_seq_len, device=hidden_states.device) # 0 is bos token
+                    chunk_idxs = torch.arange(0, kv_seq_len, device=hidden_states.device) # 0 is bos token
                     chunk_idxs = torch.split(chunk_idxs, self.local_attention_group_size)
                     assert len(chunk_idxs[-1]) == self.local_attention_group_size or len(chunk_idxs) == 1,\
                         f"last chunk size: {len(chunk_idxs[-1])} not equal to {self.local_attention_group_size}, please adjust the local_attention_group_size"
@@ -2281,7 +2292,8 @@ class InternLM2DecoderLayer(nn.Module):
                     encoder_local_attention_mask = encoder_attention_mask
                     previous_sparse_attn_idxs = [0]
                     for i, local_idxs in enumerate(chunk_idxs):
-                        local_idxs = torch.cat([torch.tensor(previous_sparse_attn_idxs, device=hidden_states.device), local_idxs]) # add bos to the group for attending
+                        if i != 0:
+                            local_idxs = torch.cat([torch.tensor(previous_sparse_attn_idxs, device=hidden_states.device), local_idxs]) # add bos to the group for attending
                         local_encoder_hidden_states = encoder_hidden_states[:, local_idxs]
                         local_encoder_position_ids = encoder_position_ids[:, local_idxs]
                         if encoder_attention_mask is None:
@@ -2377,7 +2389,7 @@ class InternLM2DecoderLayer(nn.Module):
                         output_attentions=output_attentions,
                         use_cache=False,
                         return_top_k_mask=True,
-                        compute_attn_weights=True,
+                        compute_attn_weights=("attention" in self.attention.predict_type or self.attention.predict_type in ["salient_tokens", "weighted_norms"]),
                     )
                     
                     
@@ -2387,38 +2399,41 @@ class InternLM2DecoderLayer(nn.Module):
                     start = start_record("Split back to each group", level=2)
                     # split back to each group
                     all_encoder_local_hidden_states = all_encoder_local_hidden_states.view(bsz, len(chunk_idxs), -1, self.hidden_size)
-                    kv_select_mask = []
                     for i, local_seq_len in enumerate(all_local_seq_len):
                         if i == 0:
                             local_self_attn_output.append(all_encoder_local_hidden_states[:, i, :local_seq_len])
-                            if top_k_mask is not None:
+                        else:
+                            local_self_attn_output.append(all_encoder_local_hidden_states[:, i, len(previous_sparse_attn_idxs):local_seq_len])
+                    if top_k_mask is not None:
+                        kv_select_mask = []
+                        for i, local_seq_len in enumerate(all_local_seq_len):
+                            if i == 0:
                                 # top_k_mask: (bz, local_seq_len), bool
                                 top_k_mask_i = top_k_mask[i, :local_seq_len]
                                 kv_select_mask.append(top_k_mask_i)
-                        else:
-                            local_self_attn_output.append(all_encoder_local_hidden_states[:, i, len(previous_sparse_attn_idxs):local_seq_len])
-                            if top_k_mask is not None:
+                            else:
                                 top_k_mask_i = top_k_mask[i, len(previous_sparse_attn_idxs):local_seq_len]
                                 kv_select_mask.append(top_k_mask_i)
-                    # append the text part mask, we don't mask out any text part
-                    kv_select_mask.append(torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask_i.device))
-                    kv_select_mask = torch.cat(kv_select_mask, dim=0)
-                    # # select top k keys and values (bz, num_heads, seq_len, head_dim)
-                    key_states = present_key_value[0]
-                    value_states = present_key_value[1]
-                    kv_select_idxs = kv_select_mask.nonzero(as_tuple=False).squeeze(-1)
-                    ## For visualization
-                    global plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k
-                    plot_all_top_k_idxs.append(kv_select_idxs)
-                    plot_total_num_tokens = kv_select_mask.size(0)
-                    plot_predict_type = self.attention.predict_type
-                    plot_top_k = self.attention.top_k
-                    ## For visualization
-                    top_k_key_states = key_states[:, :, kv_select_idxs]
-                    top_k_value_states = value_states[:, :, kv_select_idxs]
-                    present_key_value = (top_k_key_states, top_k_value_states, kv_select_mask) if use_cache else None
-                    print(f"Reduce kv size from {key_states.size()} to {top_k_key_states.size()}")
-                    print(kv_select_idxs)
+                        # append the text part mask, we don't mask out any text part
+                        kv_select_mask.append(torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask_i.device))
+                        kv_select_mask = torch.cat(kv_select_mask, dim=0)
+                        # # select top k keys and values (bz, num_heads, seq_len, head_dim)
+                        key_states = present_key_value[0]
+                        value_states = present_key_value[1]
+                        kv_select_idxs = kv_select_mask.nonzero(as_tuple=False).squeeze(-1)
+                        ## For visualization
+                        global plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k, plot_group_size
+                        plot_all_top_k_idxs.append(kv_select_idxs.cpu())
+                        plot_total_num_tokens = kv_select_mask.size(0)
+                        plot_predict_type = self.attention.predict_type
+                        plot_top_k = self.attention.top_k
+                        plot_group_size = self.local_attention_group_size
+                        ## For visualization
+                        top_k_key_states = key_states[:, :, kv_select_idxs]
+                        top_k_value_states = value_states[:, :, kv_select_idxs]
+                        present_key_value = (top_k_key_states, top_k_value_states, kv_select_mask) if use_cache else None
+                        print(f"Reduce kv size from {key_states.size()} to {top_k_key_states.size()}")
+                    # print(kv_select_idxs)
                     encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
                     end = end_record(start, "Split back to each group")
                 
@@ -3263,7 +3278,7 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         print("decoded one token")
-        plot_top_k_heatmap()
+        plot_top_k_heatmap() # this can be quite slow
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2] # get the layer 0's k value 's sequence length
             # Some generation methods already pass only the last input ID
@@ -3299,7 +3314,7 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             if self.config.enable_shared_cross_attention and encoder_hidden_states is not None:
-                position_ids += encoder_position_ids.max(-1).values.unsqueeze(0) # to debug
+                position_ids += encoder_position_ids.max(-1).values.unsqueeze(0) + 1 # to debug
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
