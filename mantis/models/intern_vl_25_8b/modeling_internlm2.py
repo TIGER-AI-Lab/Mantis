@@ -1016,7 +1016,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from pathlib import Path
-
+do_plot_top_k = False
 plot_all_top_k_idxs = []
 plot_total_num_tokens = 0
 plotted = False
@@ -2422,12 +2422,13 @@ class InternLM2DecoderLayer(nn.Module):
                         value_states = present_key_value[1]
                         kv_select_idxs = kv_select_mask.nonzero(as_tuple=False).squeeze(-1)
                         ## For visualization
-                        global plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k, plot_group_size
-                        plot_all_top_k_idxs.append(kv_select_idxs.cpu())
-                        plot_total_num_tokens = kv_select_mask.size(0)
-                        plot_predict_type = self.attention.predict_type
-                        plot_top_k = self.attention.top_k
-                        plot_group_size = self.local_attention_group_size
+                        global do_plot_top_k, plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k, plot_group_size
+                        if do_plot_top_k:
+                            plot_all_top_k_idxs.append(kv_select_idxs.cpu())
+                            plot_total_num_tokens = kv_select_mask.size(0)
+                            plot_predict_type = self.attention.predict_type
+                            plot_top_k = self.attention.top_k
+                            plot_group_size = self.local_attention_group_size
                         ## For visualization
                         top_k_key_states = key_states[:, :, kv_select_idxs]
                         top_k_value_states = value_states[:, :, kv_select_idxs]
@@ -3277,8 +3278,9 @@ class InternLM2ForCausalLM(InternLM2PreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
-        print("decoded one token")
-        plot_top_k_heatmap() # this can be quite slow
+        if do_plot_top_k:
+            print("decoded one token")
+            plot_top_k_heatmap() # this can be quite slow
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2] # get the layer 0's k value 's sequence length
             # Some generation methods already pass only the last input ID
