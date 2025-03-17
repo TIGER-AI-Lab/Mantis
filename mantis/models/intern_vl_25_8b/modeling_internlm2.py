@@ -2253,9 +2253,10 @@ class InternLM2DecoderLayer(nn.Module):
                     # local self attention for cross attention
                     kv_seq_len = encoder_hidden_states.size(1)
                     chunk_idxs = torch.arange(0, kv_seq_len, device=hidden_states.device) # 0 is bos token
-                    chunk_idxs = torch.split(chunk_idxs, self.local_attention_group_size)
-                    assert len(chunk_idxs[-1]) == self.local_attention_group_size or len(chunk_idxs) == 1,\
-                        f"last chunk size: {len(chunk_idxs[-1])} not equal to {self.local_attention_group_size}, please adjust the local_attention_group_size"
+                    if self.local_attention_group_size > 0:
+                        chunk_idxs = torch.split(chunk_idxs, self.local_attention_group_size)
+                        assert len(chunk_idxs[-1]) == self.local_attention_group_size or len(chunk_idxs) == 1,\
+                            f"last chunk size: {len(chunk_idxs[-1])} not equal to {self.local_attention_group_size}, please adjust the local_attention_group_size"
                     
                     # ### sequential version
                     # local_self_attn_output = []
