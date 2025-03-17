@@ -885,7 +885,7 @@ class InternLM2Attention(nn.Module):
 
 import random
 import torch.nn.functional as F
-def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, predict_type="attention_weights"):
+def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, predict_type="attention_weights", ori_kv_len=None):
     """
     Args:
         attn_weights: (bz, 1, Q_len, K_len)
@@ -897,6 +897,11 @@ def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, pr
     """
     if top_k <= 0:
         return None
+    if ori_kv_len is not None:
+        attn_weights = attn_weights[:, :, :, -ori_kv_len:] if attn_weights is not None else None
+        keys = keys[:, :, -ori_kv_len:]
+        values = values[:, :, -ori_kv_len:]
+        outputs = outputs[:, -ori_kv_len:]
     random.seed(0)
     bz, _, k_len, _ = values.shape
     bz_top_k_idxs = []
@@ -1823,6 +1828,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         key_states = apply_rotary_pos_emb_ct(key_states, cos, sin, encoder_position_ids)
         end = end_record(start, "Rotary emb")
 
+        ori_kv_len = key_states.size(2)
         if past_key_value is not None:
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
@@ -1881,7 +1887,7 @@ class InternLM2FlashCrossAttention2(InternLM2CrossAttention):
         
         if return_top_k_mask:
             top_k_mask = get_top_k_mask_to_predict(attn_weights, key_states.transpose(1, 2), value_states.transpose(1, 2), attn_output,
-                top_k=self.top_k, predict_type=self.predict_type)
+                top_k=self.top_k, predict_type=self.predict_type, ori_kv_len=ori_kv_len)
         else:
             top_k_mask = None
             
@@ -2098,6 +2104,7 @@ class InternLM2DecoderLayer(nn.Module):
         self.enable_shared_cross_attention = config.enable_shared_cross_attention
         self.local_attention_group_size = config.local_attention_group_size
         self.attn_implementation = config.attn_implementation
+        self.adaptive_local_attention = config.adaptive_local_attention
 
         if self.enable_cross_attention:
             self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
@@ -2243,7 +2250,6 @@ class InternLM2DecoderLayer(nn.Module):
                 
                 # locally self attention for the encoder_hidden_states
                 if not use_cache or past_key_value is None:
-                    start = start_record("Prepare local kv self attention", level=2)
                     # local self attention for cross attention
                     kv_seq_len = encoder_hidden_states.size(1)
                     chunk_idxs = torch.arange(0, kv_seq_len, device=hidden_states.device) # 0 is bos token
@@ -2283,140 +2289,159 @@ class InternLM2DecoderLayer(nn.Module):
                     #     # previous_sparse_attn_idxs.extend(chunk_idxs[i].reshape(-1, 258)[:, [0, -1]].flatten().tolist()) # 258 is the magic number: 256 + 2. 256 is the num tokens per grid
                     # ### sequential version
                     
-                    ### batch_version
-                    local_self_attn_output = []
-                    all_local_encoder_hidden_states = []
-                    all_local_encoder_position_ids = []
-                    all_local_encoder_attention_mask = []
-                    all_local_seq_len = []
-                    encoder_local_attention_mask = encoder_attention_mask
-                    previous_sparse_attn_idxs = [0]
-                    for i, local_idxs in enumerate(chunk_idxs):
-                        if i != 0:
-                            local_idxs = torch.cat([torch.tensor(previous_sparse_attn_idxs, device=hidden_states.device), local_idxs]) # add bos to the group for attending
-                        local_encoder_hidden_states = encoder_hidden_states[:, local_idxs]
-                        local_encoder_position_ids = encoder_position_ids[:, local_idxs]
-                        if encoder_attention_mask is None:
-                            local_encoder_attention_mask = None
-                        elif encoder_local_attention_mask.dim() == 4:
-                            local_encoder_attention_mask = encoder_local_attention_mask[:, :, local_idxs, :][:, :, :, local_idxs]
-                        else:
-                            local_encoder_attention_mask = encoder_local_attention_mask[:, local_idxs]
-                        all_local_encoder_hidden_states.append(local_encoder_hidden_states)
-                        all_local_encoder_position_ids.append(local_encoder_position_ids)
-                        all_local_encoder_attention_mask.append(local_encoder_attention_mask)
-                        all_local_seq_len.append(local_encoder_hidden_states.size(1))
-                    
-                    # packing instead of batching
-                    max_local_seq_len = max([x.size(1) for x in all_local_encoder_hidden_states])
-                    for i in range(len(all_local_encoder_hidden_states)):
-                        padding_len = max_local_seq_len - all_local_encoder_hidden_states[i].size(1)
-                        all_local_encoder_hidden_states[i] = F.pad(all_local_encoder_hidden_states[i], (0, 0, 0, padding_len), value=0)
-                        all_local_encoder_position_ids[i] = F.pad(all_local_encoder_position_ids[i], (0, padding_len), value=0)
-                        if all_local_encoder_attention_mask[i] is not None:
-                            # if 2d, then change to 4d
-                            if all_local_encoder_attention_mask[i].dim() == 2:
-                                # flash attention
-                                all_local_encoder_attention_mask[i] = (all_local_encoder_attention_mask[i].unsqueeze(-1) * all_local_encoder_attention_mask[i].unsqueeze(-2)).unsqueeze(1)
-                            if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
-                                all_local_encoder_attention_mask[i] = F.pad(all_local_encoder_attention_mask[i], (0, padding_len, 0, padding_len), value=0)
+                    if not self.adaptive_local_attention:
+                        ### batch_version
+                        start = start_record("Prepare local kv self attention", level=2)
+                        local_self_attn_output = []
+                        all_local_encoder_hidden_states = []
+                        all_local_encoder_position_ids = []
+                        all_local_encoder_attention_mask = []
+                        all_local_seq_len = []
+                        encoder_local_attention_mask = encoder_attention_mask
+                        previous_sparse_attn_idxs = [0]
+                        for i, local_idxs in enumerate(chunk_idxs):
+                            if i != 0:
+                                local_idxs = torch.cat([torch.tensor(previous_sparse_attn_idxs, device=hidden_states.device), local_idxs]) # add bos to the group for attending
+                            local_encoder_hidden_states = encoder_hidden_states[:, local_idxs]
+                            local_encoder_position_ids = encoder_position_ids[:, local_idxs]
+                            if encoder_attention_mask is None:
+                                local_encoder_attention_mask = None
+                            elif encoder_local_attention_mask.dim() == 4:
+                                local_encoder_attention_mask = encoder_local_attention_mask[:, :, local_idxs, :][:, :, :, local_idxs]
                             else:
-                                padding_value = torch.finfo(all_local_encoder_attention_mask[i].dtype).min
-                                all_local_encoder_attention_mask[i] = F.pad(all_local_encoder_attention_mask[i], (0, padding_len, 0, padding_len), value=padding_value)
-                        else:
-                            pass
-                            # if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
-                            #     all_local_encoder_attention_mask[i] = torch.zeros((bsz, 1, max_local_seq_len, max_local_seq_len), device=hidden_states.device)
-                            #     all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 1
-                            # else:
-                            #     all_local_encoder_attention_mask[i] = torch.full((bsz, 1, max_local_seq_len, max_local_seq_len), torch.finfo(torch.float32).min, device=hidden_states.device)
-                            #     all_local_encoder_attention_mask[i][:, :, :all_local_encoder_hidden_states[i].size(1), :all_local_encoder_hidden_states[i].size(1)] = 0
-                    
-                    # batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=1)
-                    # batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=1)
-                    # packing_len = batch_local_encoder_hidden_states.size(1)
-                    # if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
-                    #     batch_local_encoder_attention_mask = torch.zeros((bsz, 1, packing_len, packing_len), device=hidden_states.device, dtype=all_local_encoder_attention_mask[0].dtype)
-                    #     for i in range(len(all_local_encoder_attention_mask)):
-                    #         batch_local_encoder_attention_mask[:, :, i*max_local_seq_len:(i+1)*max_local_seq_len, i*max_local_seq_len:(i+1)*max_local_seq_len] = all_local_encoder_attention_mask[i]
-                    # else:
-                    #     batch_local_encoder_attention_mask = torch.full((bsz, 1, packing_len, packing_len), torch.finfo(torch.float32).min, device=hidden_states.device)
-                    #     for i in range(len(all_local_encoder_attention_mask)):
-                    #         batch_local_encoder_attention_mask[:, :, i*max_local_seq_len:(i+1)*max_local_seq_len, i*max_local_seq_len:(i+1)*max_local_seq_len] = all_local_encoder_attention_mask[i]
-                    
-                    # # batching version concat all local hidden states
-                    batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
-                    batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
-                    batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
-
-                    end = end_record(start, "Prepare local kv self attention")
-                    # print("batch_local_encoder_hidden_states: ", batch_local_encoder_hidden_states.size())
-                    # print("batch_local_encoder_position_ids: ", batch_local_encoder_position_ids.size())
-                    # print("batch_local_encoder_attention_mask: ", batch_local_encoder_attention_mask.size() if batch_local_encoder_attention_mask is not None else None)
-                    
-                    
-                    start = start_record("KV Local Self Attention", level=2)
-                    
-                    # max_batch_size = 1 * max_local_seq_len
-                    # all_encoder_local_hidden_states = []
-                    # for i in range(0, batch_local_encoder_hidden_states.size(0), max_batch_size):
-                    #     encoder_local_hidden_states = batch_local_encoder_hidden_states[i:i+max_batch_size]
-                    #     encoder_local_position_ids = batch_local_encoder_position_ids[i:i+max_batch_size]
-                    #     encoder_local_attention_mask = batch_local_encoder_attention_mask[i:i+max_batch_size] if batch_local_encoder_attention_mask is not None else None
-                    #     encoder_local_hidden_states, _, _ = self.attention(
-                    #         hidden_states=encoder_local_hidden_states,
-                    #         attention_mask=encoder_local_attention_mask,
-                    #         encoder_hidden_states=encoder_local_hidden_states,
-                    #         encoder_attention_mask=encoder_local_attention_mask,
-                    #         position_ids=encoder_local_position_ids,
-                    #         encoder_position_ids=encoder_local_position_ids,
-                    #         past_key_value=None,
-                    #         output_attentions=False,
-                    #         use_cache=False,
-                    #     )
-                    #     all_encoder_local_hidden_states.append(encoder_local_hidden_states)
-                    # all_encoder_local_hidden_states = torch.cat(all_encoder_local_hidden_states, dim=0)
-                    #
-                    
-                    all_encoder_local_hidden_states, local_self_attn_weights, _, top_k_mask = self.attention(
-                        hidden_states=batch_local_encoder_hidden_states,
-                        attention_mask=batch_local_encoder_attention_mask,
-                        encoder_hidden_states=batch_local_encoder_hidden_states,
-                        encoder_attention_mask=batch_local_encoder_attention_mask,
-                        position_ids=batch_local_encoder_position_ids,
-                        encoder_position_ids=batch_local_encoder_position_ids,
-                        past_key_value=None,
-                        output_attentions=output_attentions,
-                        use_cache=False,
-                        return_top_k_mask=True,
-                        compute_attn_weights=("attention" in self.attention.predict_type or self.attention.predict_type in ["salient_tokens", "weighted_norms"]),
-                    )
-                    
-                    
-                    
-                    end = end_record(start, "KV Local Self Attention")
-                    
-                    start = start_record("Split back to each group", level=2)
-                    # split back to each group
-                    all_encoder_local_hidden_states = all_encoder_local_hidden_states.view(bsz, len(chunk_idxs), -1, self.hidden_size)
-                    for i, local_seq_len in enumerate(all_local_seq_len):
-                        if i == 0:
-                            local_self_attn_output.append(all_encoder_local_hidden_states[:, i, :local_seq_len])
-                        else:
-                            local_self_attn_output.append(all_encoder_local_hidden_states[:, i, len(previous_sparse_attn_idxs):local_seq_len])
-                    if top_k_mask is not None:
-                        kv_select_mask = []
+                                local_encoder_attention_mask = encoder_local_attention_mask[:, local_idxs]
+                            all_local_encoder_hidden_states.append(local_encoder_hidden_states)
+                            all_local_encoder_position_ids.append(local_encoder_position_ids)
+                            all_local_encoder_attention_mask.append(local_encoder_attention_mask)
+                            all_local_seq_len.append(local_encoder_hidden_states.size(1))
+                        # packing instead of batching
+                        max_local_seq_len = max([x.size(1) for x in all_local_encoder_hidden_states])
+                        for i in range(len(all_local_encoder_hidden_states)):
+                            padding_len = max_local_seq_len - all_local_encoder_hidden_states[i].size(1)
+                            all_local_encoder_hidden_states[i] = F.pad(all_local_encoder_hidden_states[i], (0, 0, 0, padding_len), value=0)
+                            all_local_encoder_position_ids[i] = F.pad(all_local_encoder_position_ids[i], (0, padding_len), value=0)
+                            if all_local_encoder_attention_mask[i] is not None:
+                                # if 2d, then change to 4d
+                                if all_local_encoder_attention_mask[i].dim() == 2:
+                                    # flash attention
+                                    all_local_encoder_attention_mask[i] = (all_local_encoder_attention_mask[i].unsqueeze(-1) * all_local_encoder_attention_mask[i].unsqueeze(-2)).unsqueeze(1)
+                                if self.attn_implementation in ["flash_attention_2", "ring_flash_attn"]:
+                                    all_local_encoder_attention_mask[i] = F.pad(all_local_encoder_attention_mask[i], (0, padding_len, 0, padding_len), value=0)
+                                else:
+                                    padding_value = torch.finfo(all_local_encoder_attention_mask[i].dtype).min
+                                    all_local_encoder_attention_mask[i] = F.pad(all_local_encoder_attention_mask[i], (0, padding_len, 0, padding_len), value=padding_value)
+                            else:
+                                pass
+                        # # batching version concat all local hidden states
+                        batch_local_encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=0)
+                        batch_local_encoder_position_ids = torch.cat(all_local_encoder_position_ids, dim=0)
+                        batch_local_encoder_attention_mask = torch.cat(all_local_encoder_attention_mask, dim=0) if all_local_encoder_attention_mask[0] is not None else None
+                        end = end_record(start, "Prepare local kv self attention")
+                        start = start_record("KV Local Self Attention", level=2)
+                        all_encoder_local_hidden_states, local_self_attn_weights, _, top_k_mask = self.attention(
+                            hidden_states=batch_local_encoder_hidden_states,
+                            attention_mask=batch_local_encoder_attention_mask,
+                            encoder_hidden_states=batch_local_encoder_hidden_states,
+                            encoder_attention_mask=batch_local_encoder_attention_mask,
+                            position_ids=batch_local_encoder_position_ids,
+                            encoder_position_ids=batch_local_encoder_position_ids,
+                            past_key_value=None,
+                            output_attentions=output_attentions,
+                            use_cache=False,
+                            return_top_k_mask=True,
+                            compute_attn_weights=("attention" in self.attention.predict_type or self.attention.predict_type in ["salient_tokens", "weighted_norms"]),
+                        )
+                        end = end_record(start, "KV Local Self Attention")
+                        # split back to each group
+                        all_encoder_local_hidden_states = all_encoder_local_hidden_states.view(bsz, len(chunk_idxs), -1, self.hidden_size)
                         for i, local_seq_len in enumerate(all_local_seq_len):
                             if i == 0:
-                                # top_k_mask: (bz, local_seq_len), bool
-                                top_k_mask_i = top_k_mask[i, :local_seq_len]
-                                kv_select_mask.append(top_k_mask_i)
+                                local_self_attn_output.append(all_encoder_local_hidden_states[:, i, :local_seq_len])
                             else:
-                                top_k_mask_i = top_k_mask[i, len(previous_sparse_attn_idxs):local_seq_len]
-                                kv_select_mask.append(top_k_mask_i)
-                        # append the text part mask, we don't mask out any text part
-                        kv_select_mask.append(torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask_i.device))
-                        kv_select_mask = torch.cat(kv_select_mask, dim=0)
+                                local_self_attn_output.append(all_encoder_local_hidden_states[:, i, len(previous_sparse_attn_idxs):local_seq_len])
+                        if top_k_mask is not None:
+                            kv_select_mask = []
+                            for i, local_seq_len in enumerate(all_local_seq_len):
+                                if i == 0:
+                                    # top_k_mask: (bz, local_seq_len), bool
+                                    top_k_mask_i = top_k_mask[i, :local_seq_len]
+                                    kv_select_mask.append(top_k_mask_i)
+                                else:
+                                    top_k_mask_i = top_k_mask[i, len(previous_sparse_attn_idxs):local_seq_len]
+                                    kv_select_mask.append(top_k_mask_i)
+                            top_k_mask = torch.cat(kv_select_mask, dim=0).unsqueeze(0)
+                        encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
+                        ### batch_version
+                    else:
+                        ### adaptive version
+                        assert encoder_hidden_states.size(0) == 1, "Only support batch size 1 for now"
+                        all_local_encoder_hidden_states = []
+                        all_local_self_attn_weights = []
+                        encoder_local_attention_mask = encoder_attention_mask
+                        local_past_key_value = None
+                        previous_selected_idxs = None
+                        top_k_mask = None
+                        start = start_record("Prepare local kv self attention", level=2)
+                        for i, local_idxs in enumerate(chunk_idxs):
+                            local_encoder_hidden_states = encoder_hidden_states[:, local_idxs]
+                            local_encoder_position_ids = encoder_position_ids[:, local_idxs]
+                            if previous_selected_idxs is not None:
+                                local_encoder_attention_mask_idxs = torch.cat([previous_selected_idxs, local_idxs])
+                            else:
+                                local_encoder_attention_mask_idxs = local_idxs
+                            previous_selected_idxs = local_encoder_attention_mask_idxs
+                            if encoder_attention_mask is None:
+                                local_encoder_attention_mask = None
+                            elif encoder_local_attention_mask.dim() == 4:
+                                local_encoder_attention_mask = encoder_local_attention_mask[:, :, local_encoder_attention_mask_idxs, :][:, :, :, local_encoder_attention_mask_idxs]
+                            else:
+                                local_encoder_attention_mask = encoder_local_attention_mask[:, local_encoder_attention_mask_idxs]
+                            end = end_record(start, "Prepare local kv self attention")
+                            start = start_record("KV Local Self Attention", level=2)
+                            local_encoder_hidden_states, local_self_attn_weights, local_present_key_value, local_top_k_mask = self.attention(
+                                hidden_states=local_encoder_hidden_states,
+                                attention_mask=local_encoder_attention_mask,
+                                encoder_hidden_states=local_encoder_hidden_states,
+                                encoder_attention_mask=local_encoder_attention_mask,
+                                position_ids=local_encoder_position_ids,
+                                encoder_position_ids=local_encoder_position_ids,
+                                past_key_value=local_past_key_value,
+                                output_attentions=output_attentions,
+                                use_cache=True,
+                                return_top_k_mask=True,
+                                compute_attn_weights=("attention" in self.attention.predict_type or self.attention.predict_type in ["salient_tokens", "weighted_norms"]),
+                            )
+                            end = end_record(start, "KV Local Self Attention") 
+                            start = start_record("Prepare local kv self attention", level=2)
+                            all_local_encoder_hidden_states.append(local_encoder_hidden_states)
+                            all_local_self_attn_weights.append(local_self_attn_weights)
+                            
+                            if local_top_k_mask is not None:
+                                local_kv_select_idxs = local_top_k_mask[0].nonzero(as_tuple=False).squeeze(-1)
+                                local_key_states = local_present_key_value[0]
+                                local_value_states = local_present_key_value[1]
+                                previous_kv_len = local_past_key_value[0].size(2) if local_past_key_value is not None else 0
+                                local_kv_select_idxs = local_kv_select_idxs + previous_kv_len
+                                local_kv_select_idxs = torch.cat([torch.arange(previous_kv_len, device=local_kv_select_idxs.device), local_kv_select_idxs])
+                                local_top_k_key_states = local_key_states[:, :, local_kv_select_idxs]
+                                local_top_k_value_states = local_value_states[:, :, local_kv_select_idxs]
+                                if top_k_mask is None:
+                                    top_k_mask = local_top_k_mask[0]
+                                else:
+                                    top_k_mask = torch.cat([top_k_mask, local_top_k_mask[0]], dim=0)
+                                local_past_key_value = (local_top_k_key_states, local_top_k_value_states, top_k_mask)
+                                print(f"Reduce video chunk-{i}'s kv size from {local_key_states.size()} to {local_top_k_key_states.size()}")
+                            else:
+                                top_k_mask = None
+                                local_past_key_value = local_present_key_value
+                        end = end_record(start, "Prepare local kv self attention")
+                        encoder_hidden_states = torch.cat(all_local_encoder_hidden_states, dim=1)
+                        top_k_mask = top_k_mask.unsqueeze(0) if top_k_mask is not None else None
+                        ### adaptive version
+                    
+                    if top_k_mask is not None: # (1, num_kv_tokens)
+                        kv_select_mask = torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask.device)
+                        kv_select_mask = torch.cat([top_k_mask[0], kv_select_mask], dim=0)
                         # # select top k keys and values (bz, num_heads, seq_len, head_dim)
                         key_states = present_key_value[0]
                         value_states = present_key_value[1]
@@ -2434,9 +2459,6 @@ class InternLM2DecoderLayer(nn.Module):
                         top_k_value_states = value_states[:, :, kv_select_idxs]
                         present_key_value = (top_k_key_states, top_k_value_states, kv_select_mask) if use_cache else None
                         print(f"Reduce kv size from {key_states.size()} to {top_k_key_states.size()}")
-                    # print(kv_select_idxs)
-                    encoder_hidden_states = torch.cat(local_self_attn_output, dim=1)
-                    end = end_record(start, "Split back to each group")
                 
                     # # # DEBUG: compare difference, comment out this part when debugging
                     # _residual = self.attention_norm(torch.cat([residual_encoder, residual], dim=1))

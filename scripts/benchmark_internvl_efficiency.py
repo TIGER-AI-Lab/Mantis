@@ -68,15 +68,17 @@ class cli:
         top_k=-1,
         predict_type='key_norms_small',
         top_k_starting_layer=0,
+        adaptive_local_attention=True,
         run_times=1,
         max_new_tokens=1
     ):
         local_attention_group_size = PER_IMAGE_NUM_TOKENS * 1
         tokenizer = InternLM2Tokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-        config = InternVLChatConfig.from_pretrained(model_path, enable_shared_cross_attention=enable_shared_cross_attention, local_attention_group_size=local_attention_group_size)
+        config = InternVLChatConfig.from_pretrained(model_path, enable_shared_cross_attention=enable_shared_cross_attention, local_attention_group_size=local_attention_group_size, adaptive_local_attention=adaptive_local_attention)
         config.llm_config.enable_cross_attention = config.enable_cross_attention
         config.llm_config.local_attention_group_size = config.local_attention_group_size
         config.llm_config.enable_shared_cross_attention = config.enable_shared_cross_attention
+        config.llm_config.adaptive_local_attention = config.adaptive_local_attention
         model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='auto').eval()
 
         processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention, max_num_patches=1)
@@ -503,6 +505,7 @@ python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --t
 python benchmark_internvl_efficiency.py benchmark_fix_group_size_vary_frames --total_frames_list "16,32,64,128,256" --group_sizes "8" --run_times 1 --top_k 100 --predict_type 'key_norms_small' --max_new_tokens 1 --use_flash_attn True
 python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 256 --group_sizes "1,2,4,8,16,32,64,128" --run_times 1 --top_k -1 --predict_type 'key_norms_small' --max_new_tokens 1 --use_flash_attn True
 
+python benchmark_internvl_efficiency.py benchmark_vary_group_size_fix_frames --total_frames 128 --group_sizes "1,2,4,8,16,32,64,128" --run_times 1 --top_k -1 --predict_type 'key_norms_small' --max_new_tokens 1 --use_flash_attn True
 
 python benchmark_internvl_efficiency.py get_attention --group_size 8 --total_frames 8 --use_flash_attn False
 
@@ -517,7 +520,8 @@ python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 
 python benchmark_internvl_efficiency.py generate --group_size 8 --total_frames 64 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 128
 python benchmark_internvl_efficiency.py generate --group_size 4 --total_frames 256 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True
 
-python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 300 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 3
+python benchmark_internvl_efficiency.py generate --group_size 4 --total_frames 32 --top_k 50 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k -1 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0
 
 
 # comparison between the original implementation and my implementation
