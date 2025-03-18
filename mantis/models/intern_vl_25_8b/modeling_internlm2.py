@@ -2257,7 +2257,8 @@ class InternLM2DecoderLayer(nn.Module):
                         chunk_idxs = torch.split(chunk_idxs, self.local_attention_group_size)
                         assert len(chunk_idxs[-1]) == self.local_attention_group_size or len(chunk_idxs) == 1,\
                             f"last chunk size: {len(chunk_idxs[-1])} not equal to {self.local_attention_group_size}, please adjust the local_attention_group_size"
-                    
+                    else:
+                        chunk_idxs = [chunk_idxs]
                     # ### sequential version
                     # local_self_attn_output = []
                     # encoder_local_attention_mask = encoder_attention_mask
