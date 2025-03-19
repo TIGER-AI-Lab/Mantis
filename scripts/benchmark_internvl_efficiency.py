@@ -1,4 +1,5 @@
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '5'    
 import torch
 import fire
 # If you want to load a model using multiple GPUs, please refer to the `Multiple GPUs` section.
@@ -72,7 +73,7 @@ class cli:
         run_times=1,
         max_new_tokens=1
     ):
-        local_attention_group_size = PER_IMAGE_NUM_TOKENS * 1
+        local_attention_group_size = -1
         tokenizer = InternLM2Tokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
         config = InternVLChatConfig.from_pretrained(model_path, enable_shared_cross_attention=enable_shared_cross_attention, local_attention_group_size=local_attention_group_size, adaptive_local_attention=adaptive_local_attention)
         config.llm_config.enable_cross_attention = config.enable_cross_attention
@@ -81,7 +82,7 @@ class cli:
         config.llm_config.adaptive_local_attention = config.adaptive_local_attention
         model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='auto').eval()
 
-        processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention, max_num_patches=1)
+        processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention)
 
         model.img_context_token_id = processor.img_context_token_id
         model.img_start_token_id = processor.img_start_token_id
@@ -116,7 +117,7 @@ class cli:
         self.top_k_starting_layer = top_k_starting_layer
         self.max_new_tokens = max_new_tokens
         # self.get_attention(group_size=8, total_frames=8)
-        # self.generate(group_size=16, total_frames=16, top_k=-1, predict_type='attention_weights_sum', max_new_tokens=512)
+        # self.generate(group_size=-1, total_frames=16, images='test_image_1.jpg')
 
     def benchmark_vary_group_size_fix_frames(
         self,
@@ -356,6 +357,8 @@ class cli:
         group_size = 8,
         total_frames=128,
         query=None,
+        videos=None,
+        images=None,
     ):
         """
         Args:
@@ -373,17 +376,27 @@ class cli:
         enable_shared_cross_attention = self.enable_shared_cross_attention
         use_flash_attn = self.use_flash_attn
         
+        if videos is None and images is None:
+            videos = './mochi.mp4'
+        assert [videos, images].count(None) == 1, "Either videos or images should be provided."
+        if videos is not None:
+            if query is not None:
+                conv = conv_templates['internvl2_5'].copy()
+                conv.append_message(conv.roles[0], query)
+                conv.append_message(conv.roles[1], None)
+                query = conv.get_prompt()
+                query = "<video>\n" + query
+            else:
+                query = self.query
             
-        if query is not None:
+            model_inputs = processor(query, videos=videos, video_num_segments=total_frames)
+        else:
             conv = conv_templates['internvl2_5'].copy()
-            conv.append_message(conv.roles[0], query)
+            conv.append_message(conv.roles[0], query or 'Please describe the image in detail.')
             conv.append_message(conv.roles[1], None)
             query = conv.get_prompt()
-            query = "<video>\n" + query
-        else:
-            query = self.query
-        
-        model_inputs = processor(query, videos='./mochi.mp4', video_num_segments=total_frames)
+            query = "<image>\n" + query
+            model_inputs = processor(query, images=images)
 
         model_inputs['pixel_values'] = model_inputs['pixel_values'].to(torch.bfloat16)
         for key in model_inputs:
@@ -520,8 +533,12 @@ python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 
 python benchmark_internvl_efficiency.py generate --group_size 8 --total_frames 64 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 128
 python benchmark_internvl_efficiency.py generate --group_size 4 --total_frames 256 --top_k -1 --predict_type 'attention_weights_sum' --max_new_tokens 512 --use_flash_attn True
 
-python benchmark_internvl_efficiency.py generate --group_size 4 --total_frames 32 --top_k 50 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0
-python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k -1 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0
+
+python benchmark_internvl_efficiency.py generate --group_size -1 --top_k 50 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --images 'test_image_1.jpg'
+
+
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 50 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 8400 --predict_type 'key_norms' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0
 
 
 # comparison between the original implementation and my implementation
