@@ -2236,37 +2236,15 @@ class InternLM2DecoderLayer(nn.Module):
                 # print("Shared Cross Attention")
                 # first norm
                 output_encoder_hidden_states = True
-                residual = hidden_states
-                hidden_states = self.attention_norm(hidden_states)
                 bsz = hidden_states.size(0)
-                # first self attention using hidden_states as the query, and encoder_hidden_states as the key and value
-                if not use_cache or past_key_value is None:
-                    # we don't use the original encoder_hidden_states here as it keeps to be the orignal one without self attention
-                    # instead, we extract the encoder_hidden_states from the hidden_states of size [bsz, kv_seq_len+q_len, hidden_size]
-                    residual_encoder = encoder_hidden_states
-                    encoder_hidden_states = self.attention_norm(encoder_hidden_states)
-                    merged_kv_hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
-                    merged_kv_position_ids = torch.cat([encoder_position_ids, position_ids], dim=1)
-                else:
-                    merged_kv_hidden_states = hidden_states
-                    merged_kv_position_ids = position_ids
-                
-                start = start_record("Text to kv cross attention", level=2)
-                hidden_states, text_to_kv_attn_weights, present_key_value = self.attention(
-                    hidden_states=hidden_states,
-                    encoder_hidden_states=merged_kv_hidden_states,
-                    attention_mask=attention_mask,
-                    encoder_attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    encoder_position_ids=merged_kv_position_ids,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    past_key_value=past_key_value,
-                )
-                end = end_record(start, "Text to kv cross attention")
+                ori_encoder_position_ids = encoder_position_ids
                 
                 # locally self attention for the encoder_hidden_states
                 if not use_cache or past_key_value is None:
+                    residual_encoder = encoder_hidden_states
+                    encoder_hidden_states = self.attention_norm(encoder_hidden_states)
+                    ori_encoder_hidden_states = encoder_hidden_states
+                    
                     # local self attention for cross attention
                     kv_seq_len = encoder_hidden_states.size(1)
                     chunk_idxs = torch.arange(0, kv_seq_len, device=hidden_states.device) # 0 is bos token
@@ -2460,27 +2438,6 @@ class InternLM2DecoderLayer(nn.Module):
                     
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                     if top_k_mask is not None: # (1, num_kv_tokens)
-                        kv_select_mask = torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask.device)
-                        kv_select_mask = torch.cat([top_k_mask[0], kv_select_mask], dim=0)
-                        # # select top k keys and values (bz, num_heads, seq_len, head_dim)
-                        key_states = present_key_value[0]
-                        value_states = present_key_value[1]
-                        kv_select_idxs = kv_select_mask.nonzero(as_tuple=False).squeeze(-1)
-                        ## For visualization
-                        global do_plot_top_k, plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k, plot_group_size
-                        if do_plot_top_k:
-                            plot_all_top_k_idxs.append(kv_select_idxs.cpu())
-                            plot_total_num_tokens = kv_select_mask.size(0)
-                            plot_predict_type = self.attention.predict_type
-                            plot_top_k = self.attention.top_k
-                            plot_group_size = self.local_attention_group_size
-                        ## For visualization
-                        top_k_key_states = key_states[:, :, kv_select_idxs]
-                        top_k_value_states = value_states[:, :, kv_select_idxs]
-                        present_key_value = (top_k_key_states, top_k_value_states, kv_select_mask) if use_cache else None
-                        print(f"Reduce kv size from {key_states.size()} to {top_k_key_states.size()}")
-                        print(f"Selected kv indices: {kv_select_idxs}")
-                        
                         if self.prune_during_prefill:
                             # prune the hidden states
                             kv_select_idxs = top_k_mask[0].nonzero(as_tuple=False).squeeze(-1)
@@ -2493,7 +2450,7 @@ class InternLM2DecoderLayer(nn.Module):
                                     encoder_attention_mask = encoder_attention_mask[:, kv_select_idxs]
                             else:
                                 encoder_attention_mask = None
-                            print(f"Prune kv size from {key_states.size()} to {top_k_key_states.size()} for later layers")
+                            print(f"Prune kv size from {top_k_mask[0].size()} to {kv_select_idxs.size()} for layer layers in prefill")
                             print(f"encoder_hidden_states: {encoder_hidden_states.size()}")
                             print(f"encoder_position_ids: {encoder_position_ids}")
                             print(f"encoder_attention_mask: {encoder_attention_mask.size() if encoder_attention_mask is not None else None}")
@@ -2530,8 +2487,65 @@ class InternLM2DecoderLayer(nn.Module):
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                     end = end_record(start, "FFN for encoder_hidden_states")
                 else:
+                    ori_encoder_hidden_states = None
                     local_self_attn_weights = None
+                    top_k_mask = None
+                
+                residual = hidden_states
+                hidden_states = self.attention_norm(hidden_states)
+                # first self attention using hidden_states as the query, and encoder_hidden_states as the key and value
+                if not use_cache or past_key_value is None:
+                    if top_k_mask is not None:
+                        # # select top k keys and values (bz, num_heads, seq_len, head_dim)
+                        kv_select_idxs = top_k_mask[0].nonzero(as_tuple=False).squeeze(-1)
+                        ## For visualization
+                        ori_encoder_hidden_states = ori_encoder_hidden_states[:, kv_select_idxs]
+                        ori_encoder_position_ids = ori_encoder_position_ids[:, kv_select_idxs]
+                        if attention_mask is not None:
+                            if attention_mask.dim() == 4:
+                                attention_mask = attention_mask[:, :, :, kv_select_idxs]
+                            else:
+                                raise ValueError("Attention mask should be 4d")
+                        else:
+                            attention_mask = None
+                        print(f"Reduce kv size that text to kv cross attention from {top_k_mask[0].size()} to {kv_select_idxs.size()}")
+                        print(f"Selected kv indices: {kv_select_idxs}")
+                    # we don't use the original encoder_hidden_states here as it keeps to be the orignal one without self attention
+                    # instead, we extract the encoder_hidden_states from the hidden_states of size [bsz, kv_seq_len+q_len, hidden_size]
+                    merged_kv_hidden_states = torch.cat([ori_encoder_hidden_states, hidden_states], dim=1)
+                    merged_kv_position_ids = torch.cat([ori_encoder_position_ids, position_ids], dim=1) 
+                else:
+                    merged_kv_hidden_states = hidden_states
+                    merged_kv_position_ids = position_ids
                     
+                
+                start = start_record("Text to kv cross attention", level=2)
+                hidden_states, text_to_kv_attn_weights, present_key_value = self.attention(
+                    hidden_states=hidden_states,
+                    encoder_hidden_states=merged_kv_hidden_states,
+                    attention_mask=attention_mask,
+                    encoder_attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    encoder_position_ids=merged_kv_position_ids,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    past_key_value=past_key_value,
+                )
+                if not use_cache or past_key_value is None:
+                    if top_k_mask is not None:
+                        kv_select_mask = torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask.device)
+                        kv_select_mask = torch.cat([top_k_mask[0], kv_select_mask], dim=0)
+                        kv_select_idxs = kv_select_mask.nonzero(as_tuple=False).squeeze(-1)
+                        present_key_value = (present_key_value[0], present_key_value[1], kv_select_mask) if use_cache else None
+                        ## For visualization
+                        global do_plot_top_k, plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k, plot_group_size
+                        if do_plot_top_k:
+                            plot_all_top_k_idxs.append(kv_select_idxs.cpu())
+                            plot_total_num_tokens = kv_select_mask.size(0)
+                            plot_predict_type = self.attention.predict_type
+                            plot_top_k = self.attention.top_k
+                            plot_group_size = self.local_attention_group_size
+                end = end_record(start, "Text to kv cross attention")
                 # add residual 
                 hidden_states = residual + hidden_states
                 if output_attentions:
