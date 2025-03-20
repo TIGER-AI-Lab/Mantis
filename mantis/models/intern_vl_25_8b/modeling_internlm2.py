@@ -995,6 +995,21 @@ def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, pr
             cur_layer_key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
             key_norms = cur_layer_key_vectors.norm(2, dim=-1)
             top_k_idxs = key_norms.argsort(descending=False)[:top_k].tolist()
+        elif predict_type == "key_norms_small_deduplication":
+            num_pivot_tokens = (top_k - 1) // 16 + 1
+            key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
+            key_norms = key_vectors.norm(2, dim=-1)
+            sorted_idxs = key_norms.argsort(descending=False)
+            top_k_idxs = sorted_idxs[:num_pivot_tokens].tolist()
+            other_top_k_idxs = sorted_idxs[num_pivot_tokens:].tolist()
+            # select num_other_tokens from other_top_k_idxs by the lowest cosine similarity
+            # keys_i: (num_heads, Q_len, C)
+            normalized_key_vectors = F.normalize(key_vectors, p=2, dim=-1)
+            pivot_key_vectors = normalized_key_vectors[top_k_idxs] # (P, C)
+            other_key_vectors = normalized_key_vectors[other_top_k_idxs]
+            cosine_similarity_matrix = torch.matmul(pivot_key_vectors, other_key_vectors.transpose(0, 1))
+            top_k_idxs.extend([other_top_k_idxs[j] for j in cosine_similarity_matrix.mean(dim=0).argsort()[:top_k - num_pivot_tokens]])
+            top_k_idxs = list(set(top_k_idxs))
         elif predict_type == "output_norms":
             outputs_norms = outputs_i.norm(2, dim=-1)
             top_k_idxs = outputs_norms.argsort(descending=True)[:top_k].tolist()
@@ -2105,6 +2120,7 @@ class InternLM2DecoderLayer(nn.Module):
         self.local_attention_group_size = config.local_attention_group_size
         self.attn_implementation = config.attn_implementation
         self.adaptive_local_attention = config.adaptive_local_attention
+        self.prune_during_prefill = getattr(config, 'prune_during_prefill', False)
 
         if self.enable_cross_attention:
             self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
@@ -2158,7 +2174,8 @@ class InternLM2DecoderLayer(nn.Module):
                 'Passing `padding_mask` is deprecated and will be removed in v4.37. '
                 'Please make sure use `attention_mask` instead.`'
             )
-        
+        if isinstance(encoder_hidden_states, tuple):
+            encoder_hidden_states, encoder_position_ids, encoder_attention_mask = encoder_hidden_states
         output_encoder_hidden_states = False
         if encoder_hidden_states is None or (not self.enable_cross_attention and not self.enable_shared_cross_attention):
             # print("Normal Decoder Layer")
@@ -2441,6 +2458,7 @@ class InternLM2DecoderLayer(nn.Module):
                         top_k_mask = top_k_mask.unsqueeze(0) if top_k_mask is not None else None
                         ### adaptive version
                     
+                    encoder_hidden_states = residual_encoder + encoder_hidden_states
                     if top_k_mask is not None: # (1, num_kv_tokens)
                         kv_select_mask = torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask.device)
                         kv_select_mask = torch.cat([top_k_mask[0], kv_select_mask], dim=0)
@@ -2461,6 +2479,25 @@ class InternLM2DecoderLayer(nn.Module):
                         top_k_value_states = value_states[:, :, kv_select_idxs]
                         present_key_value = (top_k_key_states, top_k_value_states, kv_select_mask) if use_cache else None
                         print(f"Reduce kv size from {key_states.size()} to {top_k_key_states.size()}")
+                        print(f"Selected kv indices: {kv_select_idxs}")
+                        
+                        if self.prune_during_prefill:
+                            # prune the hidden states
+                            kv_select_idxs = top_k_mask[0].nonzero(as_tuple=False).squeeze(-1)
+                            encoder_hidden_states = encoder_hidden_states[:, kv_select_idxs]
+                            encoder_position_ids = encoder_position_ids[:, kv_select_idxs]
+                            if encoder_attention_mask is not None:
+                                if encoder_attention_mask.dim() == 4:
+                                    encoder_attention_mask = encoder_attention_mask[:, :, kv_select_idxs, :][:, :, :, kv_select_idxs]
+                                else:
+                                    encoder_attention_mask = encoder_attention_mask[:, kv_select_idxs]
+                            else:
+                                encoder_attention_mask = None
+                            print(f"Prune kv size from {key_states.size()} to {top_k_key_states.size()} for later layers")
+                            print(f"encoder_hidden_states: {encoder_hidden_states.size()}")
+                            print(f"encoder_position_ids: {encoder_position_ids}")
+                            print(f"encoder_attention_mask: {encoder_attention_mask.size() if encoder_attention_mask is not None else None}")
+                            
                 
                     # # # DEBUG: compare difference, comment out this part when debugging
                     # _residual = self.attention_norm(torch.cat([residual_encoder, residual], dim=1))
@@ -2480,7 +2517,7 @@ class InternLM2DecoderLayer(nn.Module):
                     # # # DEBUG: compare difference, comment out this part when debugging
                     
                     start = start_record("FFN for encoder_hidden_states", level=2)
-                    encoder_hidden_states = residual_encoder + encoder_hidden_states
+                    # encoder_hidden_states = residual_encoder + encoder_hidden_states
                     # ffn here for encoder_hidden_states
                     residual_encoder = encoder_hidden_states
                     encoder_hidden_states = self.ffn_norm(encoder_hidden_states)
@@ -2522,7 +2559,7 @@ class InternLM2DecoderLayer(nn.Module):
             outputs += (present_key_value,)
             
         if output_encoder_hidden_states:
-            outputs += (encoder_hidden_states,)
+            outputs += ((encoder_hidden_states, encoder_position_ids, encoder_attention_mask),)
         return outputs
 
 
