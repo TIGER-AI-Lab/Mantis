@@ -39,6 +39,7 @@ class InternVLChatConfig(PretrainedConfig):
             enable_shared_cross_attention=False,
             local_attention_group_size=258*8, # 258 =256 + 2, 2 for <img> and </img>, and 8 for the local group attention
             adaptive_local_attention=False,
+            prune_for_query=False,
             **kwargs):
         super().__init__(**kwargs)
 
@@ -73,10 +74,12 @@ class InternVLChatConfig(PretrainedConfig):
         self.local_attention_group_size = local_attention_group_size
         self.enable_shared_cross_attention = enable_shared_cross_attention
         self.adaptive_local_attention = adaptive_local_attention
+        self.prune_for_query = prune_for_query
         self.llm_config.enable_cross_attention = enable_cross_attention
         self.llm_config.local_attention_group_size = local_attention_group_size
         self.llm_config.enable_shared_cross_attention = enable_shared_cross_attention
         self.llm_config.adaptive_local_attention = adaptive_local_attention
+        self.llm_config.prune_for_query = prune_for_query
         assert [x==True for x in [self.enable_cross_attention, self.enable_shared_cross_attention]].count(True) <= 1, \
             "Only one of enable_cross_attention and enable_shared_cross_attention can be True."
 

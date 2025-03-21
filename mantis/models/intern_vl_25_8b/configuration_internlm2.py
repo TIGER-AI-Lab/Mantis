@@ -98,6 +98,7 @@ class InternLM2Config(PretrainedConfig):
         enable_cross_attention=False,
         enable_shared_cross_attention=False,
         adaptive_local_attention=False,
+        prune_for_query=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -121,6 +122,7 @@ class InternLM2Config(PretrainedConfig):
         self.enable_cross_attention = enable_cross_attention
         self.enable_shared_cross_attention = enable_shared_cross_attention
         self.adaptive_local_attention = adaptive_local_attention
+        self.prune_for_query = prune_for_query
         self._rope_scaling_validation()
 
         self.attn_implementation = attn_implementation

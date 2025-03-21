@@ -1,5 +1,4 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '5'    
 import torch
 import fire
 # If you want to load a model using multiple GPUs, please refer to the `Multiple GPUs` section.
@@ -71,16 +70,18 @@ class cli:
         top_k_starting_layer=0,
         adaptive_local_attention=False,
         prune_during_prefill_layer_idx=-1,
+        prune_for_query=False,
         run_times=1,
         max_new_tokens=1
     ):
         local_attention_group_size = -1
         tokenizer = InternLM2Tokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
-        config = InternVLChatConfig.from_pretrained(model_path, enable_shared_cross_attention=enable_shared_cross_attention, local_attention_group_size=local_attention_group_size, adaptive_local_attention=adaptive_local_attention, prune_during_prefill_layer_idx=prune_during_prefill_layer_idx)
+        config = InternVLChatConfig.from_pretrained(model_path, enable_shared_cross_attention=enable_shared_cross_attention, local_attention_group_size=local_attention_group_size, adaptive_local_attention=adaptive_local_attention, prune_during_prefill_layer_idx=prune_during_prefill_layer_idx, prune_for_query=prune_for_query)
         config.llm_config.enable_cross_attention = config.enable_cross_attention
         config.llm_config.local_attention_group_size = config.local_attention_group_size
         config.llm_config.enable_shared_cross_attention = config.enable_shared_cross_attention
         config.llm_config.adaptive_local_attention = config.adaptive_local_attention
+        config.llm_config.prune_for_query = config.prune_for_query
         model = InternVLChatModel.from_pretrained(model_path, config=config, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_flash_attn=use_flash_attn, trust_remote_code=True, device_map='auto').eval()
 
         processor = InternVLChatProcessor(tokenizer, enable_cross_attention=model.config.enable_cross_attention)
@@ -543,7 +544,7 @@ python benchmark_internvl_efficiency.py generate --group_size -1 --top_k 50 --pr
 python benchmark_internvl_efficiency.py generate --group_size -1 --total_frames 32 --top_k 1 --predict_type 'vector_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --prune_during_prefill_layer_idx -1 --adaptive_local_attention False
 
 python benchmark_internvl_efficiency.py generate --group_size -1 --total_frames 32 --top_k 50 --predict_type 'key_norms_small_deduplication' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --prune_during_prefill_layer_idx 2 --adaptive_local_attention False
-python benchmark_internvl_efficiency.py generate --group_size -1 --total_frames 32 --top_k -1 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --prune_during_prefill_layer_idx 2 --adaptive_local_attention True
+python benchmark_internvl_efficiency.py generate --group_size -1 --total_frames 32 --top_k 500 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --prune_during_prefill_layer_idx -1 --adaptive_local_attention True --prune_for_query True
 
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 128 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 3
 python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 32 --top_k 8400 --predict_type 'key_norms' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0

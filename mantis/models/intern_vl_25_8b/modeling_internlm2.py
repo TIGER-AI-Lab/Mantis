@@ -902,7 +902,7 @@ def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, pr
         keys = keys[:, :, -ori_kv_len:]
         values = values[:, :, -ori_kv_len:]
         outputs = outputs[:, -ori_kv_len:]
-    random.seed(0)
+    # random.seed(0)
     bz, _, k_len, _ = values.shape
     bz_top_k_idxs = []
     for bz_i in range(bz):
@@ -995,6 +995,19 @@ def get_top_k_mask_to_predict(attn_weights, keys, values, outputs, top_k=100, pr
             cur_layer_key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
             key_norms = cur_layer_key_vectors.norm(2, dim=-1)
             top_k_idxs = key_norms.argsort(descending=False)[:top_k].tolist()
+        elif predict_type == "key_norms_small_random":
+            # half of the top_k tokens are selected by the highest key norms, and the other half are randomly selected
+            cur_layer_key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
+            key_norms = cur_layer_key_vectors.norm(2, dim=-1)
+            sorted_idxs = key_norms.argsort(descending=False)
+            top_k_idxs = sorted_idxs[:top_k//2].tolist()
+            random_top_k_idxs = sorted_idxs[top_k//2:].tolist()
+            random_top_k_idxs = random.sample(random_top_k_idxs, min(top_k//2, len(random_top_k_idxs)))
+            top_k_idxs.extend(random_top_k_idxs)
+        elif predict_type == "random":
+            top_k_idxs = random.sample(range(k_len), top_k)
+            if 0 not in top_k_idxs:
+                top_k_idxs.append(0)
         elif predict_type == "key_norms_small_deduplication":
             num_pivot_tokens = (top_k - 1) // 16 + 1
             key_vectors = keys_i.transpose(0, 1).flatten(1, 2)
@@ -2121,6 +2134,7 @@ class InternLM2DecoderLayer(nn.Module):
         self.attn_implementation = config.attn_implementation
         self.adaptive_local_attention = config.adaptive_local_attention
         self.prune_during_prefill = getattr(config, 'prune_during_prefill', False)
+        self.prune_for_query = getattr(config, 'prune_for_query', False)
 
         if self.enable_cross_attention:
             self.attention = INTERNLM2_ATTENTION_CLASSES[config.attn_implementation](config=config)
@@ -2495,7 +2509,7 @@ class InternLM2DecoderLayer(nn.Module):
                 hidden_states = self.attention_norm(hidden_states)
                 # first self attention using hidden_states as the query, and encoder_hidden_states as the key and value
                 if not use_cache or past_key_value is None:
-                    if top_k_mask is not None:
+                    if top_k_mask is not None and self.prune_for_query:
                         # # select top k keys and values (bz, num_heads, seq_len, head_dim)
                         kv_select_idxs = top_k_mask[0].nonzero(as_tuple=False).squeeze(-1)
                         ## For visualization
@@ -2509,7 +2523,7 @@ class InternLM2DecoderLayer(nn.Module):
                         else:
                             attention_mask = None
                         print(f"Reduce kv size that text to kv cross attention from {top_k_mask[0].size()} to {kv_select_idxs.size()}")
-                        print(f"Selected kv indices: {kv_select_idxs}")
+                        # print(f"Selected kv indices: {kv_select_idxs}")
                     # we don't use the original encoder_hidden_states here as it keeps to be the orignal one without self attention
                     # instead, we extract the encoder_hidden_states from the hidden_states of size [bsz, kv_seq_len+q_len, hidden_size]
                     merged_kv_hidden_states = torch.cat([ori_encoder_hidden_states, hidden_states], dim=1)
@@ -2536,7 +2550,14 @@ class InternLM2DecoderLayer(nn.Module):
                         kv_select_mask = torch.ones(hidden_states.shape[1], dtype=torch.bool, device=top_k_mask.device)
                         kv_select_mask = torch.cat([top_k_mask[0], kv_select_mask], dim=0)
                         kv_select_idxs = kv_select_mask.nonzero(as_tuple=False).squeeze(-1)
-                        present_key_value = (present_key_value[0], present_key_value[1], kv_select_mask) if use_cache else None
+                        if self.prune_for_query:
+                            present_key_value = (present_key_value[0], present_key_value[1], kv_select_mask) if use_cache else None
+                        else:
+                            key_states = present_key_value[0]
+                            value_states = present_key_value[1]
+                            present_key_value = (key_states[:, :, kv_select_idxs], value_states[:, :, kv_select_idxs], kv_select_mask) if use_cache else None
+                            print(f"Reduce kv size from {top_k_mask[0].size()} to {kv_select_idxs.size()}")
+                            # print(f"Selected kv indices: {kv_select_idxs}")
                         ## For visualization
                         global do_plot_top_k, plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k, plot_group_size
                         if do_plot_top_k:
