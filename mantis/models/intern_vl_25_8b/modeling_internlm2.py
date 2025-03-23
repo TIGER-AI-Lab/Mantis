@@ -45,6 +45,8 @@ except:  # noqa # pylint: disable=bare-except
 from .configuration_internlm2 import InternLM2Config
 
 logger = logging.get_logger(__name__)
+do_print = False
+do_record = False
 
 _CONFIG_FOR_DOC = 'InternLM2Config'
 
@@ -78,6 +80,8 @@ detect_operation_memory_usage_key = None
 peak_memory_usage = 0
 # detect_operation_memory_usage_key = "FFN for encoder_hidden_states" # KV Local Self Attention
 def start_record(message:str, level=0):
+    if not do_record:
+        return
     global previous_recorded_event, event_records, peak_memory_usage
     if detect_operation_memory_usage_key:
         torch.cuda.reset_peak_memory_stats()
@@ -112,6 +116,8 @@ def start_record(message:str, level=0):
     return start
 
 def end_record(start, message:str, flush_records=False, do_print=False):
+    if not do_record:
+        return
     global previous_recorded_event, event_records, peak_memory_usage
     peak_memory_usage = max(torch.cuda.max_memory_allocated() / 1024**2, peak_memory_usage)
     if detect_operation_memory_usage_key:
@@ -2441,7 +2447,8 @@ class InternLM2DecoderLayer(nn.Module):
                                 else:
                                     top_k_mask = torch.cat([top_k_mask, local_top_k_mask[0]], dim=0)
                                 local_past_key_value = (local_top_k_key_states, local_top_k_value_states, top_k_mask)
-                                print(f"Reduce video chunk-{i}'s kv size from {local_key_states.size()} to {local_top_k_key_states.size()}")
+                                if do_print:
+                                    print(f"Reduce video chunk-{i}'s kv size from {local_key_states.size()} to {local_top_k_key_states.size()}")
                             else:
                                 top_k_mask = None
                                 local_past_key_value = local_present_key_value
@@ -2464,10 +2471,11 @@ class InternLM2DecoderLayer(nn.Module):
                                     encoder_attention_mask = encoder_attention_mask[:, kv_select_idxs]
                             else:
                                 encoder_attention_mask = None
-                            print(f"Prune kv size from {top_k_mask[0].size()} to {kv_select_idxs.size()} for layer layers in prefill")
-                            print(f"encoder_hidden_states: {encoder_hidden_states.size()}")
-                            print(f"encoder_position_ids: {encoder_position_ids}")
-                            print(f"encoder_attention_mask: {encoder_attention_mask.size() if encoder_attention_mask is not None else None}")
+                            if do_print:
+                                print(f"Prune kv size from {top_k_mask[0].size()} to {kv_select_idxs.size()} for layer layers in prefill")
+                                print(f"encoder_hidden_states: {encoder_hidden_states.size()}")
+                                print(f"encoder_position_ids: {encoder_position_ids}")
+                                print(f"encoder_attention_mask: {encoder_attention_mask.size() if encoder_attention_mask is not None else None}")
                             
                 
                     # # # DEBUG: compare difference, comment out this part when debugging
@@ -2492,11 +2500,12 @@ class InternLM2DecoderLayer(nn.Module):
                     # ffn here for encoder_hidden_states
                     residual_encoder = encoder_hidden_states
                     encoder_hidden_states = self.ffn_norm(encoder_hidden_states)
-                    max_batch_size = 128
+                    max_batch_size = 4096
+                    seq_len = encoder_hidden_states.size(1)
                     all_encoder_hidden_states = []
-                    for i in range(0, bsz, max_batch_size):
-                        all_encoder_hidden_states.append(self.feed_forward(encoder_hidden_states[i:i+max_batch_size]))
-                    encoder_hidden_states = torch.cat(all_encoder_hidden_states, dim=0)
+                    for i in range(0, seq_len, max_batch_size):
+                        all_encoder_hidden_states.append(self.feed_forward(encoder_hidden_states[:, i:i+max_batch_size]))
+                    encoder_hidden_states = torch.cat(all_encoder_hidden_states, dim=1)
                     # encoder_hidden_states = self.feed_forward(encoder_hidden_states)
                     encoder_hidden_states = residual_encoder + encoder_hidden_states
                     end = end_record(start, "FFN for encoder_hidden_states")
@@ -2522,7 +2531,8 @@ class InternLM2DecoderLayer(nn.Module):
                                 raise ValueError("Attention mask should be 4d")
                         else:
                             attention_mask = None
-                        print(f"Reduce kv size that text to kv cross attention from {top_k_mask[0].size()} to {kv_select_idxs.size()}")
+                        if do_print:
+                            print(f"Reduce kv size that text to kv cross attention from {top_k_mask[0].size()} to {kv_select_idxs.size()}")
                         # print(f"Selected kv indices: {kv_select_idxs}")
                     # we don't use the original encoder_hidden_states here as it keeps to be the orignal one without self attention
                     # instead, we extract the encoder_hidden_states from the hidden_states of size [bsz, kv_seq_len+q_len, hidden_size]
@@ -2556,7 +2566,8 @@ class InternLM2DecoderLayer(nn.Module):
                             key_states = present_key_value[0]
                             value_states = present_key_value[1]
                             present_key_value = (key_states[:, :, kv_select_idxs], value_states[:, :, kv_select_idxs], kv_select_mask) if use_cache else None
-                            print(f"Reduce kv size from {top_k_mask[0].size()} to {kv_select_idxs.size()}")
+                            if do_print:
+                                print(f"Reduce kv size from {top_k_mask[0].size()} to {kv_select_idxs.size()}")
                             # print(f"Selected kv indices: {kv_select_idxs}")
                         ## For visualization
                         global do_plot_top_k, plot_all_top_k_idxs, plot_total_num_tokens, plot_predict_type, plot_top_k, plot_group_size

@@ -541,6 +541,9 @@ python benchmark_internvl_efficiency.py generate --group_size 4 --total_frames 2
 python benchmark_internvl_efficiency.py generate --group_size -1 --top_k 50 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --images 'test_image_1.jpg'
 
 
+python benchmark_internvl_efficiency.py generate --group_size 32 --total_frames 512 --top_k 512 --predict_type 'key_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer -1 --prune_during_prefill_layer_idx -1 --adaptive_local_attention True --prune_for_query True
+
+
 python benchmark_internvl_efficiency.py generate --group_size -1 --total_frames 32 --top_k 1 --predict_type 'vector_norms_small' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --prune_during_prefill_layer_idx -1 --adaptive_local_attention False
 
 python benchmark_internvl_efficiency.py generate --group_size -1 --total_frames 32 --top_k 50 --predict_type 'key_norms_small_deduplication' --max_new_tokens 512 --use_flash_attn True --top_k_starting_layer 0 --prune_during_prefill_layer_idx 2 --adaptive_local_attention False
@@ -569,4 +572,5 @@ python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 
 python benchmark_internvl_efficiency.py generate --group_size 16 --total_frames 64 --top_k 300 --predict_type 'attention_weights' --max_new_tokens 128 --use_flash_attn True --query "What is the name of the animal?" --top_k_starting_layer 3
 
 # which token did eos attend to analyze why local group attention can cause the repetition of the generation
+uv pip install torchcodec --index-url=https://download.pytorch.org/whl/cu124
 """

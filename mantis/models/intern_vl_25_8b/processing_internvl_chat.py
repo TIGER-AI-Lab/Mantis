@@ -6,6 +6,7 @@ import numpy as np
 import torchvision.transforms as T
 from decord import VideoReader, cpu
 from PIL import Image
+from pathlib import Path
 from torchvision.transforms.functional import InterpolationMode
 from transformers import AutoModel, AutoTokenizer
 
@@ -128,23 +129,73 @@ def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
     ])
     return frame_indices
 
-def load_video(video_path, bound=None, input_size=448, max_num=1, num_segments=32):
-    vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
+def load_video(video_path, bound=None, input_size=448, max_num=1, num_segments=32, cache_dir="~/tmp/video_cache"):
+    cache_dir = Path(cache_dir).expanduser()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    vr = VideoReader(video_path, ctx=cpu(0), num_threads=8)
     max_frame = len(vr) - 1
     fps = float(vr.get_avg_fps())
 
     pixel_values_list, num_patches_list = [], []
     transform = build_transform(input_size=input_size)
     frame_indices = get_index(bound, fps, max_frame, first_idx=0, num_segments=num_segments)
-    for frame_index in frame_indices:
-        img = Image.fromarray(vr[frame_index].asnumpy()).convert('RGB')
+    frame_indices_hash = hash(tuple(frame_indices))
+    
+    cache_key = video_path.replace("/", "_").replace(":", "_") + f"_f{frame_indices[0]}_to_f{frame_indices[-1]}_t_f{len(frame_indices)}_h{frame_indices_hash}"
+    cache_file = cache_dir / f"{cache_key}.npy"
+    if cache_file.exists():
+        frames = np.load(cache_file)
+    else:
+        frames = vr.get_batch(frame_indices).asnumpy() # get_batch is faster than get_frame
+        np.save(cache_file, frames)
+    for frame in frames:
+        img = Image.fromarray(frame).convert('RGB')
         img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=True, max_num=max_num)
         pixel_values = [transform(tile) for tile in img]
         pixel_values = torch.stack(pixel_values)
         num_patches_list.append(pixel_values.shape[0])
         pixel_values_list.append(pixel_values)
+    # for frame_index in frame_indices:
+    #     img = Image.fromarray(vr[frame_index].asnumpy()).convert('RGB')
+    #     img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=True, max_num=max_num)
+    #     pixel_values = [transform(tile) for tile in img]
+    #     pixel_values = torch.stack(pixel_values)
+    #     num_patches_list.append(pixel_values.shape[0])
+    #     pixel_values_list.append(pixel_values)
     pixel_values = torch.cat(pixel_values_list)
     return pixel_values, num_patches_list
+
+# from torchcodec.decoders import VideoDecoder
+# # uv pip install torchcodec --index-url=https://download.pytorch.org/whl/cu124
+# def load_video(video_path, bound=None, input_size=448, max_num=1, num_segments=32):
+#     device = "cpu"  # or e.g. "cuda" !
+#     decoder = VideoDecoder(video_path, device=device, seek_mode="approximate")
+#     print(decoder.metadata)
+#     max_frame = decoder.metadata.num_frames - 1
+#     fps = float(decoder.metadata.average_fps)
+
+#     pixel_values_list, num_patches_list = [], []
+#     transform = build_transform(input_size=input_size)
+#     frame_indices = get_index(bound, fps, max_frame, first_idx=0, num_segments=num_segments)
+#     frames = decoder.get_frames_at(indices=frame_indices)
+#     print(frames)
+#     for frame in frames.data:
+#         frame = frame.permute(1, 2, 0).numpy()
+#         img = Image.fromarray(frame).convert('RGB')
+#         img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=True, max_num=max_num)
+#         pixel_values = [transform(tile) for tile in img]
+#         pixel_values = torch.stack(pixel_values)
+#         num_patches_list.append(pixel_values.shape[0])
+#         pixel_values_list.append(pixel_values)
+#     # for frame_index in frame_indices:
+#     #     img = Image.fromarray(vr[frame_index].asnumpy()).convert('RGB')
+#     #     img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=True, max_num=max_num)
+#     #     pixel_values = [transform(tile) for tile in img]
+#     #     pixel_values = torch.stack(pixel_values)
+#     #     num_patches_list.append(pixel_values.shape[0])
+#     #     pixel_values_list.append(pixel_values)
+#     pixel_values = torch.cat(pixel_values_list)
+#     return pixel_values, num_patches_list
 
 def find_all_str_indices(string, substring):
     indices = []
