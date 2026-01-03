@@ -1,6 +1,6 @@
 # Mantis: Interleaved Multi-Image Instruction Tuning (TMLR 2024)
 
-This repository contain the code for our TMLR24 paper Mantis (https://arxiv.org/abs/2405.01483).
+This repository contain the code for our TMLR24 paper Mantis (https://arxiv.org/abs/2405.01483). <strong>We got best paper award from TMLR 2025! Checkout [Medium](https://medium.com/@TmlrOrg/announcing-the-2025-tmlr-outstanding-certification-e26d548ff011)!</strong>
 
 ![Mantis](./docs/assets/images/radar_chart.png)
 <a target="_blank" href="https://arxiv.org/abs/2405.01483">
