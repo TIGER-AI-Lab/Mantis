@@ -1396,7 +1396,7 @@ class Collator():
                 if k == 'input_ids':
                     # add padding
                     max_length = max([inputs[k].shape[1] for inputs in model_inputs])
-                    pad_token_id = self.tokenizer.pad_token_id
+                    pad_token_id = self.processor.tokenizer.pad_token_id
                     # pad all inputs to the same length
                     results[k] = torch.cat(
                         [
